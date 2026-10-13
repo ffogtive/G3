@@ -350,7 +350,7 @@ switch (screen) {
       SH.forEach((sh, i) => {
         ui.showStageCard(stage, undefined, { shoulder: sh, honk: HK[i], special: SP[i] || undefined });
         const r = document.querySelector('#ui .ui-road');
-        if (r) { const c = r.cloneNode(true); c.style.margin = '0'; c.querySelectorAll('.ui-road__tile').forEach((t) => { t.style.animation = 'none'; }); gal.appendChild(c); }
+        if (r) { const c = r.cloneNode(true); c.style.margin = '0'; c.style.gridArea = 'auto'; c.querySelectorAll('.ui-road__tile').forEach((t) => { t.style.animation = 'none'; }); gal.appendChild(c); }
       });
       document.body.appendChild(gal);
     });

@@ -345,15 +345,20 @@ function setupStage(stage) {
   fx.clear();
   weapons.reset();
   const startS = 0;
-  const frontS = startS + stage.jamLength + 30;
+  // 갓길 없는 판(폐쇄·터널): 단단한 대기열은 누벼서 못 뚫으므로, 원흉 가까이에서 시작하는 짧고 빽빽한 퍼즐
+  const A = { ...TUNE.approach, ...(stage.approach || {}) };
+  const noShoulder = ['closed', 'none'].includes(A.shoulder);
+  const jamLen = noShoulder ? Math.min(stage.jamLength, A.jamLength ?? 85) : stage.jamLength;
+  const startLane = noShoulder ? (A.startLane ?? 1) : 3;
+  const frontS = startS + jamLen + 30;
   G.startS = startS; G.frontS = frontS;
   world.build(stage, startS - 160, frontS + 950, { startS, frontS });
   const night = !!world.night;
   boss.spawn(stage, frontS);
   const rng = mulberry32(stage.id * 1000 + 7);
-  traffic.spawnJam(stage, boss.villains, { s: startS, lane: 3 }, rng, night);
+  traffic.spawnJam(stage, boss.villains, { s: startS, lane: startLane }, rng, night);
   G.tailS = traffic.sTail;
-  player.reset(startS, 3);
+  player.reset(startS, startLane);
   setHeadlights(player.mesh, night);
   for (const v of boss.villains) setHeadlights(v.mesh, night);
   // 사실 기반 대수: 정체 길이(km) × 차로 수 × 정체 밀도(대/km/차로). docs/FEEDBACK_LOG.md 근거
@@ -823,9 +828,10 @@ function autopilot(phase) {
         const l = player.lane + d;
         if (l < 0 || l > NUM_LANES - 1 || traffic.canMergeInto(l, player, 0.5)) continue;
         const g = gapIn(l);
-        if (g > bg + 2) { bg = g; best = l; }
+        if (g > bg + 1) { bg = g; best = l; }
       }
-      if (cur < 12 && best !== player.lane) { out[best < player.lane ? 'left' : 'right'] = true; autoNext = G.realTime + 0.3; }
+      // 슬라롬: 앞이 막혀 가면(18m 안) 앞 틈이 더 긴 옆 차로로 계속 옮겨 탄다
+      if (cur < 18 && best !== player.lane) { out[best < player.lane ? 'left' : 'right'] = true; autoNext = G.realTime + 0.25; }
       else if (cur < 6) { out.horn = true; autoNext = G.realTime + 0.5; }
       return out;
     }

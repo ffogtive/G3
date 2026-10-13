@@ -281,14 +281,17 @@ function specialSVG(text) {
 }
 const roadSVG = (inner) => `<svg viewBox="0 0 40 40" aria-hidden="true">${inner}</svg>`;
 
-// 견인 실패 그림: 레커차(주황)가 플레이어 차(노랑)를 앞바퀴 들어 끌고 감. viewBox 240×110
+// 견인 실패 그림: 레커차(주황)가 플레이어 차(노랑)를 앞바퀴 들어 끌고 감.
+// viewBox 240×130 (위 20 = 여유 하늘), 아래 기준 slice → 어떤 비율로 잘려도 도로·차·레커는 남고 하늘만 잘린다
 function wreckerArt() {
-  return `<svg class="ui-fail__svg" viewBox="0 0 240 110" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <rect width="240" height="110" fill="#bfe3ff"/>
+  return `<svg class="ui-fail__svg" viewBox="0 -20 240 130" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <rect y="-20" width="240" height="130" fill="#bfe3ff"/>
+    <circle cx="24" cy="6" r="9" fill="#fff6c8" opacity=".9"/>
     <path d="M0 76 Q30 64 62 72 Q96 60 132 70 Q170 58 204 68 Q224 64 240 68 V80 H0z" fill="#8fc0a0"/>
     <rect y="78" width="240" height="32" fill="#5b5f66"/>
     <path d="M0 80.5h240" stroke="#ffcf33" stroke-width="2"/>
     <path d="M-4 99h248" stroke="#f2f2ee" stroke-width="2.6" stroke-dasharray="16 12"/>
+    <g transform="translate(-4 0)">
     <ellipse cx="150" cy="90" rx="64" ry="4.5" fill="#000" opacity=".22"/>
     <ellipse cx="60" cy="90" rx="34" ry="3.6" fill="#000" opacity=".2"/>
     <g class="ui-fail__truck">
@@ -317,6 +320,7 @@ function wreckerArt() {
       </g>
       <g class="ui-fail__steam"><circle cx="86" cy="38" r="6" fill="#fff" ${so(1.6)}/><circle cx="94" cy="30" r="7.5" fill="#fff" ${so(1.6)}/><circle cx="86" cy="22" r="5" fill="#eef1f4" ${so(1.4)}/></g>
       <g class="ui-fail__dizzy"><path d="M50 30l1.6 3.4 3.6.4-2.7 2.4.8 3.6-3.3-1.8-3.3 1.8.8-3.6-2.7-2.4 3.6-.4z" fill="#ffd23f" ${so(1.3)}/><path d="M36 38l1.1 2.4 2.5.3-1.9 1.7.6 2.5-2.3-1.3-2.3 1.3.6-2.5-1.9-1.7 2.5-.3z" fill="#ffd23f" ${so(1.1)}/></g>
+    </g>
     </g>
   </svg>`;
 }
@@ -766,6 +770,8 @@ function buildHP() {
     + '</div></div>'));
   E.hp.setAttribute('role', 'meter');
   E.hp.setAttribute('aria-label', '내구도');
+  E.hp.setAttribute('aria-valuemin', '0');
+  E.hp.setAttribute('aria-valuemax', '100');
   E.hpCells = [...E.hp.querySelectorAll('.ui-hp__cell')];
   E.hpN = E.hp.querySelector('.ui-hp__n');
   E.hpTag = E.hp.querySelector('.ui-hp__tag');
@@ -838,7 +844,8 @@ function hpFx(node, kf, opt) {
   HPS.fx++;
   E.hp.appendChild(node);
   const a = anim(node, kf, opt);
-  const done = () => { HPS.fx--; node.remove(); };
+  let over = false;
+  const done = () => { if (over) return; over = true; HPS.fx--; node.remove(); };
   if (a) a.onfinish = a.oncancel = done; else done();
 }
 function hpHit(prevHalves, halves, dmg) {
@@ -1412,7 +1419,7 @@ function dropToast(t, fast = false) {
   setTimeout(() => { t.node.remove(); const i = TQ.indexOf(t); if (i >= 0) TQ.splice(i, 1); }, fast || reduceMotion ? 100 : 240);
 }
 function toast(text, kind = 'info', ms) {
-  text = String(text ?? '').trim().slice(0, 80);
+  text = typeof text === 'string' || typeof text === 'number' ? String(text).trim().slice(0, 80) : '';
   if (!text) return;
   kind = TOAST_ICO[kind] ? kind : 'info';
   ms = clamp(num(ms, kind === 'warn' ? 1900 : 1600), 500, 10000);
@@ -2167,8 +2174,9 @@ function popMissions(panel, ms) {
 // 가설: 판마다 다른 갓길·경적 규칙이 시작 카드에서 3초 안에 읽히면 '갓길+빵 만능' 습관이 깨진다 ❓
 function normRoad(r) {
   if (!r || typeof r !== 'object') return null;
-  const sh = typeof r.shoulder === 'string' && Object.hasOwn(SH_MODES, r.shoulder) ? r.shoulder : null;
-  const hk = typeof r.honk === 'string' && Object.hasOwn(HONK_MODES, r.honk) ? r.honk : null;
+  const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);   // iOS < 15.4 엔 Object.hasOwn 없음
+  const sh = own(SH_MODES, r.shoulder) ? r.shoulder : null;
+  const hk = own(HONK_MODES, r.honk) ? r.honk : null;
   const sp = (typeof r.special === 'string' || typeof r.special === 'number') ? String(r.special).trim().slice(0, 40) : '';
   let hint = (typeof r.hint === 'string' || typeof r.hint === 'number') ? String(r.hint).trim().slice(0, 60) : '';
   if (!hint) hint = hk ? `이번 판 경적 = ${HONK_MODES[hk].short}` : sh ? `이번 판 갓길 = ${SH_MODES[sh].short}` : '';

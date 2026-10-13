@@ -261,6 +261,7 @@ const FONT = {
   P: ['##.', '#.#', '##.', '#..', '#..'], T: ['###', '.#.', '.#.', '.#.', '.#.'], X: ['#.#', '#.#', '.#.', '#.#', '#.#'],
   V: ['#.#', '#.#', '#.#', '.#.', '.#.'],
   1: ['.#.', '##.', '.#.', '.#.', '###'], 2: ['##.', '..#', '.#.', '#..', '###'], ' ': ['...', '...', '...', '...', '...'],
+  0: ['###', '#.#', '#.#', '#.#', '###'], 3: ['###', '..#', '.##', '..#', '###'], // v0.4.1 (자 눈금)
 };
 function textRows(str) {
   const rows = ['', '', '', '', ''];
@@ -432,28 +433,28 @@ function plateHidden(g, x, y, z, yellow, mode) {
   const pc = yellow ? C.plateY : C.plateW;
   if (mode === 'none') {
     g.box(x - 0.29, x + 0.29, y - 0.088, y + 0.088, z, z + 0.008, 0xb9bcc0);          // 떼어낸 자국 (깨끗한 테두리)
-    g.box(x - 0.265, x + 0.265, y - 0.072, y + 0.072, z, z + 0.014, 0x1c1d21);          // 빈 브래킷 (검정)
+    g.box(x - 0.265, x + 0.265, y - 0.072, y + 0.072, z, z + 0.014, 0x111214);          // 빈 브래킷 (검정 구멍)
     g.box(x - 0.24, x + 0.24, y - 0.012, y + 0.012, z, z + 0.018, 0x2e3036);             // 브래킷 리브
-    for (const s of SIDES) g.box(x + s * 0.2 - 0.022, x + s * 0.2 + 0.022, y + 0.03, y + 0.074, z, z + 0.024, C.chrome); // 볼트
+    for (const s of SIDES) g.box(x + s * 0.2 - 0.024, x + s * 0.2 + 0.024, y + 0.028, y + 0.076, z, z + 0.026, 0xe8ebef); // 빈 볼트 구멍 (밝게)
     return;
   }
   if (mode === 'covered') {
     g.box(x - 0.27, x + 0.27, y - 0.075, y + 0.075, z, z + 0.02, pc);                  // 원래 번호판 (가장자리 살짝 보임)
-    const paper = 0xe6e2d6, fold = 0xcfcabb, ink = 0x9a9890;
-    g.at(x, y, z + 0.024, 0, 0, 0.05, 1, (q) => {                                         // 구긴 신문지 3겹 (살짝 틀어짐)
-      q.box(-0.28, 0.05, -0.088, 0.09, 0, 0.012, paper);
-      q.box(0.03, 0.29, -0.092, 0.084, 0.004, 0.014, fold);
-      q.box(-0.16, 0.18, -0.03, 0.03, 0.012, 0.02, paper);
-      for (const [yy, x0, x1] of [[0.055, -0.24, 0.0], [0.03, -0.24, -0.04], [-0.06, -0.22, 0.02], [0.05, 0.07, 0.26], [-0.04, 0.08, 0.24], [-0.065, 0.06, 0.2]]) q.box(x0, x1, yy - 0.006, yy + 0.006, 0.012, 0.0165, ink); // 글줄
+    const paper = 0xe9e5d8, fold = 0xc9c3b2, ink = 0x8a8880;
+    g.at(x, y - 0.005, z + 0.024, 0, 0, 0.13, 1, (q) => {                                // 구긴 신문지 3겹 (번호판과 다르게 비스듬히)
+      q.box(-0.31, 0.04, -0.1, 0.1, 0, 0.012, paper);
+      q.box(0.02, 0.32, -0.105, 0.095, 0.004, 0.015, fold);
+      q.box(-0.18, 0.2, -0.04, 0.04, 0.012, 0.021, paper);
+      for (const [yy, x0, x1] of [[0.07, -0.27, 0.0], [0.04, -0.27, -0.05], [-0.07, -0.25, 0.02], [0.062, 0.06, 0.29], [-0.05, 0.07, 0.27], [-0.08, 0.05, 0.22], [0.0, -0.15, 0.16]]) q.box(x0, x1, yy - 0.007, yy + 0.007, 0.012, 0.023, ink); // 글줄
     });
     for (const [sx, sy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {                       // 은색 테이프 X (귀퉁이)
-      g.at(x + sx * 0.26, y + sy * 0.075, z + 0.04, 0, 0, sx * sy * 0.7, 1, (q) => q.box(-0.075, 0.075, -0.022, 0.022, 0, 0.006, 0xc4cad2));
+      g.at(x + sx * 0.27, y + sy * 0.085, z + 0.04, 0, 0, sx * sy * 0.7, 1, (q) => q.box(-0.09, 0.09, -0.026, 0.026, 0, 0.006, 0xd4dae2));
     }
     return;
   }
   // temp: 임시번호판 (흰 종이, 빨간 사선, 글자 배치 다름)
   g.box(x - 0.29, x + 0.29, y - 0.09, y + 0.09, z, z + 0.014, 0xfbfbf7);
-  g.at(x, y, z + 0.016, 0, 0, 0.32, 1, (q) => q.box(-0.33, 0.33, -0.03, 0.03, 0, 0.006, 0xd8231a)); // 빨간 사선 띠
+  g.at(x, y, z + 0.016, 0, 0, 0.3, 1, (q) => q.box(-0.29, 0.29, -0.028, 0.028, 0, 0.006, 0xd8231a)); // 빨간 사선 띠
   const t0 = z + 0.022, t1 = z + 0.028;
   g.box(x - 0.24, x - 0.14, y + 0.035, y + 0.07, t0, t1, C.plateTxt);                    // '임시' 작은 글자
   g.box(x - 0.22, x + 0.2, y - 0.025, y + 0.012, t0, t1, C.plateTxt);                     // 번호 (가늘고 김)
@@ -767,7 +768,8 @@ function passenger(c, P) {
   }
   // v0.4.1 손상 연출(setDamage) 기술자 — 지오메트리에는 영향 없음
   c.dmg = { t: 'car', hl, hw, zf, zr, yb, belt, hood, cabZ0: cab.zb0, cabZ1: cab.zb1, roofY, roofTop, F, col, bump, wR: wr.zR + wr.r, wF: wr.zF - wr.r,
-    headL: [-(hw - 0.17), -(gw + 0.05), hy0, hy1, zf - 0.04, zf + 0.04] };
+    headL: [-(hw - 0.17), -(gw + 0.05), hy0, hy1, zf - 0.04, zf + 0.04],
+    tailL: tail === 'none' ? null : tail === 'vert' ? [-(hw - (P.tailAmb ?? 0.19)), -(hw - (P.tailW ?? 0.5)), ty0, ty1, zr + 0.05] : [-(hw - (P.tailAmb ?? 0.19)), -(P.tailIn ?? 0.2), ty0, ty1, zr + 0.05] };
   c.points.smokePoint = [0, hood + 0.12, (zf + cab.zb0) / 2];
   return { hl, hw, zf, zr, F, Fo, roofTop, sz, hood, cab, wr, yb, belt, roofY, bump };
 }
@@ -1065,7 +1067,8 @@ function buildVan(c, p) {
 //  비detailed(불투명 유리): 옆 유리 양면에 머리·어깨 옆모습을 3mm 띄워 굽는다 — 한 열의 여러 명은 0.2m 씩 뒤로 엇갈려 겹치지 않게
 //    → 옆에 나란히 붙으면 머릿수를 셀 수 있다. 뒷유리에는 마지막 열 뒤통수(뒤에서 '사람 있음' 힌트만), 앞유리에는 앞줄 얼굴.
 //  detailed(투명 유리): 실내 좌석 위치에 진짜 머리 블록.
-const VAN_ROWS = [{ z: -0.62, x: [-0.42, 0.42] }, { z: 0.22, x: [-0.42, 0.42] }, { z: 1.22, x: [-0.42, 0.42] }, { z: 1.86, x: [-0.5, 0.5, 0] }];
+const VAN_ROWS = [{ z: -0.78, x: [-0.42, 0.42] }, { z: 0.02, x: [-0.42, 0.42] }, { z: 0.82, x: [-0.42, 0.42] }, { z: 1.6, x: [-0.5, 0.5, 0] }];
+const VAN_STEP = 0.33; // 한 열 안 머리 간격 (옆 시점에서 안 겹치게)
 const PAX_SHIRT = [0x4a6fa5, 0xd8584a, 0x5aa36a, 0xe0b040, 0x8a5ac0, 0xf4f4f2, 0x3a3d44, 0xe07ab0, 0x2f8f9a];
 const PAX_HAIR = [0x2a211c, 0x5a3a22, 0x15161a, 0x9aa0a8, 0x7a4a1c, 0x2a211c, 0x3b2418, 0xc9a050, 0x15161a];
 function vanPassengers(c, r, n) {
@@ -1073,7 +1076,7 @@ function vanPassengers(c, r, n) {
   const seats = []; // [row, x, idx]
   VAN_ROWS.forEach((row, ri) => row.x.forEach((x) => seats.push({ ri, x, z: row.z })));
   const occ = seats.slice(0, n).map((s, i) => ({ ...s, i }));
-  const yH = r.belt + 0.5; // 머리 중심 높이 (지붕 1.86 아래)
+  const yH = r.belt + 0.46; // 머리 중심 높이 (지붕 1.86 아래)
   const skin = [C.skin, 0xe0a982, 0xc98a5f, 0xf0c8a4];
   if (D) { // 실내 3D 머리
     for (const s of occ) {
@@ -1091,8 +1094,8 @@ function vanPassengers(c, r, n) {
   // 옆모습 실루엣 한 명 (zc = 머리 중심, dy = 높이 보정, k = 크기, dim = 유리 너머로 흐려짐 0..1)
   const prof = (sd, zc, dy, k, dim, s) => {
     const tone = (h) => mixHex(h, 0x1d2a48, dim);
-    const yc = yH + dy, x0 = faceX(sd, yc + 0.1), x1 = faceX(sd, yc - 0.3);
-    const X = (o) => (sd < 0 ? [Math.min(x0, x1) - o - 0.006, Math.max(x0, x1) - 0.002] : [Math.min(x0, x1) + 0.002, Math.max(x0, x1) + o + 0.006]);
+    const yc = yH + dy, x0 = faceX(sd, yc + 0.18), x1 = faceX(sd, yc - 0.4);
+    const X = (o) => (sd < 0 ? [Math.min(x0, x1) - o - 0.018, Math.max(x0, x1) - 0.002] : [Math.min(x0, x1) + 0.002, Math.max(x0, x1) + o + 0.018]); // 필러(1.4cm)보다 바깥
     B.box(...X(0.003), yc - 0.33 * k, yc - 0.16 * k, zc - 0.19 * k, zc + 0.17 * k, tone(PAX_SHIRT[s.i]));   // 어깨
     B.box(...X(0.006), yc - 0.17 * k, yc + 0.1 * k, zc - 0.11 * k, zc + 0.11 * k, tone(skin[s.i % 4]));      // 얼굴(옆)
     B.box(...X(0.009), yc + 0.02 * k, yc + 0.14 * k, zc - 0.08 * k, zc + 0.125 * k, tone(PAX_HAIR[s.i]));    // 머리카락 (위)
@@ -1102,7 +1105,7 @@ function vanPassengers(c, r, n) {
   for (const sd of SIDES) {
     VAN_ROWS.forEach((row, ri) => {
       const inRow = occ.filter((s) => s.ri === ri).sort((a, b) => (a.x - b.x) * sd * -1); // 이 면에 가까운 좌석부터
-      inRow.forEach((s, j) => prof(sd, row.z + j * 0.2, -j * 0.035, 1 - j * 0.08, 0.12 + j * 0.16, s));
+      inRow.forEach((s, j) => prof(sd, row.z + j * (ri === 3 ? 0.3 : VAN_STEP), -j * 0.03, 1.25 - j * 0.06, 0.05 + j * 0.12, s));
     });
   }
   // 뒷유리: 마지막 열 뒤통수 (뒤에서 '사람 있음' 정도만)
@@ -1636,6 +1639,7 @@ function buildPlayerPorter(c, p) {
     lamp(c, 'brake', ...xr(s, 0.34, hw - 0.17), 0.46, 0.84, z1 - 0.06, z1 + 0.05);
     lamp(c, 'hazard', ...xr(s, hw - 0.17, hw + 0.012), 0.46, 0.84, z1 - 0.06, z1 + 0.05);
   }
+  c.dmg.tailL = [-(hw - 0.17), -0.34, 0.46, 0.84, z1 + 0.05];
   plate(B, 0, 0.62, z1 - 0.04, 1, false);
   // 뒷바퀴 + 검은 펜더
   const wzR = hl - 0.88;
@@ -1772,6 +1776,7 @@ function buildPlayerWrecker(c, p) {
     lamp(c, 'brake', ...xr(s, 0.3, hw - 0.2), 0.5, 0.78, z1 - 0.07, z1 + 0.02);
     lamp(c, 'hazard', ...xr(s, hw - 0.2, hw - 0.02), 0.5, 0.78, z1 - 0.07, z1 + 0.02);
   }
+  c.dmg.tailL = [-(hw - 0.2), -0.3, 0.5, 0.78, z1 + 0.02];
   plate(B, 0, 0.6, z1 + 0.02, 1, false);
   c.points.towPoint = [0, wy0 + 0.1, hl + 0.46];
   c.dmg.rear = { zone: [-0.9, 0.9, 0.17, 0.43, hl - 0.66, hl + 0.6], pivot: [0, wy1, hl - 0.6], lift: true };
@@ -1870,10 +1875,10 @@ function rearGlassAt(r, w = 0.45, out = 0.012) {
   const tilt = Math.atan2(F.b[3] - F.t[3], F.y1 - F.y0);
   return { pos: [0, y + Math.sin(tilt) * out, z + Math.cos(tilt) * out], rot: [-tilt, 0, 0], width: lerp(F.b[1] - F.b[0], F.t[1] - F.t[0], w) };
 }
-const STICKER = { beginner: { w: 0.66, asp: 208 / 512, at: 0.42 }, myLane: { w: 0.7, asp: 208 / 512, at: 0.45 } };
+const STICKER = { beginner: { w: 0.9, asp: 208 / 512, at: 0.4 }, myLane: { w: 0.9, asp: 208 / 512, at: 0.42 } };
 function stickerRec(r, key, name = 'sticker') {
   const S = STICKER[key] || STICKER.beginner, g = rearGlassAt(r, S.at, 0.014);
-  const w = Math.min(S.w, g.width - 0.36);
+  const w = Math.min(S.w, g.width - 0.3);
   return { key, w, h: w * S.asp, pos: g.pos, rot: g.rot, name };
 }
 
@@ -2088,7 +2093,24 @@ function buildMotorbike(c, p) {
   }
   // ── 깃발 (깃대는 차체, 깃발은 펄럭임용 별도 메시: userData.flags[i].rotation.y)
   const flags = [];
-  if (V.flag === 'big') {
+  if (p.leader) { // v0.4.1 분리형 리더 깃대: 차체엔 소켓만, 깃대·무지개 LED·큰 깃발은 별도 메시(userData.flagPole 아래) → 압정 맞으면 떼어 떨어뜨림
+    const base = V.scooter ? [0.2, 1.72, 0.84] : [0, 0.92 + 0.22 + 0.2 * Math.max(0, V.tiers - 1), 0.82], H = 2.25;
+    B.box(base[0] - 0.05, base[0] + 0.05, base[1] - 0.12, base[1] + 0.02, base[2] - 0.05, base[2] + 0.05, 0x2b2d32); // 소켓
+    const pole = new GB();
+    pole.box(-0.03, 0.03, 0, H, -0.03, 0.03, C.chrome);
+    pole.box(-0.055, 0.055, 0, 0.1, -0.055, 0.055, 0x2b2d32);                                // 깃대 밑 칼라
+    pole.prism(8, 0.06, 0.06, 0.1, 'y', 0, H + 0.05, 0, 0xffd23a, { a0: Math.PI / 8 });      // 금색 꼭지
+    const RB = [0xff2a2a, 0xff8a00, 0xffe600, 0x2ee85a, 0x2ab8ff, 0x4a5aff, 0xc04aff];
+    const led = new GB();                                                                       // 깃대 무지개 LED 슬리브
+    RB.forEach((col, i) => led.box(-0.045, 0.045, 0.25 + i * 0.2, 0.25 + i * 0.2 + 0.17, -0.045, 0.045, col));
+    const ledBike = new GB();                                                                   // 바이크 옆구리 무지개 LED 띠
+    for (const sd of SIDES) RB.forEach((col, i) => ledBike.box(...xr(sd, V.scooter ? 0.236 : 0.186, V.scooter ? 0.25 : 0.2), 0.6, 0.66, -0.5 + i * 0.16, -0.5 + i * 0.16 + 0.14, col));
+    c.extra.push({ key: 'flagPole', gb: pole, mat: 'body', pos: base, name: 'flagPole', inDims: true });
+    c.extra.push({ key: 'ledPole', gb: led, mat: 'glow', pos: base, name: 'ledPole' });
+    c.extra.push({ key: 'ledBike', gb: ledBike, mat: 'glow', name: 'ledBike' });
+    flags.push({ pos: [base[0], base[1] + H, base[2]], len: 0.9, h: 0.62, cols: [0xff2a2a, 0xffe600, 0x2ab8ff], tri: false, yaw: -1.0 });
+    c.ud.leader = true;
+  } else if (V.flag === 'big') {
     const base = V.scooter ? [0.2, 1.72, 0.84] : [0, 0.92 + 0.22 + 0.2 * Math.max(0, V.tiers - 1), 0.82], tip = [base[0] + 0.02, 2.62, base[2] - (V.scooter ? 0.06 : -0.02)];
     B.beam(base, tip, 0.035, 0.035, C.chrome);
     flags.push({ pos: tip, len: V.scooter ? 0.56 : 0.64, h: 0.46, cols: V.flagCols, tri: false, yaw: -1.0 });
@@ -2109,11 +2131,17 @@ function buildMotorbike(c, p) {
   };
   c.ud.motoVariant = V.name;
   c.ud.fall = { rotZ: 1.22, y: 0.3 };   // 옆으로 쓰러진 바이크: body.rotation.z = ±rotZ, body.position.y = y (권장)
+
   return { L: Math.round((zRear - zFront) * 100) / 100, W: 0.8, exhaust: V.scooter ? [0.24, 0.32, 0.98] : [0.2, 0.4, 1.0] };
 }
 
 // ── 라이더 리그: 관절 좌표(엉덩이 원점) → 몸통·팔·다리 각재 + 큰 머리. 포즈마다 지오메트리 1개 (캐시)
-export const RIDER_POSES = ['ride', 'stand', 'oneHand', 'noHands', 'lie', 'tumble', 'sprawl', 'sit'];
+//  v0.4.1 추가 포즈 (P1 메아리터널 대피용): 'dismount'(바이크 왼쪽 땅에 내려서서 왼손으로 핸들 잡음 — 바이크에 붙인 채로 씀)
+//    'run' / 'run2'(달리기 2프레임, 땅 — 0.12s 마다 번갈아 교체, 놀란 눈) 'cower'(쪼그려 머리 감싸기 '헉 회장님 차다!', 땅)
+//  ⚠ P1(메아리터널 폭주 퍼레이드) 판에서는 'lie'·'sprawl' 사용 금지 — 사람 접촉 0, 라이더는 먼저 내려 보도로 대피하고 빈 바이크만 넘어진다
+//    (V04_SPEC P1 '라이더 선대피 + 빈 바이크 도미노'). tumble/sit 도 P1 에선 쓰지 말 것 (넘어지는 연출 = 빈 바이크 전용)
+export const RIDER_POSES = ['ride', 'stand', 'oneHand', 'noHands', 'lie', 'tumble', 'sprawl', 'sit', 'dismount', 'run', 'run2', 'cower'];
+export const KICK_LEAN = 0.16; // 킥스탠드 정차 시 바이크 왼쪽 기울기 (rad)
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const va = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 const ta = (v) => [v.x, v.y, v.z];
@@ -2154,6 +2182,27 @@ function riderJoints(name, S) {
       J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.03, 1); J.face = v3(0, 1, 0); J.headUp = v3(0, 0.15, 1); J.headFace = v3(0, 1, 0); J.coat = 'flat'; J.dizzy = true;
       J.hands = [v3(-0.74, 0.02, 0.62), v3(0.74, 0.02, 0.62)]; J.feet = [v3(-0.44, 0.0, -0.8), v3(0.44, 0.0, -0.8)];
       J.armPole = () => v3(0, 1, 0.2); J.legPole = () => v3(0, 1, 0); J.footFwd = v3(0, 1, -0.2); break;
+    case 'dismount': { // 하차: 바이크 왼쪽 땅에 서서 왼손 = 왼쪽 그립, 오른손 = 허리춤. 발 = 땅(시트 높이 S.pos[1] 아래)
+      const gy = -S.pos[1] + 0.075;
+      J.pelvis = v3(-0.52, gy + 0.86, -0.1); J.up = v3(0.06, 1, 0.04); J.face = v3(0.3, 0, -1); J.coat = 'hang';
+      J.feet = [v3(-0.66, gy, -0.02), v3(-0.4, gy, 0.12)]; J.legPole = () => v3(0, 0.2, -1);
+      J.hands = [G[0], v3(-0.2, gy + 0.92, -0.02)]; J.armPole = (s) => (s < 0 ? v3(-1, -0.3, 0.2) : v3(1, -0.4, 0.4));
+      break;
+    }
+    case 'run': case 'run2': { // 달리기 (땅): 앞으로 기울고 팔다리 교차, 코트 휘날림, 놀란 눈
+      const m = name === 'run' ? 1 : -1;
+      J.pelvis = v3(0, 0, 0); J.up = lean(0.3); J.panic = true;
+      J.feet = [v3(-0.12, m > 0 ? -0.46 : -0.8, m > 0 ? -0.42 : 0.36), v3(0.12, m > 0 ? -0.8 : -0.46, m > 0 ? 0.36 : -0.42)];
+      J.legPole = () => v3(0, 0.3, -1);
+      J.hands = [v3(-0.27, m > 0 ? 0.2 : 0.44, m > 0 ? 0.3 : -0.3), v3(0.27, m > 0 ? 0.44 : 0.2, m > 0 ? -0.3 : 0.3)];
+      J.armPole = (s) => v3(s, -0.6, 0.2);
+      break;
+    }
+    case 'cower': // 쪼그려 앉아 두 손으로 머리 감싸기 (땅)
+      J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.78, -0.58); J.panic = true; J.coat = 'hang';
+      J.feet = [v3(-0.2, -0.48, -0.36), v3(0.2, -0.48, -0.36)]; J.legPole = () => v3(0, 1, -0.6);
+      J.hands = [v3(-0.16, 0.8, -0.56), v3(0.16, 0.8, -0.56)]; J.armPole = (s) => v3(s, 0.2, 0.3);
+      break;
     case 'sit': // 엉덩방아 (다리 앞으로, 손 뒤로 짚음)
       J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.9, 0.42); J.headUp = v3(0, 1, 0.1); J.coat = 'hang'; J.dizzy = true;
       J.hands = [v3(-0.3, -0.12, 0.38), v3(0.3, -0.12, 0.38)]; J.feet = [v3(-0.22, -0.06, -0.74), v3(0.22, -0.06, -0.74)];
@@ -2203,11 +2252,14 @@ function riderParts(g, name, S) {
   // 머리 (장난감 비율 1.25배)
   const up = (J.headUp || J.up.clone().add(v3(0, 1.6, 0))).clone();
   const Hm = basis(at(0, TL + 0.04, 0), up, J.headFace || v3(0, 0, -1)).multiply(_m4().makeScale(1.25, 1.25, 1.25));
-  g.with(Hm, (q) => RIDER_HEADS[o.head](q, o, J.dizzy));
+  g.with(Hm, (q) => RIDER_HEADS[o.head](q, o, J.dizzy || (J.panic ? 2 : false)));
 }
 function riderFace(g, o, dizzy, eyeY = 0.2) {
   g.box(-0.17, 0.17, 0.02, 0.36, -0.16, 0.16, o.skin ?? C.skin, 'D');
-  if (dizzy) { // 어질어질 소용돌이 눈 (슬랩스틱)
+  if (dizzy === 2) { // v0.4.1 놀람 (대피): 동그란 흰 눈 + 작은 눈동자 + 'O' 입
+    for (const s of SIDES) { const cx = s * 0.08; g.box(cx - 0.055, cx + 0.055, eyeY - 0.06, eyeY + 0.06, -0.168, -0.16, 0xffffff); g.box(cx - 0.02, cx + 0.02, eyeY - 0.02, eyeY + 0.02, -0.173, -0.168, EYE); }
+    g.box(-0.04, 0.04, 0.05, 0.12, -0.172, -0.16, 0x5a1a14);
+  } else if (dizzy) { // 어질어질 소용돌이 눈 (슬랩스틱)
     for (const s of SIDES) {
       const cx = s * 0.08;
       g.box(cx - 0.05, cx + 0.05, eyeY - 0.05, eyeY + 0.05, -0.168, -0.16, 0xffffff);
@@ -2468,10 +2520,22 @@ function rimGlowGeo(w) {
   if (!g) { const gb = new GB(); rimRing(gb, 0, 0, 0, w.r, w.w, w.o.glowRim); g = gb.build(false); RIM_CACHE.set(k, g); }
   return g;
 }
+// GB 삼각형을 다른 GB 로 옮겨 붙임 (pos 평행이동). 둘 다 변환 행렬 없는 상태에서만
+function appendGB(dst, src, pos = [0, 0, 0]) {
+  for (let i = 0; i < src.p.length; i += 3) dst.p.push(src.p[i] + pos[0], src.p[i + 1] + pos[1], src.p[i + 2] + pos[2]);
+  dst.n.push(...src.n); dst.c.push(...src.c);
+}
 function compile(kind, def, p) {
   const c = newCtx(p.detailed, p.variant, p.color);
   if (p.plate) c.body.plateMode = p.plate;        // v0.4.1 숨은 위반 번호판 (plate() 가 뒤 번호판에서 읽음)
   const info = def.build(c, p);
+  if (p.lod && c.rider) { // v0.4.1 오토바이 LOD: 라이더(ride 포즈)·깃발을 차체 한 메시로 병합 → 차체 1 + 네온 1 = draw call 2
+    const S = c.rider;
+    c.body.at(S.pos[0], S.pos[1], S.pos[2], 0, 0, 0, 1, (q) => riderParts(q, 'ride', S));
+    for (const x of c.extra.filter((e) => e.key === 'flags')) appendGB(c.body, x.gb, x.pos);
+    c.extra = c.extra.filter((e) => e.key !== 'flags');
+    c.rider = null;
+  }
   const E = { info, wheels: [] };
   const main = p.detailed ? c.wheels.slice(0, 4) : [];
   const merged = p.detailed ? c.wheels.slice(4) : c.wheels;
@@ -2661,6 +2725,12 @@ export function buildVehicle(kind, opts = {}) {
   if (!E) { E = compile(kind, def, { color, detailed: detailed && !lod, variant, seed: opts.seed ?? 0, plate, passengers, lod, leader }); GEO_CACHE.set(key, E); }
   const g = instantiate(kind, E, detailed && !lod);
   if (plate) g.userData.plate = plate;
+  if (lod) g.userData.lod = true;
+  if (leader) { // 깃대 아래로 LED·깃발을 옮겨 붙임 → scene.attach(userData.flagPole) 한 번이면 통째로 떨어짐
+    const ud = g.userData, pole = ud.flagPole;
+    for (const m of [ud.ledPole, ...(ud.flags || [])]) if (m && pole) { pole.add(m); m.position.sub(pole.position); }
+    ud.leds = [ud.ledPole, ud.ledBike];
+  }
   if (passengers) g.userData.passengers = passengers;
   const sticker = opts.sticker ?? def.sticker;
   if (sticker && E.info.r && !g.userData.sticker) addSticker(g, E.info.r, sticker);
@@ -2845,14 +2915,14 @@ function damageOps(d, L, focus = 'both') {
   if (d.t === 'car') {
     const RB = [-d.hw - 0.06, d.hw + 0.06, d.yb - 0.1, d.yb + 0.26, Math.max(d.zr - 0.28, d.wR + 0.03), d.hl + 0.22];
     const FB = [-d.hw - 0.06, d.hw + 0.06, d.yb - 0.1, d.yb + 0.25, -d.hl - 0.3, Math.min(d.zf + 0.28, d.wF - 0.03)];
-    if (rear) ops.push({ id: 'rear', zone: RB, m: L >= 3 ? zoneM([d.hw, d.yb + 0.22, d.hl], [0.05, -0.03, -0.17]) : zoneM([d.hw, d.yb + 0.22, d.hl], [0.0, -0.05, -0.035]), dark: L >= 3 ? 0.6 : 0.72 });
+    if (rear) ops.push({ id: 'rear', zone: RB, m: L >= 3 ? zoneM([d.hw, d.yb + 0.22, d.hl], [0.06, 0.1, -0.24]) : zoneM([d.hw, d.yb + 0.22, d.hl], [0.0, -0.05, -0.05]), dark: L >= 3 ? 0.6 : 0.72 });
     if (front) ops.push({ id: 'front', zone: FB, m: zoneM([-d.hw, d.yb + 0.2, -d.hl], [0, -0.04, L >= 4 ? 0.1 : L >= 2 ? 0.045 : 0.028]), dark: 0.72 });
     if (L >= 4) ops.push({ id: 'roof', zone: [-d.hw - 0.2, d.hw + 0.2, d.roofY - 0.02, d.roofTop + 0.5, -d.hl, d.hl], m: zoneM([d.hw, d.roofY, 0], [0.02, 0, 0.06], [0, -0.035, 0]), dark: 0.8 });
   } else { // 캡오버 (포터·레커)
     const R = d.rear;
     if (rear) {
       if (R.lift) ops.push({ id: 'rear', zone: R.zone, m: zoneM(R.pivot, [L >= 3 ? 0.17 : 0.07, 0, L >= 3 ? -0.09 : -0.035]), dark: 0.7 });
-      else ops.push({ id: 'rear', zone: R.zone, m: zoneM(R.pivot, L >= 3 ? [0.04, -0.03, -0.17] : [0, -0.05, -0.035]), dark: 0.7 });
+      else ops.push({ id: 'rear', zone: R.zone, m: zoneM(R.pivot, L >= 3 ? [0.05, 0.1, -0.24] : [0, -0.05, -0.05]), dark: 0.7 });
     }
     if (front) ops.push({ id: 'front', zone: [-d.hw - 0.08, d.hw + 0.08, 0.27, 0.6, d.zF - 0.12, d.zF + 0.33], m: zoneM([-d.hw, 0.54, d.zF], [0, -0.04, L >= 4 ? 0.1 : L >= 2 ? 0.045 : 0.028]), dark: 0.72 });
     if (L >= 4) ops.push({ id: 'roof', zone: [-d.hw - 0.3, d.hw + 0.3, d.roofY - 0.02, d.roofY + 0.75, d.zF - 0.1, d.zB + 0.06], m: zoneM([d.hw, d.roofY, 0], [0.02, 0, 0.055], [0, -0.035, 0]), dark: 0.8 });
@@ -2908,10 +2978,16 @@ function damageOverlay(d, L, ops) {
   const G = new GB(), col = d.col, opOf = (id) => ops.find((o) => o.id === id);
   const R = opOf('rear'), Fr = opOf('front');
   if (d.t === 'car') {
-    if (R) G.with(R.m, (q) => { // 뒤범퍼 긁힘 (범퍼와 같이 움직임)
-      for (const [x0, x1, y, h, c2] of [[-d.hw + 0.08, -0.15, d.yb + 0.13, 0.022, 0xd9dce0], [-d.hw + 0.2, 0.25, d.yb + 0.05, 0.016, 0xd9dce0], [-d.hw + 0.05, -0.5, d.yb + 0.19, 0.03, 0x15161a]]) q.box(x0, x1, y - h / 2, y + h / 2, d.hl - 0.01, d.hl + 0.006, c2);
-      q.at(-d.hw * 0.55, d.yb + 0.1, d.hl + 0.004, 0, 0, 0.6, 1, (r) => r.box(-0.16, 0.16, -0.012, 0.012, 0, 0.005, 0x15161a)); // 찢어진 금
+    if (R) G.with(R.m, (q) => { // 뒤범퍼 긁힘 (범퍼와 같이 움직임) — 은색 긴 자국 (검은 범퍼 위에서 추격캠에 읽힘)
+      for (const [x0, x1, y, h, c2] of [[-d.hw + 0.04, 0.1, d.yb + 0.15, 0.03, 0xe8ebef], [-d.hw + 0.16, 0.42, d.yb + 0.06, 0.022, 0xd9dce0], [-d.hw + 0.05, -0.35, d.yb + 0.21, 0.026, 0xc4c9d0]]) q.box(x0, x1, y - h / 2, y + h / 2, d.hl - 0.01, d.hl + 0.008, c2);
+      q.at(-d.hw * 0.5, d.yb + 0.11, d.hl + 0.006, 0, 0, 0.5, 1, (r) => r.box(-0.2, 0.2, -0.016, 0.016, 0, 0.005, 0xe8ebef)); // 사선 긁힘
+      q.box(-d.hw - 0.03, -d.hw + 0.2, d.yb - 0.04, d.yb + 0.25, d.hl - 0.22, d.hl + 0.01, 0x4a4e55);                 // 찢겨 벌어진 모서리
     });
+    if (R && d.tailL) { // 왼쪽 테일램프 금 (켜진 브레이크등 위에도 보임)
+      const [x0, x1, y0, y1, zt] = d.tailL;
+      G.at((x0 + x1) / 2, (y0 + y1) / 2, zt + 0.012, 0, 0, 0, Math.min(1.2, (x1 - x0) * 3.2), (q) => cracks(q));
+      G.box(x0 - 0.01, x0 + 0.05, y0 - 0.01, y1 + 0.01, zt - 0.02, zt + 0.014, 0x2a2b2f);                               // 바깥 모서리 깨짐
+    }
     if (Fr) G.with(Fr.m, (q) => {
       for (const [x0, x1, y] of [[0.15, d.hw - 0.08, -0.0], [0.3, d.hw - 0.2, 0.08]]) q.box(x0, x1, d.yb + 0.1 + y - 0.011, d.yb + 0.1 + y + 0.011, -d.hl - 0.006, -d.hl + 0.01, 0xd9dce0);
     });
@@ -2950,7 +3026,8 @@ function damageOverlay(d, L, ops) {
       if (Lt > 0.4) G.at(0, d.belt + 0.005, d.cabZ1 + 0.03, -0.2, 0, 0, 1, (q) => q.box(-(d.hw - 0.08), d.hw - 0.08, 0, 0.035, 0, Lt, col, '', { D: 0x34363b })); // 트렁크 들림
     }
   } else { // 캡오버
-    if (R) G.with(R.m, (q) => { for (const [x0, x1, y] of [[-d.hw + 0.06, -0.1, 0.38], [-d.hw + 0.2, 0.3, 0.33]]) q.box(x0, x1, y - 0.012, y + 0.012, d.hl + 0.03, d.hl + 0.04, 0xd9dce0); });
+    if (R) G.with(R.m, (q) => { for (const [x0, x1, y] of d.rear.lift ? [[-0.7, 0.2, 0.3], [-0.4, 0.6, 0.26]] : [[-d.hw + 0.06, -0.1, 0.38], [-d.hw + 0.2, 0.3, 0.33]]) q.box(x0, x1, y - 0.014, y + 0.014, d.rear.lift ? d.hl + 0.345 : d.hl + 0.03, d.rear.lift ? d.hl + 0.355 : d.hl + 0.042, 0xe8ebef); });
+    if (R && d.tailL) { const [x0, x1, y0, y1, zt] = d.tailL; G.at((x0 + x1) / 2, (y0 + y1) / 2, zt + 0.012, 0, 0, 0, 1, (q) => cracks(q)); G.box(x0 - 0.01, x0 + 0.05, y0 - 0.01, y1 + 0.01, zt - 0.02, zt + 0.014, 0x2a2b2f); }
     if (L >= 2 && Fr) { // 그릴 판 열림 (경첩 = 그릴 윗변) + 라디에이터
       G.box(-0.5, 0.5, 0.6, 0.86, d.zF - 0.01, d.zF + 0.024, 0x101113);
       for (let i = 0; i < 6; i++) G.box(-0.44 + i * 0.16, -0.38 + i * 0.16, 0.63, 0.83, d.zF - 0.016, d.zF - 0.008, 0x6f7680);
@@ -2992,6 +3069,34 @@ export function setDamage(vehicle, level = 0, o = {}) {
   return L;
 }
 
+// v0.4.1 킥스탠드 정차 (오토바이): on → 차체(body)가 KICK_LEAN 만큼 왼쪽으로 기울고 왼쪽 킥스탠드 다리(첫 호출 때 생성)가 땅을 짚음,
+//  바퀴(group 직속)도 같이 기울임. off → 원위치. 빈 바이크 전용 — 라이더가 붙어 있으면 같이 기우니 먼저 떼거나 'dismount' 대신 쓸 것.
+//  도미노로 넘어뜨릴 때는 setKickstand(v, false) 후 기존 fall 권장값(userData.fall) 사용. 반환: 성공 여부
+let KICK_GEO = null;
+export function setKickstand(vehicle, on = true) {
+  const ud = vehicle?.userData; if (!ud || ud.kind !== 'motorbike' || !ud.body) return false;
+  if (!ud.kickstand) {
+    if (!KICK_GEO) {
+      const K = new GB(), fy = 0.34 * Math.tan(KICK_LEAN) + 0.02;
+      K.beam([-0.12, 0.34, 0.04], [-0.34, fy + 0.02, 0.2], 0.045, 0.045, 0x8e97a2);
+      K.box(-0.41, -0.27, fy - 0.025, fy + 0.02, 0.14, 0.27, 0x5b626c);
+      KICK_GEO = K.build(false);
+    }
+    const m = new THREE.Mesh(KICK_GEO, ud.bodyMesh?.material || MAT.body); m.name = 'kickstand'; m.castShadow = true; ud.body.add(m); ud.kickstand = m;
+  }
+  const th = on ? KICK_LEAN : 0;
+  ud.kickstand.visible = !!on; ud.body.rotation.z = th;
+  for (const w of ud.wheels || []) {
+    if (w.parent !== vehicle) continue;
+    const b = (w.userData.base ||= w.position.clone());
+    w.position.set(b.x - b.y * Math.sin(th), b.y * Math.cos(th), b.z); w.rotation.z = th;
+  }
+  ud.parked = !!on;
+  return true;
+}
+// 리더 깃대 LED (v0.4.1, motorbike { leader: true }): 퇴치 때 '툭' 꺼짐
+export function setLeaderLed(vehicle, on = true) { for (const m of vehicle?.userData?.leds || []) if (m) m.visible = !!on; }
+
 // 오토바이 라이더 포즈 (userData.setPose 와 같음). 반환: 성공 여부
 export function setPose(vehicle, name) { return vehicle?.userData?.setPose ? vehicle.userData.setPose(name) : false; }
 // 확장: detailed 차량의 per-vehicle 재질 해제 (지오메트리는 캐시 공유 → dispose 금지)
@@ -3001,8 +3106,8 @@ export function disposeVehicle(vehicle) { for (const m of vehicle?.userData?.fla
 // 캔버스 간판 (꿀수박)
 // ────────────────────────────────────────────────────────────────────────
 const TEX = new Map(), SIGN_MAT = new Map();
-const SIGN_SIZE = { heli: [512, 180], beginner: [512, 208], myLane: [512, 208], pullover: [512, 128], rent: [256, 320], kimbap: [256, 256] };   // 기본 512×144
-const SIGN_ALPHA = new Set(['heli', 'beginner', 'myLane', 'kimbap']);
+const SIGN_SIZE = { heli: [512, 180], beginner: [512, 208], myLane: [512, 208], pullover: [512, 128], rent: [256, 320], kimbap: [256, 256], ruler: [512, 160] };   // 기본 512×144
+const SIGN_ALPHA = new Set(['heli', 'beginner', 'myLane', 'kimbap', 'ruler']);
 const SIGN_GLOW = new Set(['pullover']);   // 발광 (조명 무시) — LED 전광판
 // 둥근 사각형 경로
 function rr2(x, X, Y, W, H, R) { x.beginPath(); x.moveTo(X + R, Y); x.arcTo(X + W, Y, X + W, Y + H, R); x.arcTo(X + W, Y + H, X, Y + H, R); x.arcTo(X, Y + H, X, Y, R); x.arcTo(X, Y, X + W, Y, R); x.closePath(); }
@@ -3034,8 +3139,9 @@ const SIGN_DRAW = {
     x.font = `${Math.round(h * 0.7)}px ${FONT_DISPLAY}`;
     const tw = x.measureText('정차하세요').width, s = Math.min(1, (w - 30) / tw);
     x.save(); x.translate(w / 2, h * 0.54); x.scale(s, 1); x.fillText('정차하세요', 0, 0); x.restore();
-    x.globalCompositeOperation = 'destination-in'; // 도트 매트릭스: 6px 격자 점만 남김
-    for (let yy = 1; yy < h; yy += 6) for (let xx = 1; xx < w; xx += 6) { x.fillRect(xx, yy, 4.6, 4.6); }
+    x.globalCompositeOperation = 'destination-in'; // 도트 매트릭스: 6px 격자 점만 남김 (경로 하나로 한 번에 채워야 함)
+    x.beginPath(); for (let yy = 1; yy < h; yy += 6) for (let xx = 1; xx < w; xx += 6) x.rect(xx, yy, 4.6, 4.6);
+    x.fillStyle = '#fff'; x.fill();
     x.globalCompositeOperation = 'destination-over'; x.fillStyle = '#07080a'; x.fillRect(0, 0, w, h);
   },
   // '임대' 깃발 (지붕용 fxProp 'rentFlag'): 빨강 바탕 + 흰 세로 글씨 + 전화번호 줄
@@ -3046,6 +3152,14 @@ const SIGN_DRAW = {
     x.font = `${Math.round(w * 0.62)}px ${FONT_DISPLAY}`;
     x.fillText('임', w / 2, h * 0.3); x.fillText('대', w / 2, h * 0.66);
     x.font = `${Math.round(w * 0.11)}px ${FONT_DISPLAY}`; x.fillText('☎ 010-1차로', w / 2, h * 0.9);
+  },
+  // #4 자 위 빨간 표 '두 칸 점유!'
+  ruler(x, w, h) {
+    rr2(x, 4, 4, w - 8, h - 8, 24); x.fillStyle = '#e2231a'; x.fill();
+    x.lineWidth = 8; x.strokeStyle = '#ffffff'; rr2(x, 14, 14, w - 28, h - 28, 16); x.stroke();
+    x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `${Math.round(h * 0.56)}px ${FONT_DISPLAY}`;
+    const tw = x.measureText('두 칸 점유!').width, s = Math.min(1, (w - 50) / tw);
+    x.save(); x.translate(w / 2, h * 0.54); x.scale(s, 1); x.fillText('두 칸 점유!', 0, 0); x.restore();
   },
   // 삼각김밥 엠블럼 (회장님 세단 트렁크·그릴): 흰 둥근 삼각형 + 검정 김 띠
   kimbap(x, w, h) {
@@ -3093,7 +3207,10 @@ function signTexture(key) {
 }
 const SIGN_GEO = new Map();
 function signGeo(w, h) { const k = w + '|' + h; let g = SIGN_GEO.get(k); if (!g) { g = new THREE.PlaneGeometry(w, h); SIGN_GEO.set(k, g); } return g; }
-function signMat(key, tex) {
+function signMat(key, tex, doubleSide = false) {
+  if (doubleSide) { // 깃발 천 (양면)
+    let m2 = SIGN_MAT.get(key); if (!m2) { m2 = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }); SIGN_MAT.set(key, m2); } return m2;
+  }
   let m = SIGN_MAT.get(key);
   if (!m) {
     m = SIGN_GLOW.has(key) ? new THREE.MeshBasicMaterial({ map: tex })
@@ -3263,6 +3380,34 @@ const PROJ = {
     band(0.3, 0.42); band(0.58, 0.68);
     g.box(-0.012, 0.012, y0 + 0.08 + hh - 0.02, y0 + 0.08 + hh + 0.012, -0.012, 0.012, 0xff9a4a);
     return { radius: 0.36 };
+  },
+  // v0.4.1 #9 갓길 낙하물 (숏폼중독이 떨어뜨림): 원점 = 중심, 바닥에 놓으면 y = radius 근처
+  phoneMount(g, glow) { // 폰 거치대 (~0.9m): 검정 흡착판 + 꺾인 팔 2단 + 집게 크래들에 낀 폰(화면 발광) — 넘어진 채로도 '거치대+폰' 실루엣
+    const k = 0x1b1c1f, k2 = 0x34373d, a0 = Math.PI / 8;
+    g.prism(8, 0.24, 0.17, 0.08, 'y', 0, -0.3, 0.1, k, { a0, capB: k2 });                     // 흡착판
+    g.prism(8, 0.07, 0.07, 0.1, 'y', 0, -0.22, 0.1, k2, { a0 });
+    g.beam([0, -0.18, 0.1], [0, 0.06, -0.02], 0.08, 0.08, k);                                  // 팔 1
+    g.prism(8, 0.06, 0.06, 0.12, 'x', 0, 0.07, -0.02, 0x8e97a2, { a0 });                       // 관절 (은색)
+    g.beam([0, 0.07, -0.02], [0, 0.18, 0.12], 0.07, 0.07, k);                                  // 팔 2
+    g.box(-0.3, 0.3, 0.12, 0.2, 0.08, 0.18, k2);                                               // 크래들 받침
+    for (const s of SIDES) g.box(...xr(s, 0.27, 0.33), 0.12, 0.48, 0.08, 0.2, k2);              // 집게 팔
+    g.box(-0.27, 0.27, 0.16, 0.5, 0.1, 0.16, 0x17181c);                                        // 폰 (가로)
+    const gy0 = 0.18, gy1 = 0.48; glow.box(-0.24, 0.24, (gy0 + gy1) / 2, gy1, 0.16, 0.172, 0x6ff6ff); glow.box(-0.24, 0.24, gy0, (gy0 + gy1) / 2, 0.16, 0.172, 0xff7ad0); // 숏폼 화면 (+Z = 운전석 쪽)
+    glow.box(-0.04, 0.04, 0.3, 0.36, 0.172, 0.176, 0xffffff);                                  // ▶
+    return { radius: 0.42 };
+  },
+  charger(g) { // 시거잭 충전기 + 꼬인 케이블 (~0.8m): 흰 플러그 + 파란 LED 링 + 나선 케이블 + USB 끝
+    const a0 = Math.PI / 8, wh = 0xf4f4f2;
+    g.prism(8, 0.1, 0.12, 0.26, 'z', 0, 0, -0.28, wh, { a0, capA: 0x9aa1aa });                 // 플러그 몸통
+    g.prism(8, 0.13, 0.13, 0.04, 'z', 0, 0, -0.14, 0x3a8dff, { a0 });                          // LED 링
+    g.box(-0.02, 0.02, -0.02, 0.02, -0.46, -0.4, 0xd9dce0);                                     // 끝 접점
+    for (let i = 0; i < 22; i++) { // 나선 케이블
+      const t = i / 21, a = t * Math.PI * 8, x = Math.cos(a) * 0.08, y = Math.sin(a) * 0.08, z = -0.1 + t * 0.48;
+      const t2 = (i + 1) / 21, a2 = t2 * Math.PI * 8;
+      if (i < 21) g.beam([x, y, z], [Math.cos(a2) * 0.08, Math.sin(a2) * 0.08, -0.1 + t2 * 0.48], 0.035, 0.035, 0x15161a);
+    }
+    g.box(-0.06, 0.06, -0.04, 0.04, 0.38, 0.5, 0x15161a); g.box(-0.04, 0.04, -0.015, 0.015, 0.5, 0.56, 0xc4c9d0); // USB 끝
+    return { radius: 0.32 };
   },
 };
 export const PROJECTILE_KINDS = Object.keys(PROJ);
@@ -3711,7 +3856,109 @@ function buildCrashScene() {
   return g;
 }
 
-const FX_PROPS = { drone: buildDrone, balloons: buildBalloons, helicopter: buildHelicopter, ufo: buildUfo, crashScene: buildCrashScene };
+// ── v0.4.1 #7 카메라 앞 천사: 'angelRing' 천사 링 / 'wings' 날개 / 'devilHorns' 악마 뿔 — 셋 다 원점 = 지붕 위 부착점 (차 userData.height 에 놓기)
+//  'angelRing': 지붕 위 0.55m 에 뜬 노란 발광 고리 (지름 1.3m, 추격캠에서 납작한 타원으로 읽힘). userData.ring (둥실 position.y / 회전)
+function ringParts(g, R = 0.62, r = 0.07, n = 20) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, b = ((i + 1) / n) * Math.PI * 2;
+    g.beam([Math.cos(a) * R, 0, Math.sin(a) * R], [Math.cos(b) * R, 0, Math.sin(b) * R], r * 2, r * 1.4, i % 2 ? 0xffe14a : 0xfff3a0);
+  }
+}
+function buildAngelRing() {
+  const g = new THREE.Group(); g.name = 'fx:angelRing';
+  const ring = fxMesh(fxGeo('angel:ring', (q) => ringParts(q)), MAT.glow, 'ring', false); ring.position.y = 0.55; g.add(ring);
+  g.userData = { kind: 'angelRing', ring, height: 0.62, width: 1.38 };
+  return g;
+}
+//  'wings': 흰 깃털 날개 한 쌍 (펼친 폭 ~3.0m). userData.wings = [L, R] (피벗 = 날개 뿌리, rotation.z 로 퍼덕), setTorn(bool) = 찢어진 날개로 교체
+function wingParts(torn) {
+  return (g) => { // 오른쪽(+X) 날개, 뿌리 = 원점, 위로 휘며 바깥으로
+    const fe = [0xffffff, 0xf2f4f8, 0xe2e8f0];
+    g.box(0, 0.36, -0.06, 0.1, -0.18, 0.18, fe[0]);                                          // 어깨
+    const rows = [[0.3, 0.12, 0.62, 0.36], [0.55, 0.22, 0.95, 0.3], [0.85, 0.3, 1.3, 0.26], [1.15, 0.36, 1.5, 0.22]];
+    rows.forEach(([x0, y0, x1, h], i) => {
+      if (torn && (i === 2 || i === 3)) { // 찢김: 끝 깃털 듬성 + 회색 그을음
+        for (let k = 0; k < 3; k++) if (k !== 1) g.at(x0 + k * 0.12, y0 - 0.1 * k, 0.02 * k, 0, 0, -0.5 - k * 0.2, 1, (q) => q.box(0, 0.32, -0.04, 0.04, -0.06, 0.06, 0xb8bcc4));
+        return;
+      }
+      g.at(x0, y0, 0, 0, 0, 0.18 - i * 0.12, 1, (q) => q.box(0, x1 - x0 + 0.25, -h / 2, h / 2, -0.1 + i * 0.01, 0.1 - i * 0.01, fe[i % 3]));
+      for (let k = 0; k < 4; k++) g.at(x0 + 0.1 + k * 0.12, y0 - h / 2, 0, 0, 0, -0.6 - k * 0.08, 1, (q) => q.box(0, 0.34, -0.045, 0.045, -0.08, 0.08, fe[(k + i) % 3])); // 아래로 처진 깃털
+    });
+  };
+}
+function buildWings() {
+  const g = new THREE.Group(); g.name = 'fx:wings';
+  const wings = SIDES.map((s) => {
+    const m = fxMesh(fxGeo('wings:ok', wingParts(false)), MAT.body, s < 0 ? 'wingL' : 'wingR');
+    m.position.set(s * 0.45, 0.05, 0.3); if (s < 0) m.scale.x = -1; m.rotation.z = s * 0.42; g.add(m); return m;
+  });
+  g.userData = {
+    kind: 'wings', wings, torn: false, width: 3.1, height: 1.0,
+    setTorn: (on = true) => { g.userData.torn = !!on; for (const w of wings) w.geometry = fxGeo(on ? 'wings:torn' : 'wings:ok', wingParts(!!on)); },
+  };
+  return g;
+}
+//  'devilHorns': 빨간 뿔 2개 (지붕 앞쪽 양옆, 높이 ~0.75m, 바깥으로 휘어 올라감). userData.horns = [L, R] (scale.y 로 쑥 자라기)
+function hornParts(g) {
+  const segs = 6;
+  for (let i = 0; i < segs; i++) {
+    const t0 = i / segs, t1 = (i + 1) / segs, r0 = 0.15 * (1 - t0) + 0.015, r1 = 0.15 * (1 - t1) + 0.015;
+    const p0 = [Math.sin(t0 * 1.2) * 0.32, t0 * 0.72, -Math.sin(t0 * 2.0) * 0.06], p1 = [Math.sin(t1 * 1.2) * 0.32, t1 * 0.72, -Math.sin(t1 * 2.0) * 0.06];
+    g.beam(p0, p1, r0 * 2, r0 * 2, i < 2 ? 0xb3141f : i < 4 ? 0xe2231a : 0xff4a3a);
+    void r1;
+  }
+  g.box(-0.17, 0.17, -0.02, 0.06, -0.17, 0.17, 0x7a0f17);
+}
+function buildDevilHorns() {
+  const g = new THREE.Group(); g.name = 'fx:devilHorns';
+  const horns = SIDES.map((s) => { const m = fxMesh(fxGeo('horn', hornParts), MAT.body, s < 0 ? 'hornL' : 'hornR'); m.position.set(s * 0.45, 0, -0.35); if (s < 0) m.scale.x = -1; g.add(m); return m; });
+  g.userData = { kind: 'devilHorns', horns, height: 0.75, width: 1.3 };
+  return g;
+}
+// ── #4 거대한 자 ('ruler'): 길이 3.6m(차로 폭) 노란 줄자 판 + 눈금(10cm·50cm·1m) + 빨간 '두 칸 점유!' 표. 원점 = 자 중심 아래면, 길이 = X
+//  노면에 눕히거나(rotation 그대로) 공중에 띄워 SUV 위로 걸치기. userData.tag (빨간 표 메시)
+function rulerParts(g) {
+  const L = 3.6, w = 0.42, t = 0.07, yl = 0xffd23a, k = 0x1b1c1f;
+  g.box(-L / 2 - 0.08, L / 2 + 0.08, 0, t, -w / 2, w / 2, yl, '', { U: 0xffe066, D: 0xd8a820 });
+  g.box(-L / 2 - 0.08, L / 2 + 0.08, 0.002, t - 0.002, -w / 2 - 0.006, -w / 2, 0xd8a820);
+  for (let i = 0; i <= 36; i++) {
+    const x = -L / 2 + i * 0.1, len = i % 10 === 0 ? 0.24 : i % 5 === 0 ? 0.16 : 0.09;
+    g.box(x - 0.012, x + 0.012, t, t + 0.006, w / 2 - len, w / 2, k);
+  }
+  for (let m = 0; m <= 3; m++) pixelArt(g, textRows(String(m)), 'U', -L / 2 + m + 0.08, t + 0.006, 0.0, 0.032, k); // 0 1 2 3 (m)
+  g.box(-0.02, 0.02, t, t + 0.008, -w / 2, w / 2, 0xe2231a);                                  // 가운데(차선) 빨간 선
+  g.box(-L / 2 - 0.2, -L / 2, -0.04, t + 0.1, -w / 2 - 0.04, w / 2 + 0.04, 0x8e97a2);       // 줄자 몸통 (은색 케이스)
+}
+function buildRuler() {
+  const g = new THREE.Group(); g.name = 'fx:ruler';
+  g.add(fxMesh(fxGeo('ruler', rulerParts), MAT.body, 'ruler'));
+  const tex = signTexture('ruler');
+  let tag = null;
+  if (tex) { tag = new THREE.Mesh(signGeo(1.4, 0.44), signMat('ruler', tex)); tag.name = 'tag'; tag.position.set(0, 0.62, 0); g.add(tag); }
+  g.userData = { kind: 'ruler', tag, length: 3.6, width: 0.42 };
+  return g;
+}
+// ── #10 '임대' 깃발 ('rentFlag'): 세입자 차 지붕용. 원점 = 깃대 받침(지붕 위), 높이 ~1.9m. userData.flag (펄럭: rotation.y = sin(t*7)*0.3)
+function buildRentFlag() {
+  const g = new THREE.Group(); g.name = 'fx:rentFlag';
+  g.add(fxMesh(fxGeo('rent:pole', (q) => {
+    q.box(-0.12, 0.12, 0, 0.06, -0.12, 0.12, 0x2b2d32);                                    // 자석 받침
+    q.box(-0.03, 0.03, 0.06, 2.1, -0.03, 0.03, 0xd7dde5);                                   // 깃대
+    q.prism(8, 0.06, 0.06, 0.09, 'y', 0, 2.12, 0, 0xffd23a);                                // 꼭지
+  }), MAT.body, 'pole'));
+  const flag = new THREE.Group(); flag.name = 'flag'; flag.position.set(0, 2.06, 0); g.add(flag);
+  const tex = signTexture('rent');
+  if (tex) {
+    const m = signMat('rent2', tex, true);
+    const f = new THREE.Mesh(signGeo(0.92, 1.15), m); f.name = 'flagCloth'; f.position.set(0, -0.58, 0.48); f.rotation.y = Math.PI / 2; flag.add(f); // 앞면 = 오른쪽(추격캠 쪽)
+  }
+  flag.rotation.y = -0.6; // 옆바람: 추격캠에서 면이 보이게
+  g.userData = { kind: 'rentFlag', flag, height: 2.17 };
+  return g;
+}
+
+const FX_PROPS = { drone: buildDrone, balloons: buildBalloons, helicopter: buildHelicopter, ufo: buildUfo, crashScene: buildCrashScene,
+  angelRing: buildAngelRing, wings: buildWings, devilHorns: buildDevilHorns, ruler: buildRuler, rentFlag: buildRentFlag };
 export const FX_PROP_KINDS = Object.keys(FX_PROPS);
 export function buildFxProp(kind) {
   const g = (FX_PROPS[kind] || FX_PROPS.drone)();

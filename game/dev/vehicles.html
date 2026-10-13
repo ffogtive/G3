@@ -145,7 +145,10 @@ function mkVehicle(kind) {
   const [k, vs] = kind.split(':'); kind = k; // 'motorbike:2' = 변형 직접 지정 (v0.4)
   const det = state.detailed || DETAILED.has(kind);
   const color = VILLAIN_COLOR[kind] ?? (kind === 'sedan' ? 0xf4f4f2 : kind === 'compact' ? 0xd8342c : kind === 'suv' ? 0x2b2d31 : kind === 'van' ? 0xe9ecef : kind === 'truck' ? 0xf4f4f2 : kind === 'bus' ? 0x2f6fd6 : undefined);
-  const v = V.buildVehicle(kind, { color, detailed: det, seed, variant: vs !== undefined ? +vs : undefined });
+  const v = V.buildVehicle(kind, { color, detailed: det, seed, variant: vs !== undefined ? +vs : undefined,
+    plate: Q.get('plate') || undefined, passengers: +(Q.get('pax') || 0), sticker: Q.get('sticker') || undefined, lod: Q.has('lod'), leader: Q.has('leader') }); // v0.4.1 옵션
+  if (Q.has('dmg') && V.setDamage) V.setDamage(v, +Q.get('dmg'), { focus: Q.get('focus') || 'both' });
+  if (Q.has('steer') && V.setSteer) V.setSteer(v, (+Q.get('steer') * Math.PI) / 180);
   if (Q.has('pose')) V.setPose(v, Q.get('pose'));           // 오토바이 라이더 포즈 (?pose=stand)
   if (Q.has('blink')) V.setBlinker(v, Q.get('blink'), true); // 깜빡이 고정 켬 (?blink=left|right|hazard)
   if (Q.has('fall') && v.userData.fall) { // 넘어진 바이크 (userData.fall 권장값 확인용). 바퀴도 body 로 옮겨 같이 눕힘
@@ -343,6 +346,7 @@ function setupJam() {
   const pLane = 2;
   const bossCam = Q.get('cam') === 'boss';
   jamPlayer = V.buildVehicle(Q.get('car') || 'player', { detailed: true }); jamPlayer.position.set(laneX(pLane), 0, 0); scene.add(jamPlayer);
+  if (Q.has('dmg') && V.setDamage) V.setDamage(jamPlayer, +Q.get('dmg'));   // v0.4.1 손상 단계 (?dmg=0..4)
   // 원흉 (앞 45m)
   const vs = stage.villains[0];
   jamVillain = V.buildVehicle(vs.kind, { color: vs.color, detailed: true });
@@ -721,7 +725,81 @@ function setupDamage() {
   });
   applyLights(); layout();
 }
-function setupProps1() { setupTiles(); }
+// ── ?view=props1 : 1챕터 판 소품 — 4 스테이션 (게임 추격캠) / &tiles=1 → 새 fxProp·낙하물 확대 타일
+function roadAt(ox, n = 4, o = {}) { const segs = []; for (let k = -1; k < n; k++) { const seg = SC.buildRoadSegment(40, { seed: k + 3, ...o }); seg.position.set(ox, 0, -k * 40); scene.add(seg); segs.push(seg); } return segs; }
+function npcRow(ox, lane, s0, s1, opts = {}) { // 정체 줄 (브레이크등)
+  let s = s0; const out = [];
+  while (s < s1) { const k = opts.kind || ['sedan', 'suv', 'compact', 'taxi', 'van'][out.length % 5]; const c = V.buildVehicle(k, { color: [0xf4f4f2, 0x9aa1a9, 0x2b2d31, 0x2a5db0, 0xd8342c][(out.length + lane) % 5], seed: lane * 31 + out.length });
+    s += c.userData.length / 2; c.position.set(ox + (opts.x ?? laneX(lane)), 0, -s); scene.add(c); V.setBrake(c, true); jamCars.push(c); out.push(c); s += c.userData.length / 2 + (opts.gap ?? 2.4); }
+  return out;
+}
+function setupProps1() {
+  if (Q.has('tiles')) {
+    scene.add(makeRoad(60, 80));
+    const add = (name, obj, row, off, rowW = 1) => { scene.add(obj); entries.push({ kind: name, obj, row, off, rowW, isProj: true, combo: true }); return obj; };
+    for (const k of ['angelRing', 'wings', 'devilHorns', 'ruler', 'rentFlag']) { const o = V.buildFxProp(k); add(k, o, 0, OFFS.item, 1); }
+    { const o = V.buildFxProp('wings'); o.userData.setTorn(true); add('wings 찢김 setTorn', o, 0, OFFS.item, 1); }
+    for (const k of ['phoneMount', 'charger']) { const o = V.buildProjectile(k); o.position.y = 0.45; add(k, o, 1, OFFS.item, 1); }
+    const combo = (name, kind, props, row = 1) => {
+      const g = new THREE.Group(); const car = V.buildVehicle(kind, { color: colorOf(kind) }); g.add(car);
+      for (const [pk, fn] of props) { const p = V.buildFxProp(pk); p.position.y = car.userData.height - 0.02; if (fn) fn(p, car); g.add(p); }
+      add(name, g, row, OFFS.rear, 1.2);
+    };
+    combo('천사 모드 (링+날개)', 'van', [['angelRing'], ['wings']]);
+    combo('악마 모드 (뿔+찢긴 날개)', 'van', [['devilHorns'], ['wings', (p) => p.userData.setTorn(true)]]);
+    combo('세입자 (임대 깃발)', 'sedan', [['rentFlag', (p) => { p.position.z = 0.4; }]]);
+    { const g = new THREE.Group(); const suv = V.buildVehicle('villainSuv', { sticker: 'myLane' }); g.add(suv); const r = V.buildFxProp('ruler'); r.position.set(0, suv.userData.height + 0.35, -0.6); g.add(r); add('차선물기 + 자 + 내 차로 스티커', g, 1, OFFS.rear, 1.2); }
+    applyLights(); layout(); return;
+  }
+  stations = [];
+  // A) #7 단속 갠트리 + 단속 띠 + 천사/악마
+  { const ox = 0; roadAt(ox);
+    const gt = SC.buildEnforceGantry({ rearLane: 2 }); gt.position.set(ox, 0, -34); scene.add(gt); gt.userData.rearCam.rotation.y = Math.PI; gt.userData.flash('rear', true); gt.userData.flash(1, true);
+    const ds = SC.buildRoadDecal('enforceStart'); ds.position.set(ox, 0, -20); scene.add(ds);
+    const de = SC.buildRoadDecal('enforceEnd'); de.position.set(ox, 0, -40); scene.add(de);
+    const pl = V.buildVehicle('player'); pl.position.set(ox + laneX(1), 0, 0); scene.add(pl);
+    const angel = V.buildVehicle('van', { color: 0xe9ecef }); angel.position.set(ox + laneX(2), 0, -14); scene.add(angel); V.setBrake(angel, true);
+    for (const k of ['angelRing', 'wings']) { const p = V.buildFxProp(k); p.position.y = angel.userData.height - 0.02; angel.add(p); }
+    const devil = V.buildVehicle('van', { color: 0x2b2d31 }); devil.position.set(ox + laneX(3), 0, -46); scene.add(devil);
+    for (const k of ['devilHorns', 'wings']) { const p = V.buildFxProp(k); p.position.y = devil.userData.height - 0.02; if (k === 'wings') p.userData.setTorn(true); devil.add(p); }
+    npcRow(ox, 2, 22, 30); npcRow(ox, 0, 6, 26); npcRow(ox, 3, 4, 20);
+    stations.push({ cam: stCam(ox, laneX(1), 0), x: 0, y: 0, w: 0.5, h: 0.5, focus: [ox, -25], label: '<b>#7 단속 갠트리</b> 후면 터렛 π + 플래시 · 단속구간/단속 끝 띠 · 천사링+날개 / 뿔+찢긴 날개' });
+  }
+  // B) #4 차선물기: 발광 점선 + 빨간 빗금 + 거대한 자 + '내 차로' 스티커
+  { const ox = 200; roadAt(ox);
+    const hl = SC.buildRoadDecal('laneHighlight', { length: 120 }); hl.position.set(ox, 0, 20); scene.add(hl);
+    const suv = V.buildVehicle('villainSuv', { sticker: 'myLane' }); suv.position.set(ox + laneX(0) + LANE_W / 2, 0, -16); scene.add(suv); V.setBrake(suv, true);
+    const r = V.buildFxProp('ruler'); r.position.set(ox + laneX(0) + LANE_W / 2, suv.userData.height + 0.5, -16 - 0.3); scene.add(r);
+    const pl = V.buildVehicle('player'); pl.position.set(ox + laneX(1), 0, 0); scene.add(pl);
+    npcRow(ox, 2, 4, 40); npcRow(ox, 3, 6, 40);
+    stations.push({ cam: stCam(ox, laneX(1), 0), x: 0.5, y: 0, w: 0.5, h: 0.5, focus: [ox, -20], label: '<b>#4 차선물기</b> laneHighlight 데칼 · 자(두 칸 점유) · 내 차로 스티커' });
+  }
+  // C) #8 합류 테이퍼 + 깜빡이 바다 + 지퍼 빛줄
+  { const ox = 400; roadAt(ox, 5);
+    const mt = SC.buildMergeTaper({ length: 120, taper: 40 }); mt.position.set(ox, 0, 60); scene.add(mt); mt.userData.setZip(+(Q.get('zip') || 0.55), 0);
+    const pl = V.buildVehicle('player'); pl.position.set(ox + laneX(3), 0, 0); scene.add(pl);
+    const q = npcRow(ox, 4, -6, 54, { gap: 2.0 }); q.forEach((c, i) => { c.userData.__blink = 'left'; V.setBlinker(c, 'left', i % 2 ? true : false); });
+    npcRow(ox, 3, 8, 50); npcRow(ox, 2, 2, 50);
+    stations.push({ cam: stCam(ox, laneX(3), 0), x: 0, y: 0.5, w: 0.5, h: 0.5, focus: [ox, -25], label: '<b>#8 합류 테이퍼</b> 점선 합류차로 · 테이퍼 빗금 · 합류 끝 표지 · 노면 화살표 · 지퍼 빛줄 setZip(0.55)' });
+  }
+  // D) #3 비상주차대 + #9 낙하물 + #10 건물주 데칼·임대 깃발 + #5 빗길(젖은 노면 + 깜빡이 반사)
+  { const ox = 600; roadAt(ox, 4, { wet: true });
+    const bay = SC.buildEmergencyBay({ length: 40 }); bay.position.set(ox, 0, -14); scene.add(bay);
+    for (const s of bay.userData.stopS) { const c = V.buildVehicle('sedan', { color: 0x9aa1a9, seed: s | 0 }); c.position.set(ox + 8.7, 0, -14 - s); scene.add(c); V.setHazard(c, true); }
+    const own = SC.buildRoadDecal('ownerOnly'); own.position.set(ox, 0, -8); scene.add(own);
+    for (const [k, x, z, ry] of [['phoneMount', 8.2, -4, 0.6], ['charger', 9.2, -8, -0.4], ['phoneMount', 8.9, -10, 2.2]]) { const o = V.buildProjectile(k); o.position.set(ox + x, o.userData.radius * 0.7, z); o.rotation.set(1.2, ry, 0.3); scene.add(o); }
+    const pl = V.buildVehicle('player'); pl.position.set(ox + laneX(1), 0, 0); scene.add(pl);
+    const ten = V.buildVehicle('sedan', { color: 0x2b2d31 }); ten.position.set(ox + laneX(1), 0, -12); scene.add(ten); V.setBrake(ten, true);
+    const rf = V.buildFxProp('rentFlag'); rf.position.set(0, ten.userData.height - 0.02, 0.3); ten.add(rf);
+    const zb = V.buildVehicle('suv', { color: 0x9aa1a9 }); zb.position.set(ox + laneX(2), 0, -20); scene.add(zb); V.setBrake(zb, true);
+    V.setBlinker(zb, 'left', true, { halo: 1.8, wet: true }); zb.userData.__blink = 'left';
+    npcRow(ox, 0, 14, 40); npcRow(ox, 3, 4, 40);
+    stations.push({ cam: stCam(ox, laneX(1), 0), x: 0.5, y: 0.5, w: 0.5, h: 0.5, focus: [ox, -20], label: '<b>#3 비상주차대 · #9 낙하물 · #10 건물주 전용·임대 깃발 · #5 빗길</b> (젖은 노면 + 깜빡이 반사 줄)' });
+  }
+  scene.fog = new THREE.Fog(sky.fog, sky.fogNear, sky.fogFar);
+  animHooks.push((t) => { for (const c of jamCars) if (c.userData.__blink) V.setBlinker(c, c.userData.__blink, t + (c.id % 5) * 0.11); scene.traverse((o) => { if (o.userData?.setZip && o.userData.kind === 'mergeTaper') o.userData.setZip((t * 0.25) % 1.1, t); }); });
+  stationLabels();
+}
 function setupP1() { setupTiles(); }
 
 if (view === 'jam') setupJam();

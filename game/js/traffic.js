@@ -146,9 +146,16 @@ export class Traffic {
     // 지그재그 빌런: 빌런 바로 뒤 차선들은 겁나서 거리 둠 (그래도 막혀 있음)
     for (let l = 0; l < NUM_LANES; l++) if (!isFinite(frontRear[l])) frontRear[l] = sFront - 3;
 
-    // ② 정체: 앞줄 바로 뒤부터 빽빽하게 (플레이어 시작 자리만 비움)
+    // ② 정체: 차로별 성격(JamShaper)대로 — 기본 'packed'는 앞줄 바로 뒤부터 빽빽하게 (플레이어 시작 자리만 비움)
+    //    stage.jamShape.lanes[l]: 'packed' | 'train'(촘촘·쉬지 않고 굴러감) | 'flow'(꾸준히) | 'spaced'(차간 넓음 = 누빌 길)
+    this.jamShape = stage.jamShape || null;
+    this.laneKind = [0, 1, 2, 3].map((l) => this.jamShape?.lanes?.[l] || 'packed');
+    this.jamWaves = [];
+    this.jamSrcT = 0;
     for (let l = 0; l < NUM_LANES; l++) {
-      let cursor = frontRear[l] - (2.2 + rng() * 1.6) - (villainLanes.has(l) && zig ? 6 : 0);
+      const lk = this.laneKind[l];
+      const gapOf = () => lk === 'spaced' ? 7 + rng() * 5 : lk === 'train' ? 1.2 + rng() * 0.5 : lk === 'flow' ? 2.6 + rng() * 2 : (1.5 + rng() * 1.7) / density;
+      let cursor = frontRear[l] - (lk === 'spaced' ? 9 + rng() * 4 : 2.2 + rng() * 1.6) - (villainLanes.has(l) && zig ? 6 : 0);
       while (cursor > tail) {
         const kind = pickWeighted(rng, NPC_KINDS);
         const tmp = this._makeCar(rng, kind, l, 0, stage.jamSpeed * 0.7);
@@ -159,7 +166,7 @@ export class Traffic {
         }
         tmp.s = s;
         tmp.mesh.position.z = -s;
-        cursor = s - tmp.len / 2 - (1.5 + rng() * 1.7) / density;
+        cursor = s - tmp.len / 2 - gapOf();
       }
     }
 
@@ -366,6 +373,8 @@ export class Traffic {
       }
     }
 
+    if (!this.released) this._updateJamShape(dt, t, alive, player);
+
     for (const c of this.cars) {
       if (!c.released && t >= c.releaseAt) {
         c.released = true;
@@ -386,10 +395,16 @@ export class Traffic {
       } else if (c.isCheater) {
         v0 = c.cheaterV || 5; T = 0.6; s0 = 2.0; aMax = 2.5;
       } else {
-        // 차선 단위 stop & go (같은 차선은 같이 움직임)
-        const lf = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.42 + c.lane * 1.9));
-        v0 = jamV * c.personal * lf * 1.25;
-        T = 0.5; s0 = 1.4; aMax = 1.8;
+        const lk = this.laneKind?.[Math.min(NUM_LANES - 1, c.lane)] || 'packed';
+        if (lk === 'train') { v0 = jamV * 1.0; T = 0.45; s0 = 1.2; aMax = 1.6; }                 // 쉬지 않고 굴러가는 기차
+        else if (lk === 'flow') { v0 = jamV * 0.95 * c.personal; T = 0.8; s0 = 2.2; aMax = 1.6; } // 꾸준한 흐름
+        else if (lk === 'spaced') { v0 = jamV * 1.05 * c.personal; T = 1.6; s0 = 5.5; aMax = 1.4; } // 거리 두는 차로
+        else {
+          // 차선 단위 stop & go (같은 차선은 같이 움직임)
+          const lf = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.42 + c.lane * 1.9));
+          v0 = jamV * c.personal * lf * 1.25;
+          T = 0.5; s0 = 1.4; aMax = 1.8;
+        }
       }
       if (c.pullT > 0 && !c.released) { c.pullT -= dt; v0 = Math.max(v0, jamV * (c.letInBoost ? 3.6 : 2.2)); aMax = 3.6; T = 0.3; s0 = 1.0; }
       else c.letInBoost = 0;
@@ -498,6 +513,47 @@ export class Traffic {
         this.onAutoTow?.(ob);
       }
     }
+  }
+
+  // ── JamShaper: 브레이크 파동 (차로 lane, 위치 s에서 뒤로 speed m/s로 흐름; 차를 만날 때마다 강도 × amp)
+  emitBrakeWave(lane, s, strength = 1, opts = {}) {
+    if (lane < 0 || lane >= NUM_LANES) return;
+    this.jamWaves.push({ lane, s, strength, amp: opts.amp ?? 0.88, speed: opts.speed ?? 6, hold: opts.hold ?? 0.6, life: opts.life ?? 6, hit: new Set() });
+  }
+  _updateJamShape(dt, t, alive, player) {
+    // 파동 전파
+    for (let i = this.jamWaves.length - 1; i >= 0; i--) {
+      const w = this.jamWaves[i];
+      w.s -= w.speed * dt; w.life -= dt;
+      if (w.life <= 0 || w.strength < 0.15) { this.jamWaves.splice(i, 1); continue; }
+      for (const c of this.buckets[w.lane] || []) {
+        if (!this.cars.includes(c) || c.released || c.isWall || w.hit.has(c)) continue;
+        if (Math.abs(c.s - w.s) < c.len / 2 + 1.2) {
+          w.hit.add(c);
+          c.brakeT = Math.max(c.brakeT, w.hold * Math.min(2.5, w.strength));
+          w.strength *= w.amp;   // amp<1 약해짐(충격파), amp>1 커짐(유령정체 증폭)
+        }
+      }
+    }
+    // 소스: 판 시그니처가 만드는 정체 모양 (빌런 기준)
+    const src = this.jamShape?.sources || [];
+    if (!src.length || !alive.length) return;
+    const v = alive[0];
+    this.jamSrcT -= dt;
+    for (const S of src) {
+      if (S.type === 'yield' && this.jamSrcT <= 0) {
+        // 옆 차로 톱니: 빌런 옆(-20~+5m) 차들이 '들어오나?' 하고 차례로 멈칫 → 그 차로에 틈(포켓)이 생김
+        const lane = S.lane ?? 0;
+        const cands = (this.buckets[lane] || []).filter((c) => this.cars.includes(c) && !c.isWall && !c.released && c.brakeT <= 0 && c.s > v.s - 20 && c.s < v.s + 5);
+        if (cands.length) {
+          const c = cands.sort((a, b) => b.s - a.s)[0];
+          c.brakeT = S.hold ?? 2.5;
+          c.yieldPocket = t;
+          this.emitBrakeWave(lane, c.s - c.len / 2 - 1, 0.7, { amp: 0.8 });
+        }
+      }
+    }
+    if (this.jamSrcT <= 0) this.jamSrcT = src[0].period ?? 2.5;
   }
 
   _hasGap(tl, player) {

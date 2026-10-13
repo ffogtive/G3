@@ -583,9 +583,10 @@ export function buildRoadSegment(length = SEG_LEN, opts = {}) {
   const struct = new THREE.Mesh(geo.struct, MAT.vc);
   struct.name = 'struct'; struct.castShadow = true; struct.receiveShadow = true;
   g.add(road, struct);
+  if (opts.wet) { g.userData.length = length; setRoadWet(g, true); } // v0.4.1 빗길 (재질 교체 + 물웅덩이, 지오메트리 동일)
   if (geo.glow) { const m = new THREE.Mesh(geo.glow, MAT.glow); m.name = 'glow'; g.add(m); }
   if (geo.glass) { const m = new THREE.Mesh(geo.glass, acrylicMaterial()); m.name = 'glass'; m.renderOrder = 2; g.add(m); }
-  g.userData = { kind: 'roadSegment', length, night, soundBarrier: sb, seed, drawCalls: g.children.length };
+  g.userData = { kind: 'roadSegment', length, night, soundBarrier: sb, seed, wet: !!opts.wet, drawCalls: g.children.length };
   return g;
 }
 
@@ -1926,4 +1927,296 @@ export function makeSkyDome(topColor = 0x5fb8ff, bottomColor = 0xd8f0ff, opts = 
     autoStars();
   };
   return m;
+}
+
+// ─────────────────────────────────────────────────────────────
+// v0.4.1 1챕터 판 소품 (V04_SPEC 단계 13) + 빗길 노면
+//
+// 가설: 판 차별화는 "그 판에만 있는 무대 장치"가 추격캠에서 3초 안에 읽혀야 성립한다 → 노면 데칼(띠·글자·화살표)은
+//       추격캠(38° 내려다봄)에서 가장 크게 보이는 면이라 1순위, 세로 구조물(갠트리·표지)은 실루엣 + 발광으로 보조.
+//  - 전부 새 export 함수 (기존 buildRoadSegment/buildProp 지오메트리는 그대로). 원점 x = 0 (도로 좌표 그대로), s = 0 (z = 0 → −Z 로 뻗음)
+//  - 노면 데칼은 y 0.025 + polygonOffset (차선 도색 0.02 위), depthWrite false, receiveShadow → 차 그림자가 위에 드리움
+// ─────────────────────────────────────────────────────────────
+const DECAL_Y = 0.025;
+function decalMat(key, w, h, draw, glow = false) {
+  return cached(_matCache, 'decal|' + key + (glow ? '|g' : ''), () => {
+    const tex = textTexture(w, h, draw, { aniso: 16 });
+    const o = { map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, name: 'scenery.decal.' + key };
+    return glow ? new THREE.MeshBasicMaterial(o) : new THREE.MeshLambertMaterial(o);
+  });
+}
+function flatPlane(w, l) { return cached(_propCache, 'flat|' + w + '|' + l, () => new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2)); }
+// 노면 글자 (진행 방향으로 길게 늘인 한국 노면 표시 글꼴 느낌): lines 는 먼(앞) 줄부터
+function roadText(ctx, w, h, lines, color, stretch = 1.9) {
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const n = lines.length, lh = h / n;
+  lines.forEach((t, i) => {
+    ctx.save(); ctx.translate(w / 2, lh * (i + 0.5)); ctx.scale(1, stretch);
+    fitFont(ctx, t, FONT_DISPLAY, Math.round(lh / stretch * 0.86), w * 0.92); ctx.fillText(t, 0, 0); ctx.restore();
+  });
+}
+const DECAL_DRAW = {
+  // #7 단속구간 시작: 빨간 띠 + 차로마다 흰 '단속구간'
+  enforceStart: [1024, 256, (ctx, w, h) => {
+    ctx.fillStyle = 'rgba(215,38,30,0.86)'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, 14); ctx.fillRect(0, h - 14, w, 14);
+    for (let i = 0; i < 4; i++) { ctx.save(); ctx.translate(w * (i + 0.5) / 4, h / 2); ctx.scale(1, 1.6); ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; fitFont(ctx, '단속구간', FONT_DISPLAY, 70, w / 4 - 30); ctx.fillText('단속구간', 0, 2); ctx.restore(); }
+  }],
+  // #7 '단속 끝': 흰 띠 + 빨간 사선 + 차로마다 빨강 '단속 끝' (덫 깔기 기준선)
+  enforceEnd: [1024, 256, (ctx, w, h) => {
+    ctx.fillStyle = 'rgba(250,250,246,0.92)'; ctx.fillRect(0, 0, w, h);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.clip(); ctx.fillStyle = 'rgba(215,38,30,0.22)';
+    for (let x = -h; x < w + h; x += 64) { ctx.beginPath(); ctx.moveTo(x, h); ctx.lineTo(x + 26, h); ctx.lineTo(x + 26 + h, 0); ctx.lineTo(x + h, 0); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = '#d7261e'; ctx.fillRect(0, 0, w, 16); ctx.fillRect(0, h - 16, w, 16);
+    for (let i = 0; i < 4; i++) { ctx.save(); ctx.translate(w * (i + 0.5) / 4, h / 2); ctx.scale(1, 1.6); ctx.fillStyle = '#d7261e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; fitFont(ctx, '단속 끝', FONT_DISPLAY, 74, w / 4 - 30); ctx.fillText('단속 끝', 0, 2); ctx.restore(); }
+  }],
+  // #10 1차로 '건물주 전용' (노란 노면 글자, 버스전용 패러디)
+  ownerOnly: [256, 704, (ctx, w, h) => {
+    ctx.strokeStyle = 'rgba(242,194,27,0.95)'; ctx.lineWidth = 12; ctx.strokeRect(10, 10, w - 20, h - 20);
+    roadText(ctx, w, h, ['건물주', '전용'], '#f2c21b', 2.0);
+  }],
+  // 해방 후 '추월차로' (발광 흰 글자)
+  passingLane: [256, 704, (ctx, w, h) => { roadText(ctx, w, h, ['추월', '차로'], '#ffffff', 2.0); }],
+  // #8 합류 화살표 (왼쪽으로 꺾이는 노면 화살표, 위 = 앞)
+  mergeArrow: [256, 640, (ctx, w, h) => {
+    ctx.fillStyle = 'rgba(246,246,240,0.95)';
+    ctx.beginPath(); ctx.moveTo(w * 0.62, h); ctx.lineTo(w * 0.82, h); ctx.lineTo(w * 0.82, h * 0.48);
+    ctx.quadraticCurveTo(w * 0.82, h * 0.3, w * 0.42, h * 0.2); ctx.lineTo(w * 0.42, h * 0.3); ctx.lineTo(w * 0.08, h * 0.12); ctx.lineTo(w * 0.42, h * 0.0);
+    ctx.lineTo(w * 0.42, h * 0.08); ctx.quadraticCurveTo(w * 0.62, h * 0.18, w * 0.62, h * 0.42); ctx.closePath(); ctx.fill();
+  }],
+  // #5 빗길 물웅덩이 (하늘빛 반사 + 가장자리 흐림) — 4차로 폭 14.4 × 40m 한 장, 웅덩이 위치 고정 난수
+  puddles: [512, 1024, (ctx, w, h) => {
+    const r = rng(505), lw = w / 4;
+    for (let i = 0; i < 44; i++) { // 바퀴 자국(차로 중심 ±0.9m)을 따라 길쭉한 얕은 물웅덩이
+      const lane = (r() * 4) | 0, rut = r() < 0.5 ? -0.25 : 0.25, cx = (lane + 0.5 + rut + (r() - 0.5) * 0.08) * lw, cy = r() * h;
+      const rx = 5 + r() * 9, ry = 26 + r() * 70;
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(rx / ry, 1);
+      const g = ctx.createRadialGradient(0, 0, 1, 0, 0, ry);
+      g.addColorStop(0, 'rgba(176,204,232,0.42)'); g.addColorStop(0.75, 'rgba(150,182,214,0.26)'); g.addColorStop(1, 'rgba(140,170,205,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, ry, 0, 7); ctx.fill(); ctx.restore();
+    }
+  }],
+  // #3 비상주차대 노면 글자
+  bayText: [256, 512, (ctx, w, h) => { roadText(ctx, w, h, ['비상', '주차대'], 'rgba(246,246,240,0.95)', 1.7); }],
+};
+/**
+ * 노면 데칼 (추가 export). 원점 = 데칼 중심 (x 는 도로 좌표, s 방향 = −Z). 메시 1개, draw call 1.
+ * kind: 'enforceStart'(빨간 '단속구간' 띠) | 'enforceEnd'('단속 끝' 띠) — 4차로 폭 14.4 × 3.2m (opts.lanes=[a,b] 로 차로 범위)
+ *       'ownerOnly'('건물주 전용' 1차로 노란 글자 3 × 8.4m, opts.lane) — userData.setPassing(true) → 발광 '추월차로' 로 교체(해방 연출)
+ *       'mergeArrow'(합류 화살표 2 × 5m) | 'bayText'('비상주차대' 2.4 × 4.8m) | 'laneHighlight'(#4 굵고 밝은 발광 점선 + 빨간 사선, opts.x·length)
+ *       'puddles'(#5 빗길 물웅덩이 하늘빛 반사, 4차로 × opts.length 40m — 세그먼트마다 하나 + setRoadWet)
+ */
+export function buildRoadDecal(kind = 'enforceEnd', opts = {}) {
+  const g = new THREE.Group(); g.name = 'decal:' + kind;
+  if (kind === 'laneHighlight') {
+    const L = opts.length || 40, x = opts.x ?? (laneX(0) + LANE_W / 2);
+    const geo = cached(_propCache, 'laneHL|' + L, () => {
+      const G = new GB();
+      for (let s = 2; s < L; s += 10) {
+        G.top(-0.17, 0.17, -s, -Math.min(s + 6, L), 0.03, 0xffffff);                   // 굵은 발광 점선 (원래 0.2m → 0.34m)
+        for (let k = 0; k < 6; k += 0.75) for (const sd of [-1, 1]) {                   // 양옆 빨간 사선 (빗금)
+          const s0 = s + k, x0 = sd * 0.24, x1 = sd * 0.62;
+          G.flat([[x0, -s0], [x1, -(s0 + 0.32)], [x1, -(s0 + 0.5)], [x0, -(s0 + 0.18)]], 0.028, 0xff3b30);
+        }
+      }
+      return G.build();
+    });
+    const m = new THREE.Mesh(geo, MAT.glow); m.name = 'highlight'; m.position.x = x; g.add(m);
+    g.userData = { kind, length: L, mesh: m };
+    return g;
+  }
+  const spec = DECAL_DRAW[kind] || DECAL_DRAW.enforceEnd;
+  let w = 3.0, l = 3.0, x = 0;
+  if (kind === 'enforceStart' || kind === 'enforceEnd') {
+    const [a, b] = opts.lanes || [0, NUM_LANES - 1];
+    w = (b - a + 1) * LANE_W; l = 3.2; x = (laneX(a) + laneX(b)) / 2;
+  } else if (kind === 'ownerOnly') { w = 3.0; l = 8.4; x = laneX(opts.lane ?? 0); }
+  else if (kind === 'mergeArrow') { w = 2.0; l = 5.0; x = opts.x ?? laneX(SHOULDER_LANE_X); }
+  else if (kind === 'bayText') { w = 2.4; l = 4.8; x = opts.x ?? (ROAD_RIGHT + SH_R) / 2; }
+  else if (kind === 'puddles') { w = NUM_LANES * LANE_W; l = opts.length || 40; x = 0; }
+  const m = new THREE.Mesh(flatPlane(w, l), decalMat(kind, spec[0], spec[1], spec[2], kind === 'puddles'));
+  m.name = 'decal'; m.position.set(x, DECAL_Y, -l / 2); m.receiveShadow = true; m.renderOrder = 1; g.add(m);
+  g.userData = { kind, length: l, width: w, mesh: m };
+  if (kind === 'ownerOnly') {
+    const own = m.material, pass = decalMat('passingLane', 256, 704, DECAL_DRAW.passingLane[2], true);
+    g.userData.setPassing = (on) => { m.material = on ? pass : own; };
+  }
+  return g;
+}
+const SHOULDER_LANE_X = 4; // laneX(4) = 9.0 = 갓길(합류차로) 중심
+
+// ── #7 단속카메라 갠트리 (후면 단속 터렛 + 차로별 플래시)
+/**
+ * buildEnforceGantry(opts) (추가 export). 원점 x = 0, s = 0 (갠트리 중심). 정면 = +Z (다가오는 차를 찍음).
+ * 구성: 기존 cctv 지주 + 차로 4개 전면 카메라 + 팔 위 '후면 단속' 터렛(회전) + 구간단속 표지 + 플래시(꺼짐 = draw call 0).
+ * userData: { rearCam: Group(피벗, rotation.y 0 = 정면 → π = 후면, 코어가 보간), flashes: Mesh[4](차로별, visible), rearFlash: Mesh,
+ *             flash(i | 'rear', on), height, spansRoad: true }
+ * opts: { night, rearLane = 2 (터렛 위치 차로), label = '구간단속' }  draw call: 구조 1 + 표지 1 + 터렛 1 (+ 플래시 켤 때)
+ */
+export function buildEnforceGantry(opts = {}) {
+  const night = !!opts.night, lane = opts.rearLane ?? 2;
+  const g = buildProp('cctv', 0, { night, label: opts.label || '구간단속' });
+  g.name = 'enforceGantry';
+  const armY = 7.4, tx = laneX(lane);
+  // 터렛 (받침은 팔 위, 회전부는 별도 그룹)
+  const T = cached(_propCache, 'gantryTurret', () => {
+    const B = new GB();
+    B.box(0, 0, 0, 0.36, 0.34, 0.36, 0x7f878f, { nb: true });                       // 받침 기둥
+    const H = new GB();
+    H.box(0, 0, 0, 0.62, 0.5, 1.0, 0x2f3338, { top: 0x3b4046 });                     // 하우징 (검정 — 일반 카메라와 다르게)
+    H.box(0, 0.5, 0.02, 0.7, 0.06, 1.12, 0x22252a);                                    // 차양
+    H.box(0, 0.08, 0.5, 0.42, 0.36, 0.05, 0x101215);                                   // 렌즈 판
+    H.geo(PRIM.cyl8, M4(0, 0.26, 0.52, 0.15, 0.08, 0.15, 0, 0, Math.PI / 2), 0x5a6a8a); // 렌즈
+    H.geo(PRIM.cyl8, M4(0, 0.26, 0.56, 0.09, 0.03, 0.09, 0, 0, Math.PI / 2), 0x9fd0ff);
+    H.box(0.22, 0.36, 0.52, 0.07, 0.07, 0.03, 0xff3030);                               // REC
+    H.box(0, 0.12, -0.52, 0.5, 0.26, 0.04, 0xffcf3a);                                  // 뒷면 노란 '후면' 판 (돌기 전 = 뒤를 봄)
+    return { base: B.build(), head: H.build() };
+  });
+  const base = new THREE.Mesh(T.base, MAT.vc); base.position.set(tx, armY + 0.16, 0); base.castShadow = true;
+  const rearCam = new THREE.Group(); rearCam.name = 'rearCam'; rearCam.position.set(tx, armY + 0.5, 0);
+  const head = new THREE.Mesh(T.head, MAT.vc); head.name = 'turret'; head.castShadow = true; rearCam.add(head);
+  const flashGeo = cached(_propCache, 'gantryFlash', () => { const F = new GB(); F.box(0, 0, 0, 0.5, 0.4, 0.06, 0xffffff); F.box(0, 0.08, 0.03, 0.9, 0.12, 0.02, 0xfff6c0); F.box(0, -0.12, 0.03, 0.12, 0.72, 0.02, 0xfff6c0); return F.build(); });
+  const rearFlash = new THREE.Mesh(flashGeo, MAT.glow); rearFlash.name = 'rearFlash'; rearFlash.position.set(0, 0.08, 0.6); rearFlash.visible = false; rearCam.add(rearFlash);
+  g.add(base, rearCam);
+  const flashes = [];
+  for (let i = 0; i < NUM_LANES; i++) { const f = new THREE.Mesh(flashGeo, MAT.glow); f.name = 'flash'; f.position.set(laneX(i), armY - 0.58, 0.64); f.visible = false; g.add(f); flashes.push(f); }
+  Object.assign(g.userData, {
+    kind: 'enforceGantry', rearCam, rearFlash, flashes, spansRoad: true, height: armY + 1.2,
+    flash: (i, on = true) => { if (i === 'rear') rearFlash.visible = !!on; else if (flashes[i]) flashes[i].visible = !!on; },
+  });
+  g.userData.drawCalls = g.children.filter((c) => c.isMesh).length + 1;
+  return g;
+}
+
+// ── #8 합류부: 갓길 = 합류차로 → 테이퍼 + '합류 끝' 표지 + 노면 화살표 + 지퍼 빛줄
+//  원점 s = 0 = 합류차로 시작, opts.length(기본 120) 에서 끝남, 마지막 opts.taper(기본 40) m 가 테이퍼.
+//  userData: { taperS, endS, setZip(p 0..1, t), zip(Mesh) } — setZip: 테이퍼 끝(앞)에서부터 뒤로 초록 지퍼 이빨이 켜짐 (지퍼식 합류 해방)
+function zipMat() {
+  return new THREE.ShaderMaterial({
+    name: 'scenery.zipper', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uP: { value: 0 }, uT: { value: 0 }, uC: { value: new THREE.Color(0x3dff7a) } },
+    vertexShader: /* glsl */`attribute float k; varying float vK; void main() { vK = k; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`uniform float uP; uniform float uT; uniform vec3 uC; varying float vK;
+      void main() { if (vK > uP) discard; float edge = smoothstep(0.0, 0.04, uP - vK); float pulse = 0.7 + 0.3 * sin(uT * 9.0 - vK * 40.0);
+        gl_FragColor = vec4(uC * pulse * (0.6 + 1.4 * (1.0 - edge)), 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+}
+export function buildMergeTaper(opts = {}) {
+  const L = opts.length || 120, TP = opts.taper || 40, sT = L - TP, night = !!opts.night;
+  const g = new THREE.Group(); g.name = 'mergeTaper';
+  const geo = cached(_propCache, `merge|${L}|${TP}|${night ? 1 : 0}`, () => {
+    const G = new GB(), S = new GB();
+    const white = night ? 0xc6cbd4 : PAL.white, asph = PAL.shoulder, xE = ROAD_RIGHT;
+    // 1) 오른쪽 가장자리 실선 → 합류차로 점선 (공백을 갓길색으로 덮음, 10m 주기 6m 도색)
+    for (let s = 0; s < sT; s += 10) G.top(xE - 0.13, xE + 0.13, -(s + 6), -Math.min(s + 10, sT), 0.022, PAL.asphalt);
+    // 2) 테이퍼 대각선 (흰 실선) + 빗금(갈매기)
+    const d = (s) => SH_R - 0.3 - (SH_R - 0.3 - xE) * Math.min(1, Math.max(0, (s - sT) / TP)); // 대각선의 x
+    for (let s = sT; s < L; s += 0.5) { const x0 = d(s), x1 = d(s + 0.5); G.flat([[x0 - 0.1, -s], [x0 + 0.1, -s], [x1 + 0.1, -(s + 0.5)], [x1 - 0.1, -(s + 0.5)]], 0.024, white); }
+    for (let s = sT + 3; s < L - 1; s += 3.2) { // 대각선 바깥(가드레일 쪽) 삼각형 빗금
+      const xa = d(s) + 0.15, xb = SH_R - 0.25; if (xb - xa < 0.25) continue;
+      G.flat([[xa, -s], [xb, -(s - 1.6)], [xb, -(s - 1.0)], [xa, -(s + 0.6)]], 0.024, white);
+    }
+    G.top(xE - 0.12, SH_R - 0.25, -L, -(L + 0.35), 0.024, white);                         // 끝 정지선 느낌 가로선
+    // 3) '합류 끝' 표지 (기둥 + 판 뒤 받침) — 판은 별도 캔버스 메시
+    const sx = SH_R + 1.0, ss = sT - 18;
+    for (const dx of [-0.7, 0.7]) S.box(sx + dx, 0, -ss, 0.12, 3.0, 0.12, 0x8a939b, { nb: true });
+    S.box(sx, 1.4, -ss + 0.06, 1.9, 1.85, 0.06, 0x9aa1a8);
+    return { paint: G.build(), struct: S.build() };
+  });
+  const paint = new THREE.Mesh(geo.paint, MAT.vc); paint.name = 'paint'; paint.receiveShadow = true; g.add(paint);
+  const struct = new THREE.Mesh(geo.struct, MAT.vc); struct.name = 'signPost'; struct.castShadow = true; g.add(struct);
+  const signMat = cached(_matCache, 'mergeSign', () => {
+    const tex = textTexture(400, 400, (ctx, w, h) => {
+      ctx.fillStyle = '#ffffff'; rrect(ctx, 0, 0, w, h, 24); ctx.fill();
+      ctx.save(); ctx.translate(w / 2, 150); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#ffcf1a'; ctx.strokeStyle = '#111'; ctx.lineWidth = 12;
+      rrect(ctx, -92, -92, 184, 184, 14); ctx.fill(); ctx.stroke(); ctx.restore();
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 18; ctx.lineCap = 'round';                 // 차로 감소 그림 (오른쪽 차로가 왼쪽으로 붙음)
+      ctx.beginPath(); ctx.moveTo(w / 2 - 34, 230); ctx.lineTo(w / 2 - 34, 78); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w / 2 + 40, 230); ctx.lineTo(w / 2 + 40, 175); ctx.quadraticCurveTo(w / 2 + 40, 130, w / 2 - 6, 100); ctx.stroke();
+      ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; fitFont(ctx, '합류 끝', FONT_DISPLAY, 92, w - 40); ctx.fillText('합류 끝', w / 2, 330);
+    }, { aniso: 8 });
+    return new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: night ? 0.6 : 0.2, name: 'scenery.mergeSign' });
+  });
+  const sign = new THREE.Mesh(cached(_propCache, 'mergeSignGeo', () => new THREE.PlaneGeometry(1.8, 1.8)), signMat);
+  sign.name = 'sign'; sign.position.set(SH_R + 1.0, 2.33, -(sT - 18) + 0.1); g.add(sign);
+  for (const s of [sT - 34, sT - 12]) { const a = buildRoadDecal('mergeArrow', { x: (ROAD_RIGHT + SH_R) / 2 + 0.1 }); a.position.z = -s; g.add(a); }
+  // 4) 지퍼 빛줄: 차로 경계(x 7.2) 따라 엇갈린 이빨 (테이퍼 끝 = k 0 → 뒤로 k 1)
+  const zs0 = Math.max(0, sT - 40), span = L - zs0;
+  const zg = cached(_propCache, `zip|${L}|${TP}`, () => {
+    const P = [], K = [];
+    const q = (x0, x1, s0, s1, k) => { const a = [x0, 0.03, -s0], b = [x1, 0.03, -s0], c = [x1, 0.03, -s1], d2 = [x0, 0.03, -s1]; for (const v of [a, b, c, a, c, d2]) { P.push(...v); K.push(k); } }; // 위(+Y)를 보게
+    let i = 0;
+    for (let s = zs0; s < L - 0.6; s += 0.6, i++) {
+      const k = (L - s) / span, xm = ROAD_RIGHT;
+      q(xm - 0.05, xm + 0.05, s, s + 0.6, k);                                            // 가운데 줄
+      if (i % 2) q(xm + 0.05, xm + 0.42, s + 0.12, s + 0.48, k); else q(xm - 0.42, xm - 0.05, s + 0.12, s + 0.48, k); // 이빨
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setAttribute('k', new THREE.Float32BufferAttribute(K, 1));
+    geo.computeBoundingSphere(); return geo;
+  });
+  const zmat = zipMat();
+  const zip = new THREE.Mesh(zg, zmat); zip.name = 'zipper'; zip.renderOrder = 2; zip.visible = false; g.add(zip);
+  g.userData = {
+    kind: 'mergeTaper', taperS: sT, endS: L, zip, length: L,
+    setZip: (p = 1, t = 0) => { zmat.uniforms.uP.value = Math.max(0, Math.min(1.001, p)); zmat.uniforms.uT.value = t; zip.visible = p > 0; },
+  };
+  return g;
+}
+
+// ── #3 비상주차대 (갓길 위 표시 + 'P 비상주차대' 표지 + 비상전화). 원점 s = 0 = 주차대 시작, 길이 opts.length(40)
+export function buildEmergencyBay(opts = {}) {
+  const L = opts.length || 40, night = !!opts.night;
+  const g = new THREE.Group(); g.name = 'emergencyBay';
+  const geo = cached(_propCache, `bay|${L}|${night ? 1 : 0}`, () => {
+    const G = new GB(), S = new GB(), white = night ? 0xc6cbd4 : PAL.white;
+    const x0 = ROAD_RIGHT + 0.35, x1 = SH_R - 0.3, a = 5, b = L - 5;
+    G.top(x0, x0 + 0.15, -a, -b, 0.024, white); G.top(x1 - 0.15, x1, -a, -b, 0.024, white);
+    for (const [s0, s1] of [[0, a], [L, b]]) { // 양끝 사선 테이퍼 + 빗금
+      G.flat([[x0, -s1], [x0 + 0.15, -s1], [x1, -s0], [x1 - 0.15, -s0]], 0.024, white);
+      for (let k = 1; k < 4; k++) { const f = k / 4, s = s0 + (s1 - s0) * f; G.flat([[x1 - 0.12, -s], [x1, -s], [x1, -(s + Math.sign(s1 - s0) * 0.5)], [x1 - (x1 - x0) * f, -(s + Math.sign(s1 - s0) * 0.15)]], 0.024, white); }
+    }
+    for (let s = a + 4; s < b - 2; s += 9) G.top(x0 + 0.15, x1 - 0.15, -s, -(s + 0.15), 0.024, white); // 주차칸 가로선
+    // 표지 기둥 + 비상전화(주황) — 가드레일 뒤
+    const px = SH_R + 1.3, ps = a + 2;
+    S.box(px, 0, -ps, 0.12, 3.2, 0.12, 0x8a939b, { nb: true });
+    S.box(px, 2.0, -ps + 0.06, 1.3, 1.3, 0.05, 0x9aa1a8);
+    S.box(px + 0.9, 0, -ps - 2, 0.5, 1.5, 0.4, 0xff7a1a, { top: 0xff9a3a });
+    S.box(px + 0.9, 1.0, -ps - 2 + 0.21, 0.32, 0.3, 0.02, 0xf4f4f2);
+    S.box(px + 0.9, 1.5, -ps - 2, 0.6, 0.08, 0.5, 0xd65a10);
+    return { paint: G.build(), struct: S.build() };
+  });
+  const paint = new THREE.Mesh(geo.paint, MAT.vc); paint.name = 'paint'; paint.receiveShadow = true;
+  const struct = new THREE.Mesh(geo.struct, MAT.vc); struct.name = 'signPost'; struct.castShadow = true;
+  g.add(paint, struct);
+  const sm = cached(_matCache, 'baySign', () => {
+    const tex = textTexture(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#1f4fa3'; rrect(ctx, 0, 0, w, h, 18); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 8; rrect(ctx, 10, 10, w - 20, h - 20, 12); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      fitFont(ctx, 'P', FONT_EN, 150, 200); ctx.fillText('P', w / 2, h * 0.42);
+      fitFont(ctx, '비상주차대', FONT_DISPLAY, 46, w - 40); ctx.fillText('비상주차대', w / 2, h * 0.82);
+    }, { aniso: 8 });
+    return new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: night ? 0.6 : 0.2, name: 'scenery.baySign' });
+  });
+  const sign = new THREE.Mesh(cached(_propCache, 'baySignGeo', () => new THREE.PlaneGeometry(1.24, 1.24)), sm);
+  sign.name = 'sign'; sign.position.set(SH_R + 1.3, 2.65, -7 + 0.1); g.add(sign);
+  const txt = buildRoadDecal('bayText'); txt.position.z = -L / 2 + 2.4; g.add(txt);
+  g.userData = { kind: 'emergencyBay', length: L, stopS: [L * 0.3, L * 0.55, L * 0.8] }; // stopS: 정차 차량 권장 s
+  return g;
+}
+
+// ── #5 빗길: 젖은 노면 재질 (반짝이는 어두운 아스팔트). buildRoadSegment 결과의 'road' 메시 재질만 바꿈 (지오메트리 공유 그대로)
+export const WET_MAT = new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, color: 0x7d838f, specular: 0x7a8aa0, shininess: 26, name: 'scenery.wet' });
+//  setRoadWet(seg, on): 노면 재질 교체 + 물웅덩이 데칼(세그먼트당 1장, +1 draw call) 켜고 끔. buildRoadSegment(len, { wet: true }) 와 같음
+export function setRoadWet(segment, on = true) {
+  const road = segment?.getObjectByName?.('road'); if (!road) return;
+  if (!road.userData.dryMat) road.userData.dryMat = road.material;
+  road.material = on ? WET_MAT : road.userData.dryMat;
+  let pd = segment.getObjectByName('decal:puddles');
+  if (on && !pd) { pd = buildRoadDecal('puddles', { length: segment.userData.length || SEG_LEN }); pd.position.z = 0; pd.children[0].position.z = -(segment.userData.length || SEG_LEN) / 2; segment.add(pd); }
+  if (pd) pd.visible = !!on;
+  segment.userData.wet = !!on;
 }

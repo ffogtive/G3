@@ -87,6 +87,14 @@ export const APPROACH_BY_ID = {
   10: { shoulder: 'occupied', honk: 'evict', fatigue: true, hint: '갓길 지인 주차. 경적 2회 = 세입자 퇴거 통보' },
 };
 
+// 1챕터 정체 모양 (JamShaper). lanes[0..3]: packed | train | flow | spaced, sources: 시그니처가 만드는 파동
+export const JAMSHAPE_BY_ID = {
+  1: { lanes: ['train', 'packed', 'flow', 'flow'] },                          // 1차로만 쉬지 않는 기차, 2차로 누수
+  3: { lanes: ['spaced', 'spaced', 'packed', 'packed'] },                     // 오른쪽 깔때기(원인은 왼쪽, 빨강은 오른쪽)
+  5: { lanes: ['spaced', 'spaced', 'packed', 'packed'], sources: [{ type: 'yield', lane: 0, hold: 2.5, period: 2.5 }] },   // 옆 차로 톱니 + 뒤는 원활
+  6: { lanes: ['packed', 'flow', 'flow', 'flow'] },                           // 1차로 증폭 아코디언 (파동은 tailgater 모듈이 냄)
+};
+
 export const SIG_BY_ID = {
   1: 'occupy', 2: 'cutin_snap', 3: 'duo_link', 4: 'straddle_mirror', 5: 'blinker_liar',
   6: 'tailgater', 7: 'speed_kangaroo', 8: 'merge_reflex', 9: 'phone_drift', 10: 'landlord',
@@ -263,6 +271,7 @@ export function stageFromEntry(e) {
     wrongWay: mvOf(e.movement) === 'wrong_way',
     sig: e.sig || SIG_BY_ID[e.id] || null,
     approach: e.approach || APPROACH_BY_ID[e.id] || null,
+    jamShape: e.jam_shape_spec || JAMSHAPE_BY_ID[e.id] || null,
   };
   return stage;
 }
@@ -295,7 +304,7 @@ export function buildStages(catalog, handmade = []) {
         ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id, frontRow: fillFrontRow(hm),
         zig: hm.zig ?? !!hm.attacks?.zigzag, zigCenter: hm.zigCenter ?? (hm.attacks?.zigzag ? 1 : undefined),
         fine: g.fine, payout: g.payout, card: g.card, violation: g.violation,
-        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty, sig: g.sig, approach: g.approach,
+        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty, sig: g.sig, approach: g.approach, jamShape: g.jamShape,
       });
     } else out.push(stageFromEntry(e));
   }

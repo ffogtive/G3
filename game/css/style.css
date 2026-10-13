@@ -1960,9 +1960,11 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
 }
 .ui-dock > .ui-rage { position: relative; z-index: auto; left: auto; bottom: auto; translate: none; }
+/* 위아래로 쌓일 때 분노 'MAX' 스티커가 범퍼 칸을 덮지 않게 살짝 내림 */
+.ui-dock .ui-rage__max { top: -9px; }
 .ui-root--touch .ui-dock { bottom: calc(var(--sab) + 116px); }
 /* 넓은 화면: [범퍼][분노] 좌우 한 줄 (세로로 쌓으면 플레이어 차 바로 아래를 가림). 속도계와 안 겹치는 폭부터 */
-@media (min-width: 860px) { .ui-dock { flex-direction: row; align-items: flex-end; } }
+@media (min-width: 860px) { .ui-dock { flex-direction: row; align-items: flex-end; } .ui-dock .ui-rage__max { top: -15px; } }
 .ui-root.ui-root--hud[data-phase="release"] .ui-hp,
 .ui-root.ui-root--hud[data-phase="cruise"] .ui-hp { opacity: 0; visibility: hidden; }
 
@@ -2019,7 +2021,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 /* 무적(피격 직후): 칸 · 아이콘 깜빡임 */
 .ui-hp.is-inv .ui-hp__cells, .ui-hp.is-inv .ui-hp__ico { animation: ui-blink .16s steps(2, jump-none) infinite; }
 /* 피격 이펙트 (JS 가 만들고 끝나면 지움) */
-.ui-hp__boom, .ui-hp__shard, .ui-hp__dmg { position: absolute; z-index: 2; pointer-events: none; will-change: transform, opacity; }
+.ui-hp__boom, .ui-hp__shard, .ui-hp__dmg { position: absolute; z-index: 2; pointer-events: none; opacity: 0; will-change: transform, opacity; }
 .ui-hp__boom { left: 0; top: 0; width: 30px; height: 30px; box-sizing: border-box; border-radius: 50%; border: 4px solid #ff3b30; background: radial-gradient(circle, rgba(255, 244, 190, .95) 0 22%, rgba(255, 110, 40, .85) 44%, rgba(255, 59, 48, 0) 70%); }
 .ui-hp__shard { left: 0; top: 0; width: 8px; height: 5px; background: #e9edf2; border: 1.5px solid var(--ui-ink); border-radius: 1.5px; }
 .ui-hp__shard.is-red { background: #ff3b30; }
@@ -2027,9 +2029,9 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 /* 위험: 화면 가장자리 빨간 심장박동 (코어의 분노 vignette 와 별도 레이어) */
 .ui-hpvig {
   position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; visibility: hidden;
-  background: radial-gradient(ellipse 82% 78% at 50% 50%, rgba(200, 0, 0, 0) 52%, rgba(225, 25, 15, .5) 84%, rgba(150, 0, 0, .85) 100%);
+  background: radial-gradient(ellipse farthest-corner at 50% 50%, rgba(200, 0, 0, 0) 46%, rgba(225, 25, 15, .55) 76%, rgba(150, 0, 0, .9) 100%);
 }
-.ui-root--hud .ui-hpvig.is-on { visibility: visible; animation: ui-hpBeat 1.05s ease-in-out infinite; }
+.ui-root--hud .ui-hpvig.is-on { visibility: visible; opacity: .4; animation: ui-hpBeat 1.05s ease-in-out infinite; }
 .ui-root--hud[data-phase="release"] .ui-hpvig, .ui-root--hud[data-phase="cruise"] .ui-hpvig { visibility: hidden; }
 
 /* ───────────── 토스트 (상단 짧은 알림) */
@@ -2110,7 +2112,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 
 /* ───────────── 스테이지 카드: 도로 상황 (갓길 / 경적 / 특수 + 전광판 힌트) */
 .ui-card__panel.has-road { width: min(480px, 100%); }
-.ui-road { grid-area: road; margin: 6px 14px 2px; padding: 7px 8px 8px; background: #dde6ef; border: 3px solid var(--ui-ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ui-ink); }
+.ui-road { grid-area: road; color: var(--ui-ink); margin: 6px 14px 2px; padding: 7px 8px 8px; background: #dde6ef; border: 3px solid var(--ui-ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ui-ink); }
 .ui-road__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 0 2px 7px; }
 .ui-road__sub { min-width: 0; font-size: 12px; color: #5a6b80; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ui-road__tag { flex: none; display: inline-flex; align-items: center; gap: 4px; font-family: var(--ui-fd); font-size: 15px; line-height: 1; color: #fff; background: var(--ui-ink); border-radius: 8px; padding: 3px 9px 3px 4px; white-space: nowrap; }
@@ -2136,7 +2138,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 
 /* ───────────── v0.4 반응형 */
 @media (max-width: 640px) {
-  .ui-dock { gap: 6px; }
+  .ui-dock { gap: 8px; }
   .ui-hp { gap: 6px; padding: 5px 10px 6px 6px; border-radius: 16px; }
   .ui-hp__ico { width: 32px; height: 32px; border-radius: 9px; }
   .ui-hp__ico svg { width: 23px; height: 23px; }
@@ -2172,9 +2174,11 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .ui-root--touch .ui-hp__cell { width: 21px; height: 17px; }
 .ui-root--touch .ui-hp__cells { gap: 4px; }
 .ui-root--touch .ui-hp__l { font-size: 11.5px; }
-.ui-root--touch .ui-dock { gap: 6px; }
+.ui-root--touch .ui-dock { gap: 8px; }
 /* 낮은 화면(폰 가로 · 낮은 데스크톱 창) */
-@media (max-height: 500px) and (min-width: 736px) { .ui-dock { flex-direction: row; align-items: flex-end; } }
+@media (max-height: 500px) and (min-width: 736px) { .ui-dock { flex-direction: row; align-items: flex-end; } .ui-dock .ui-rage__max { top: -13px; } }
+/* 긴 배너(코어의 '재도전 1회차 · 포상금 ×0.8' 등)가 좁은 화면 밖으로 나가지 않게 화면 폭에서 줄바꿈 */
+.ui-banner__t { width: max-content; max-width: calc(100vw - 28px); white-space: normal; word-break: keep-all; text-align: center; }
 @media (max-height: 500px) {
   .ui-root--touch .ui-dock { bottom: calc(var(--sab) + 14px); }
   /* 실패 카드: 그림 왼쪽 · 사유+버튼 오른쪽 */
