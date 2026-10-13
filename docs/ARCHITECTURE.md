@@ -63,6 +63,40 @@ export function buildWarningMarker() : THREE.Object3D
 //  노면 위 투하 경고 표시 (빨간 X 또는 원형 타깃, 지름 ~3m, y=0.03, 반투명 가능). userData.setProgress(0..1) 로 차오르는 연출
 ```
 
+### vehicles.js v0.4 추가 (깜빡이 · 폭주족 바이크 · 삼각별 세단)
+가설: 깜빡이 빌런의 인과가 보이려면 추격캠 30~50m 앞에서 주황 번쩍임이 차폭 밖으로 번져야 한다 (✅ `?view=blinker` 브레이크등 바다 속에서도 읽힘).
+기존 차종의 지오메트리·치수는 그대로다 (회귀 해시 360/360 동일). 꺼진 깜빡이는 `visible:false` 라서 평소 모습과 draw call 이 같다.
+
+```js
+export const BLINK_PERIOD = 2 / 3;               // 0.333s 켜짐 / 0.333s 꺼짐 ≈ 1.5Hz
+export function setBlinker(vehicle, side, t = true) : boolean
+//  side: 'left'(차 기준 왼쪽 = 로컬 −X) | 'right'(+X) | 'hazard'(양쪽 동시) | null/false(끔)
+//  t: 초(number) → 주기 점멸, true → 켜짐 고정(스틸컷). 반환 = 지금 켜졌는지 (false→true 순간에 audio 'blink')
+//  모든 차종(15종 + player 계열 + 빌런 + motorbike + starSedan). setHazard(기존 비상등 메시)와 독립.
+//  켜짐 비용: 한쪽당 draw call 2 (과장 램프 Mesh + 후광 Points). 후광 크기 MAT.blinkHalo.size (기본 2.6, 월드 m)
+export function setPose(vehicle, name) : boolean // 오토바이 라이더 포즈 (= userData.setPose)
+export const RIDER_POSES = ['ride','stand','oneHand','noHands','lie','tumble','sprawl','sit'];
+export const MOTORBIKE_VARIANTS = ['죽창 삼단','로켓카울','쭉쭉이 핸들','우퍼 스쿠터'];
+//  buildVehicle(kind, { variant }) — 모든 차종에서 seed 대신 변형을 직접 지정 (없으면 기존 seed 규칙)
+//  kind 추가: 'motorbike' | 'starSedan'  (둘 다 detailed 기본)
+```
+
+| userData (추가) | 대상 | 내용 |
+|---|---|---|
+| `blinkers` | 전 차종 | `[L, R]` Mesh(`blinkL`/`blinkR`, body 자식) + 자식 Points `blinkHalo`. setBlinker 가 visible 토글 |
+| `blinkSide` | 전 차종 | 마지막 setBlinker side (`null` = 꺼짐) |
+| `wheels` | motorbike | **2개 `[F, R]`** (차는 4개). group 직속, 로컬 X 회전 = 굴러감. 형광 휠 자식 `rimGlow` |
+| `rider` (= `driver`) | motorbike | Group, body 자식, 원점 = 엉덩이/시트 접점. 포즈마다 지오메트리 1개(draw call 1) |
+| `setPose(name)`, `poses` | motorbike | 포즈 교체(즉시 스냅). `rider.userData.groundY[pose]` = 땅에 놓을 때 rider 원점 높이 |
+| `bike` (= `body`) | motorbike | 쓰러뜨리기 권장값 `fall = { rotZ: 1.22, y: 0.3 }` (body.rotation.z = ±rotZ, position.y = y) |
+| `flags` | motorbike 0·2·3 | 깃발 Mesh[] (피벗 = 깃대 끝). 펄럭임 `flags[i].rotation.y = sin(t*9+i)*0.25` |
+| `motoVariant` | motorbike | 변형 이름 |
+| `ramPoint` | starSedan | Object3D, 앞범퍼 중앙 (들이받기 이펙트 위치) |
+
+치수: motorbike length 1.92~2.39 (깃발·죽창 끝 제외, 충돌용) × width 0.8 × height 2.0~2.7 (ride 포즈 + 깃발), 1,660~1,920▲, 7~9 draw call.
+starSedan 5.53 × 1.96 × 1.54 (범퍼가드 포함), ~1,700▲, 7 draw call.
+라이더 분리(슬랩스틱): `scene.attach(v.userData.rider)` → `setPose('tumble')` 으로 굴리고 → `'sprawl'`/`'sit'` + `groundY`. 피·부상 묘사 없음(어질어질 눈).
+
 ## scenery.js
 아트 디렉션: 한국 고속도로. 진회색 아스팔트, 흰 점선 차선, 1차선 왼쪽 노란 실선, 콘크리트 중앙분리대 + **녹색 눈부심방지 판**, 우측 갓길 + 가드레일, 구간별 **방음벽**(투명 패널에 버드세이버 스티커/녹색 판넬), 아파트 단지("101동"), 소나무 산, 논, 교회 첨탑(밤엔 빨간 십자가), 녹색 도로 안내 표지판, 주황 LED VMS 전광판, 졸음쉼터 현수막.
 
@@ -86,6 +120,24 @@ export function buildBanner(text, opts = {}) : THREE.Group
 //  우측 비탈/가드레일 옆 현수막(흰 바탕 빨강/파랑 글씨) 예: '졸음운전! 자면 죽는다', '졸음쉼터 2km'.
 export function makeSkyDome(topColor, bottomColor) : THREE.Mesh
 //  큰 구(반경 ~900) 안쪽 그라데이션 셰이더 (fog:false, depthWrite:false). 카메라 따라다닐 수 있게 원점 기준.
+```
+
+### scenery.js v0.4 추가: 터널 (갓길 없음)
+가설: 추격캠(위 12.5m)은 터널 천장보다 높다 → 셸을 **안쪽 면만** 구우면 바깥(위) 카메라에서는 백페이스 컬링으로 천장이 자동으로 잘려 차가 절대 안 가려지고, 안쪽 낮은 카메라(인트로·킬캠)에서는 아치·제트팬·천장등이 보이는 진짜 터널이 된다 (✅ `vehicles.html?view=tunnel&cam=all`).
+
+```js
+export const TUNNEL;           // { wallX: 8.55, walkX: 7.55, walkH: 0.25, springY: 3, crownY: 8, capY: 9.2, portalTopY, boardY, approach: 14 }
+export const TUNNEL_AMBIENCE;  // 터널 안 권장 조명 { hemiSky, hemiGround, hemiI, sunI, fog, fogNear, fogFar } → 코어가 보간
+export function buildTunnelSegment(length = SEG_LEN, opts = {}) : THREE.Group
+//  buildRoadSegment 와 같은 규약 (s ∈ [0,length], z: 0 → −length). 4차로(laneX) + 측방여유 0.35 + 1m 검사원 보도 + 측벽(|x| = 8.55)
+//  → 갓길(x 7.2~10.2)·갓길 차로(SHOULDER_LANE 4)는 막힘. 반대편 도로·분리대·가드레일 없음 (한 방향 단독 터널).
+//  차선 = 흰 실선(진로변경 제한). |x| > wallX 는 산 단면(암반면 + 높이 capY 잔디 윗면)이 덮어 바깥 소품이 안 비침.
+//  메시 4개 = draw call 4: road / shell(안쪽만) / glow(나트륨 등기구·유도등) / light(가산 빛웅덩이). ~2,650▲. castShadow 없음.
+//  opts: { night?, seed?, band?: 측벽 색띠 색, fans?: 제트팬(기본 true) }
+export function buildTunnelPortal(name = '○○터널', opts = {}) : THREE.Group
+//  원점 x=0, s=0 = 터널 시작면. 정면 +Z(다가오는 차), 두께 0.8m 와 날개벽·비탈(approach 14m) 은 +Z 쪽.
+//  현판(캔버스, 아치 위 boardY) + 입구 오른쪽 길가 안내표지(낮아서 추격캠에서 오래 읽힘). opts: { night?, length?(m → 'L=2,400m'), sub?, exit? }
+//  출구 = buildTunnelPortal(name, { exit: true }) 를 rotation.y = π 로 터널 끝 s 에 배치 (현판 없음).
 ```
 
 ## fx.js
