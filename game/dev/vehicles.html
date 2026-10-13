@@ -544,7 +544,7 @@ function setupTunnel() {
       const k = pick(); const pal = rnd() < 0.68 ? NPC_COLORS_MONO : NPC_COLORS_POP;
       const car = V.buildVehicle(k, { color: pal[Math.floor(rnd() * pal.length)], seed: Math.floor(rnd() * 1e6) });
       const L = car.userData.length; s += L / 2;
-      if (l === 1 && Math.abs(s - (pS + 14)) < 4) s = pS + 14 + 3.2 + L / 2;
+      if (l === 1 && s + L / 2 > pS + 14 - 3.4 && s - L / 2 < pS + 14 + 3.4) s = pS + 14 + 3.4 + 2.2 + L / 2; // 삼각별 세단 자리 비움
       car.position.set(laneX(l), 0, -s); scene.add(car); jamCars.push(car);
       if (l === 1 && s > 70 && s < 90 && !fullCars.zombie) { car.userData.__blink = 'left'; fullCars.zombie = car; fullCars.push(car); } // 좀비 깜빡이
       s += L / 2 + 2 + rnd() * 3.5;
@@ -554,7 +554,7 @@ function setupTunnel() {
   V.setHeadlights(player, true);
   blinkAll(fullCars);
   const camChase = chaseCam(px, -pS, 'chase');
-  const camPortal = chaseCam(px, 24, 'chase');
+  const camPortal = chaseCam(px, 46, 'chase');
   const lead = fullCars[0];
   const camInside = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.3, 800);
   camInside.position.set(lead.position.x + 6.2, 3.6, lead.position.z - 12); camInside.lookAt(lead.position.x - 0.5, 1.6, lead.position.z + 4);

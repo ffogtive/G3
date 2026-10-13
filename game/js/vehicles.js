@@ -1679,7 +1679,7 @@ const MOTO = [
     rider: { head: 'crest', coat: 0xf4f4f2, trim: 0xe2231a, pants: 0xf4f4f2, boots: 0x1b1c1f, glove: 0xf4f4f2, helmet: 0xf4f4f2, crest: 0xe2231a, mask: 0x1b1c1f, emblem: 0xe2231a },
   },
   { // 1 로켓카울: 뾰족한 로켓 카울 + 높은 풍방(윈드스크린) + 납작 엎드린 자세
-    name: '로켓카울', col: 0x1d1f22, neon: 0xff3df0, seat: 0x2b1030, trim: 0xff3df0, bar: 'low', exhaust: 'mega', tiers: 1, cowl: true,
+    name: '로켓카울', col: 0xf4f4f2, neon: 0xff3df0, seat: 0x2b1030, trim: 0xff3df0, bar: 'low', exhaust: 'mega', tiers: 1, cowl: true,
     hip: [0, 0.93, 0.2], grip: [0.3, 1.08, -0.45], peg: [0.2, 0.47, 0.1], lean: 0.72,
     rider: { head: 'fullface', coat: 0x1b1c1f, trim: 0xff3df0, pants: 0x2b2d32, boots: 0x111214, glove: 0xff3df0, helmet: 0x1d1f22, visor: 0x3a1450, emblem: 0xff3df0 },
   },
@@ -1775,17 +1775,20 @@ function buildMotorbike(c, p) {
     }
     // ── 앞: 헤드라이트 or 로켓카울
     if (V.cowl) {
-      B.frustum({ b: [-0.22, 0.22, -0.92, -0.46], t: [-0.16, 0.16, -0.86, -0.5], y0: 0.66, y1: 1.12 }, col, '', { U: shade(col, 1.15) });
-      B.prism(8, 0.06, 0.25, 0.3, 'z', 0, 0.9, -1.07, col, { a0: Math.PI / 8, capB: col });
-      lamp(c, 'head', -0.055, 0.055, 0.85, 0.95, -1.25, -1.19);
-      B.beam([0, 1.1, -0.66], [0, 1.62, -0.44], 0.4, 0.03, 0x22304e);                       // 풍방
-      B.beam([0, 1.62, -0.44], [0, 1.64, -0.43], 0.42, 0.04, V.trim);
+      B.frustum({ b: [-0.22, 0.22, -0.92, -0.46], t: [-0.16, 0.16, -0.86, -0.5], y0: 0.66, y1: 1.12 }, col, '', { U: shade(col, 1.06) });
+      B.prism(8, 0.05, 0.25, 0.36, 'z', 0, 0.9, -1.1, col, { a0: Math.PI / 8, capB: col });          // 로켓 코
+      B.prism(8, 0.13, 0.17, 0.08, 'z', 0, 0.9, -1.12, V.trim, { a0: Math.PI / 8, noA: true, noB: true }); // 코 띠 (핑크)
+      lamp(c, 'head', -0.05, 0.05, 0.85, 0.95, -1.3, -1.25);
+      for (const s of SIDES) B.box(...xr(s, 0.215, 0.225), 0.72, 1.06, -0.9, -0.5, V.trim);               // 옆 핑크 판
+      B.beam([0, 1.1, -0.66], [0, 1.64, -0.43], 0.42, 0.03, 0x5d7396);                       // 풍방 (연한 스모크)
+      B.beam([-0.08, 1.2, -0.62], [-0.08, 1.56, -0.465], 0.05, 0.035, 0x9fb6d4);             // 반사 하이라이트
+      B.beam([0, 1.64, -0.43], [0, 1.66, -0.42], 0.44, 0.045, V.trim);
       G.box(-0.015, 0.015, 1.12, 1.128, -0.88, -0.5, neon);                                     // 네온 등줄
       for (const s of SIDES) {
         G.box(...xr(s, 0.2, 0.226), 0.8, 0.83, -0.9, -0.5, neon);
         lamp(c, 'hazard', ...xr(s, 0.21, 0.32), 0.86, 0.96, -0.9, -0.8, undefined, { top: true, dir: -1 });
       }
-      zFront = -1.25;
+      zFront = -1.3;
     } else {
       B.prism(8, 0.13, 0.13, 0.14, 'z', 0, 0.9, -0.74, ch, { a0: Math.PI / 8 });
       B.box(-0.1, 0.1, 0.86, 0.94, -0.68, -0.55, dk);
@@ -1845,11 +1848,11 @@ function buildMotorbike(c, p) {
   // ── 깃발 (깃대는 차체, 깃발은 펄럭임용 별도 메시: userData.flags[i].rotation.y)
   const flags = [];
   if (V.flag === 'big') {
-    const base = V.scooter ? [0.2, 1.72, 0.86] : [0, 0.92 + 0.22 + 0.2 * Math.max(0, V.tiers - 1), 0.84], tip = [base[0] + 0.02, 2.62, base[2] + 0.1];
+    const base = V.scooter ? [0.2, 1.72, 0.84] : [0, 0.92 + 0.22 + 0.2 * Math.max(0, V.tiers - 1), 0.82], tip = [base[0] + 0.02, 2.62, base[2] - (V.scooter ? 0.06 : -0.02)];
     B.beam(base, tip, 0.035, 0.035, C.chrome);
-    flags.push({ pos: tip, len: 0.78, h: 0.5, cols: V.flagCols, tri: false });
+    flags.push({ pos: tip, len: 0.64, h: 0.46, cols: V.flagCols, tri: false });
   } else if (V.flag === 'twin') {
-    for (const s of SIDES) { const b = [s * 0.2, 0.78, 0.98], t = [s * 0.25, 2.28, 1.06]; B.beam(b, t, 0.03, 0.03, C.chrome); flags.push({ pos: t, len: 0.62, h: 0.32, cols: s < 0 ? V.flagCols : [V.flagCols[1], V.flagCols[0]], tri: true }); }
+    for (const s of SIDES) { const b = [s * 0.2, 0.78, 0.98], t = [s * 0.25, 2.28, 1.02]; B.beam(b, t, 0.03, 0.03, C.chrome); flags.push({ pos: t, len: 0.58, h: 0.32, cols: s < 0 ? V.flagCols : [V.flagCols[1], V.flagCols[0]], tri: true }); }
   }
   flags.forEach((f, i) => {
     const gb = new GB(); flagParts(gb, f.len, f.h, f.cols, f.tri);
@@ -1902,9 +1905,9 @@ function riderJoints(name, S) {
     case 'noHands': J.up = lean(-0.1); J.hands = [{ raise: v3(-0.16, 0.54, 0.08) }, { raise: v3(0.16, 0.54, 0.08) }]; J.armPole = (s) => v3(s, 0.2, 0.3); break;
     case 'lie': J.pelvis = v3(0, 0.1, 0.04); J.up = v3(0, 0.26, -1); J.headUp = v3(0, 1, -0.35); J.feet = [v3(-0.14, 0.14, 0.82), v3(0.14, 0.14, 0.82)]; J.legPole = () => v3(0, 1, 0); break;
     case 'tumble':
-      J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.72, -0.7); J.headUp = v3(0, 0.45, -1); J.coat = 'hang'; J.dizzy = true;
-      J.hands = [v3(-0.17, 0.06, -0.44), v3(0.17, 0.06, -0.44)]; J.feet = [v3(-0.13, -0.2, -0.3), v3(0.13, -0.2, -0.3)];
-      J.legPole = (s) => v3(s * 0.2, 1, -0.4); J.armPole = (s) => v3(s, 0, 0.2); break;
+      J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.42, -1); J.headUp = v3(0, -0.35, -1); J.coat = 'hang'; J.dizzy = true; // 공처럼 웅크림 (코어가 굴림)
+      J.hands = [v3(-0.19, 0.32, -0.5), v3(0.19, 0.32, -0.5)]; J.feet = [v3(-0.13, -0.12, -0.2), v3(0.13, -0.12, -0.2)];
+      J.legPole = (s) => v3(s * 0.15, 1, -0.75); J.armPole = (s) => v3(s, 0.4, 0); J.footFwd = v3(0, -0.3, -1); break;
     case 'sprawl': // 큰대자로 뻗음 (얼굴 위, 머리 +Z) — 어질어질 눈
       J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.03, 1); J.face = v3(0, 1, 0); J.headUp = v3(0, 0.15, 1); J.headFace = v3(0, 1, 0); J.coat = 'flat'; J.dizzy = true;
       J.hands = [v3(-0.74, 0.02, 0.62), v3(0.74, 0.02, 0.62)]; J.feet = [v3(-0.44, 0.0, -0.8), v3(0.44, 0.0, -0.8)];
@@ -2062,8 +2065,8 @@ function buildStarSedan(c, p) {
   B.box(-gw, gw, gy0, gy1 - 0.01, zf - 0.08, zf - 0.06, 0x111214);
   for (let i = 0; i < 3; i++) { const y = gy0 + 0.05 + i * ((gy1 - gy0 - 0.08) / 2.4); B.box(-gw + 0.02, gw - 0.02, y, y + 0.03, zf - 0.095, zf - 0.075, chromeC); }
   B.box(-0.012, 0.012, gy0, gy1, zf - 0.1, zf - 0.075, chromeC);
-  B.box(-0.03, 0.03, r.hood, r.hood + 0.05, zf + 0.04, zf + 0.1, chromeC);                // 별 받침
-  starPrism(B, 0, r.hood + 0.15, zf + 0.07, 0.1, 0.042, 0.03, blk ? 0xb8bfc8 : 0xf4f6f8);  // 후드 위 별 (오각, 패러디)
+  B.box(-0.03, 0.03, r.hood, r.hood + 0.06, zf + 0.04, zf + 0.1, chromeC);                // 별 받침
+  starPrism(B, 0, r.hood + 0.19, zf + 0.07, 0.14, 0.06, 0.035, blk ? 0xb8bfc8 : 0xf4f6f8); // 후드 위 별 (오각, 패러디)
   // ── 두툼한 강철 앞범퍼 + 범퍼가드 + 크롬 띠 + 아래 흡기구 + 스키드 플레이트
   const fz0 = -hl - 0.16, fz1 = -hl + 0.2;
   B.box(-hw - 0.04, hw + 0.04, r.yb - 0.08, r.yb + 0.27, fz0, fz1, shade(col, 0.82), 'D', { U: shade(col, 0.95) });

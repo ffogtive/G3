@@ -834,7 +834,7 @@ export function buildTunnelSegment(length = SEG_LEN, opts = {}) {
   return g;
 }
 /** 터널 안 권장 조명 (추가 export): 코어가 플레이어가 터널 안일 때 world.hemi/sun/fog 를 이 값으로 보간 */
-export const TUNNEL_AMBIENCE = Object.freeze({ hemiSky: 0xffc589, hemiGround: 0x4a3626, hemiI: 1.05, sunI: 0.35, fog: 0x3a2c22, fogNear: 40, fogFar: 230 });
+export const TUNNEL_AMBIENCE = Object.freeze({ hemiSky: 0xffdcb4, hemiGround: 0x5a4632, hemiI: 1.45, sunI: 0.55, fog: 0x3a2c22, fogNear: 50, fogFar: 260 });
 
 // 포털 현판 (캔버스): 녹색 판 + 흰 테두리 + 터널 이름(크게) + 길이
 function tunnelBoardMaterial(name, sub, night) {
@@ -866,7 +866,7 @@ function buildPortalGeo(night) {
   // 정면: 옆 블록 + 아치 위 띠 (각 아치 면 위로 수직 띠)
   for (const sd of [-1, 1]) {
     const xa = sd * TN.wallX, xb = sd * W;
-    qf(F, [xa, 0, ZF], [xb, 0, ZF], [xb, topS, ZF], [xa, topS, ZF], PAL_FACADE(), nF);
+    qf(F, [xa, 0, ZF], [xb, 0, ZF], [xb, topS, ZF], [xa, topS, ZF], TPAL.facade, nF);
     for (let y = 1.2; y < topS - 0.5; y += 1.2) qf(F, [xa + sd * 0.7, y, ZF + 0.01], [xb, y, ZF + 0.01], [xb, y + 0.06, ZF + 0.01], [xa + sd * 0.7, y + 0.06, ZF + 0.01], TPAL.facadeDark, nF);
     // 끝면 + 윗면
     qf(F, [xb, 0, 0], [xb, 0, ZF], [xb, topS, ZF], [xb, topS, 0], TPAL.facadeDark, [sd, 0, 0]);
@@ -874,7 +874,7 @@ function buildPortalGeo(night) {
   }
   for (let i = 0; i < NA; i++) {
     const a = archPt(i, NA), b = archPt(i + 1, NA), ta = topAt(a[0]), tb = topAt(b[0]);
-    qf(F, [a[0], a[1], ZF], [b[0], b[1], ZF], [b[0], tb, ZF], [a[0], ta, ZF], PAL_FACADE(), nF);
+    qf(F, [a[0], a[1], ZF], [b[0], b[1], ZF], [b[0], tb, ZF], [a[0], ta, ZF], TPAL.facade, nF);
     qf(F, [a[0], ta, 0], [b[0], tb, 0], [b[0], tb, ZF], [a[0], ta, ZF], TPAL.facade, [0, 1, 0]); // 윗면
     // 개구부 안쪽 면 (두께) + 포털 링(정면에 0.6m 띠, 6cm 돌출)
     const [nx, ny] = archN(i, NA);
@@ -914,7 +914,6 @@ function buildPortalGeo(night) {
   F.box(0, 9.15, ZF + 0.03, 7.9, 1.72, 0.06, 0x3a3d42);
   return F.build();
 }
-function PAL_FACADE() { return TPAL.facade; }
 /**
  * 터널 입구 포털 (추가 export). 원점 x=0, s=0 = 터널 시작면, 정면은 +Z(다가오는 차)를 봄, 두께 0.8m 는 +Z 쪽.
  * 구성: 콘크리트 면벽(개구부 = 터널 단면) + 포털 링 + 경고띠 + 현판('○○터널' 캔버스) + 날개벽·잔디 비탈(+Z 로 approach m).
