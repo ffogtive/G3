@@ -17,7 +17,7 @@ import { FX } from './fx.js';
 import { audio } from './audio.js';
 import { initUI, ui } from './ui.js';
 import * as SC from './scenery.js';
-import { setHeadlights } from './vehicles.js';
+import { setHeadlights, setHazard } from './vehicles.js';
 import * as VEH from './vehicles.js';
 import { computeReward, applyReward, villainNames } from './rewards.js';
 import CATALOG from './data/villain_catalog.js';
@@ -170,6 +170,7 @@ traffic.onCheater = (c) => {
 };
 
 function addRage(a) {
+  if (G.hp <= 0.2 * (G.maxHp || 100)) a *= 2;   // 범퍼 1칸: 분노 두 배 (역전 장치)
   const before = G.rage;
   G.rage = Math.min(1, G.rage + a);
   const seg = (r) => Math.floor(r * TUNE.rageSegs + 1e-6);
@@ -226,6 +227,7 @@ function onMiniHit(c, dmg, pos) {
   if (r === 'down') {
     const T = MINI_TYPES[c.mini.type];
     G.minisDone++; G.miniFines += T.fine; G.score += 400;
+    healHP(TUNE.hp.healMini, '정비 쿠폰 +');
     audio.play('pop');
     fx.debris(c.mesh.position.clone().setY(1), [0xff9a1a, 0xffffff, 0x222222], 10);
     fx.shake(0.3, 0.2);
@@ -255,6 +257,7 @@ function rageHorn() {
 // 보스·엘리트 페이즈 전환 연출
 function onBossPhase(e) {
   G.hitstop = Math.max(G.hitstop, 0.12);
+  if (!G.phaseHealed) { G.phaseHealed = true; healHP(TUNE.hp.healPhase, '숨 돌리기 +'); }
   fx.shake(0.6, 0.4);
   ui.flash('#ff6b3d', 120);
   ui.banner(`${e.idx + 1}페이즈! ${e.label}`, 'boss', 1300);
@@ -365,7 +368,12 @@ function setupStage(stage) {
   player.setKind?.(car.kind, night);
   player.stats = { speed: 1, armor: 0, ...(car.stats || {}) };
   player.armorLeft = player.stats.armor || 0;
-  G.airbag = owns('pas_airbag') ? 3 : 0;
+  G.airbag = owns('pas_airbag') ? 1 : 0;   // 견인될 피해를 한 번 버팀
+  // 내구도: 판마다 만땅. 판별 피해 배율(1챕터 초반은 반만), 이후 챕터는 조금씩 아프게
+  G.maxHp = player.stats.hp || TUNE.hp.max;
+  G.hp = G.maxHp; G.hpShown = -1; G.dmgLevel = -1; G.wrecked = false; G.failShown = false; G.phaseHealed = false;
+  G.dmgMul = stageDamageMul(stage);
+  VEH.setDamage?.(player.mesh, 0);
   weapons.setWeapon(equipped('weapon'));
   boss.finishStyle = (equipped('finish').id || 'fin_rocket').replace('fin_', '');
   if (owns('pas_coffee')) G.rage = TUNE.superCost;
@@ -376,6 +384,7 @@ function setupStage(stage) {
 }
 
 function startStage(idx) {
+  G.fails = 0; G.payRetryMul = 1; G.wreckSnap = null;   // 새 판 (재도전은 retryFromDiscovery가 다시 채움)
   G.stageIdx = idx;
   G.stage = STAGES[idx];
   G.paused = false;
@@ -441,6 +450,7 @@ function enterPhase(name) {
     }
     case 'boss': {
       G.bossStart = G.time;
+      G.bossRage = G.rage;   // 재도전 시 분노는 원인 발견 시점 값으로
       boss.attackT = 2.0;
       const names = villainNames(boss.villains);
       ui.banner(G.stage.honkOnly ? '원인 발견! 구조 출동!' : '원인 발견!', 'boss', 1300);
@@ -455,6 +465,17 @@ function enterPhase(name) {
       audio.play('hornAngry', { volume: 0.5 });
       // 벽 차량들 짜증 경적
       for (const c of traffic.carsBehindFront(5)) bubble('w' + c.id, FRONT_RAGE_LINES[Math.floor(Math.random() * FRONT_RAGE_LINES.length)], 'angry', 1.8, carTop(c, 0.8));
+      break;
+    }
+    case 'wreck': {
+      // 내구도 0: 슬로모 + 스핀 + 비상등, 레커 개그 → 실패 카드
+      G.slowUntil = G.realTime + 1.4; G.slowScale = 0.3;
+      ui.flash('#ff3b30', 220); fx.shake(1.0, 0.5);
+      fx.explosion(player.mesh.position.clone().setY(1), 0.8);
+      audio.play('explosion'); audio.duck(0.7, 2.5);
+      ui.banner('견인!! 범퍼가 남아나질 않았다', 'boss', 1500);
+      setHazard(player.mesh, true);
+      G.wreckSpin = 0;
       break;
     }
     case 'kill': {
@@ -513,7 +534,7 @@ function stageMissions() {
   const n = G.minisTotal || 0;
   return [
     { label: G.stage?.honkOnly ? '원인 해결 (구조 완료 · 압정 금지)' : '원인 제거 (참교육 완료)' },
-    { label: '추돌·피격 합계 3회 이하' },
+    { label: '내구도 60 이상으로 클리어' },
     { label: n ? `잔챙이 빌런 ${n}명 전원 참교육` : '잔챙이 빌런 없음 (자동 달성)' },
   ];
 }
@@ -527,7 +548,7 @@ function showResult() {
     + (G.supers > 0 ? 6 : 0) + Math.min(8, G.maxCombo / 5);
   cath = Math.max(12, Math.min(100, Math.round(cath)));
   // 별 = 명시적 미션 3개 (docs/SHOP.md)
-  const missions = stageMissions().map((m, i) => ({ label: m.label, done: i === 0 ? true : i === 1 ? (G.bumps + G.hitsTaken) <= 3 : G.minisDone >= G.minisTotal }));
+  const missions = stageMissions().map((m, i) => ({ label: m.label, done: i === 0 ? true : i === 1 ? G.hp >= 60 : G.minisDone >= G.minisTotal }));
   const stars = missions.filter((m) => m.done).length;
   // 아낀 시간(사실 기반): 정체 통과(약 9km/h) − 정상 통과(100km/h) × 해방 대수
   const savedMin = (stage.displayKm / 9 - stage.displayKm / 100) * 60;
@@ -535,7 +556,7 @@ function showResult() {
   const score = Math.round(G.score + freed * 5 + cath * 40);
   const mm = Math.floor(total / 60), ss = Math.floor(total % 60);
   const p = G.progress;
-  const reward = computeReward(stage, { stars, cath, freed, bumps: G.bumps, cheaters: G.cheaters || 0, miniFines: G.miniFines || 0, payMult: owns('pas_4k') ? 1.25 : 1 }, Math.floor(G.time * 1000) % 997 + 1);
+  const reward = computeReward(stage, { stars, cath, freed, bumps: G.bumps, cheaters: G.cheaters || 0, miniFines: G.miniFines || 0, payMult: (owns('pas_4k') ? 1.25 : 1) * (G.payRetryMul || 1) }, Math.floor(G.time * 1000) % 997 + 1);
   const { milestone } = applyReward(p, stage, reward, G.photo);
   p.unlocked = Math.min(STAGES.length, Math.max(p.unlocked, G.stageIdx + 2));
   p.stars[stage.id] = Math.max(p.stars[stage.id] || 0, stars);
@@ -549,7 +570,7 @@ function showResult() {
       { label: '해방된 차량', value: `${freed.toLocaleString('ko-KR')}대` },
       { label: '근거', value: `${stage.displayKm}km×${NUM_LANES}차로×${TUNE.jamDensity}대/km` },
       { label: '아낀 시간 합계', value: `${savedHours.toLocaleString('ko-KR')}시간` },
-      { label: '추돌+피격', value: `${G.bumps + G.hitsTaken}회` },
+      { label: '남은 내구도', value: `${G.hp}/${G.maxHp}${G.fails ? ` · 견인 ${G.fails}회` : ''}` },
       { label: '잔챙이 참교육', value: `${G.minisDone}/${G.minisTotal}` },
       { label: '소요 시간', value: `${mm}:${String(ss).padStart(2, '0')}` },
       { label: '속시원함 지수', value: `${cath}%` },
@@ -602,12 +623,99 @@ function onWeaponHit(v, dmg, pos, kind, fromRear = false) {
   }
 }
 
+// ───────────────────────────── 내구도 (v0.4)
+// 판별 피해 배율: 1-1~1-3 ×0.5, 1-4~1-6 ×0.8, 1-7~ ×1.0, 2챕터 1.0 → 10챕터 1.3
+function stageDamageMul(stage) {
+  if (stage.dmgMul) return stage.dmgMul;
+  const ch = stage.chapter || 1;
+  if (ch <= 1) return stage.id <= 3 ? 0.5 : stage.id <= 6 ? 0.8 : 1.0;
+  return Math.min(1.3, 1 + (ch - 2) * 0.0375);
+}
+function applyDamage(raw, reason) {
+  if (!['jam', 'boss'].includes(G.phase) || G.wrecked) return 0;
+  const dmg = Math.round(raw * (G.dmgMul || 1));
+  if (dmg <= 0) return 0;
+  const jamLike = G.phase === 'jam' || (G.phase === 'boss' && !G.frontLocked);
+  let hp = G.hp - dmg;
+  if (jamLike) hp = Math.max(hp, Math.min(G.hp, TUNE.hp.jamFloor));   // 정체 구간: 1칸 아래로 안 떨어짐
+  if (hp <= 0 && G.airbag > 0) { G.airbag--; hp = 1; hud.popAt(player.mesh.position.clone().setY(3.2), '에어백!! 간신히 버팀', 'score'); }
+  const lost = G.hp - Math.max(0, hp);
+  G.hp = Math.max(0, hp);
+  if (lost > 0) hud.popAt(player.mesh.position.clone().setY(2.9), `범퍼 -${lost}`, 'bump');
+  G.lastDamageReason = reason;
+  syncHP(true);
+  if (G.hp <= 0) wreck(reason);
+  return lost;
+}
+function healHP(n, label) {
+  if (G.hp >= G.maxHp || G.wrecked) return;
+  G.hp = Math.min(G.maxHp, G.hp + n);
+  hud.popAt(player.mesh.position.clone().setY(3.0), `${label}${n}`, 'score');
+  syncHP(false);
+}
+// HUD·차량 손상 단계·연기 동기화
+function syncHP(hit = false) {
+  if (G.hp !== G.hpShown || hit) { ui.setHP?.({ hp: G.hp, max: G.maxHp, invuln: hit }); G.hpShown = G.hp; }
+  const f = G.hp / G.maxHp;
+  const level = f > 0.8 ? 0 : f > 0.6 ? 1 : f > 0.4 ? 2 : f > 0.2 ? 3 : 4;
+  if (level !== G.dmgLevel) { G.dmgLevel = level; VEH.setDamage?.(player.mesh, level); }
+}
+function updateDamageFx(dt) {
+  const f = G.hp / G.maxHp;
+  if (f > 0.6 || !['jam', 'boss', 'wreck'].includes(G.phase)) return;
+  G.smokeT = (G.smokeT || 0) - dt;
+  if (G.smokeT > 0) return;
+  G.smokeT = f > 0.4 ? 0.6 : 0.3;
+  fx.smokePuff(new THREE.Vector3(player.x, 1.4 + player.hop, -(player.s + player.len * 0.35)), { count: 3, color: f > 0.4 ? 0xeeeeee : 0x222222, size: 0.9 });
+  if (f <= 0.2) setHazard(player.mesh, Math.floor(G.realTime * 3) % 2 === 0);
+}
+// 견인 (내구도 0) → 실패 카드 → '원인 발견 지점부터' 재도전
+function wreck(reason) {
+  if (G.wrecked) return;
+  G.wrecked = true;
+  G.fails = (G.fails || 0) + 1;
+  G.wreckSnap = {
+    villains: boss.villains.map((v) => ({ alive: v.alive, hp: v.hp, popped: (v.popped || []).length })),
+    rage: G.bossRage ?? G.rage,
+    phaseIdx: boss.phaseIdx || 0,
+  };
+  enterPhase('wreck');
+}
+function retryFromDiscovery() {
+  const snap = G.wreckSnap, fails = G.fails || 0, idx = G.stageIdx;
+  startStage(idx);
+  G.fails = fails;
+  G.payRetryMul = Math.max(TUNE.hp.retryPayMin, 1 - TUNE.hp.retryPayStep * fails);
+  if (G.phase === 'intro') { G.introStage = 1; G.introT2 = 9; enterPhase('jam'); }
+  // 원인 발견 지점(35m 뒤) 바로 안쪽, 갓길 장애물과 겹치지 않는 곳
+  let s = boss.refS() - 33;
+  for (const o of traffic.obstacles) if (Math.abs(o.s - s) < o.len / 2 + 4) s = o.s - o.len / 2 - 5;
+  player.s = s; player.lane = SHOULDER_LANE; player.x = laneX(SHOULDER_LANE); player.lcT = 1; player.v = 10;
+  if (snap) {
+    G.rage = snap.rage;
+    boss.villains.forEach((v, i) => {
+      const sv = snap.villains[i];
+      if (!sv) return;
+      if (!sv.alive) { v.alive = false; v.gone = true; v.hp = 0; v.mesh.visible = false; v.marker.visible = false; return; }
+      v.hp = sv.hp;   // 진행 보존: 빌런 HP는 실패 시점 그대로
+      for (let k = 0; k < sv.popped && v.tires > 1; k++) boss._popTire(v);
+    });
+    boss.phaseIdx = snap.phaseIdx;
+  }
+  ui.banner(`재도전 ${fails}회차 · 포상금 ×${G.payRetryMul.toFixed(1)}`, 'warn', 1400);
+}
+
+// 빌런 공격 → 피해 등급 (경 10 / 중 20 / 강 30 / 필살 40)
+const CAUSE_TIER = { lunge: 'fatal', highbeam: 'light', horn: 'light', smoke: 'light', swerve: 'heavy', selfie: 'light' };
 function onPlayerHit(ev) {
   if (player.invuln > 0) return;
   G.hitsTaken++;
+  const raw = ev.type === 'miniHit' ? TUNE.hp.miniDmg : (ev.dmg ?? TUNE.hp.tier[ev.tier || CAUSE_TIER[ev.cause] || 'mid']);
+  applyDamage(raw, ev.text || '피격');
+  if (G.wrecked) return;
   if (ev.type === 'miniHit' || !G.frontLocked) {
     // 정체 구간(잔챙이 투척)·보스 뒤쪽: 살짝 휘청만
-    player.invuln = 0.8; player.bumpKick = 1; player.v *= 0.5;
+    player.invuln = TUNE.hp.invuln; player.bumpKick = 1; player.v *= 0.5;
     G.combo = 0; addRage(TUNE.miniRage); fx.shake(0.4, 0.25); ui.flash('#ff3b30', 90); audio.play('bump');
     hud.popAt(player.mesh.position.clone().setY(2.4), ev.text || '으악!', 'bump');
     return;
@@ -653,6 +761,7 @@ function updateDrone(dt, jamLike, miniT) {
 function onSmash(o) {
   const r = traffic.smash(o);
   if (!r) return;
+  if (o.kind === 'cones' && !(player.boostT > 0)) applyDamage(TUNE.hp.coneDmg, '공사 콘');
   for (const pc of r.pieces) {
     scene.attach(pc.obj);
     boss.debris.push({
@@ -670,10 +779,9 @@ function onSmash(o) {
   addRage(TUNE.smashRage);
 }
 
-function onBump(other) {
-  // 1톤 포터 장갑 / 에어백: 추돌을 흡수
-  if (player.armorLeft > 0) { player.armorLeft--; hud.popAt(player.mesh.position.clone().setY(2.4), '튼튼!', 'score'); audio.play('bump', { volume: 0.4 }); traffic.jolt?.(other); return; }
-  if (G.airbag > 0) { G.airbag--; hud.popAt(player.mesh.position.clone().setY(2.4), '에어백!', 'score'); audio.play('bump', { volume: 0.4 }); traffic.jolt?.(other); return; }
+function onBump(other, relV = 0) {
+  // 저속 '쿵'은 내구도 0 (콤보·분노만). 상대속도 6m/s 이상 고속 추돌만 피해 — 갓길 고장차는 더 아픔
+  if (relV >= TUNE.hp.bumpRelV) applyDamage(other.isObstacle ? TUNE.hp.obstacleDmg : TUNE.hp.bumpDmg, other.isObstacle ? '갓길 고장차 충돌' : '고속 추돌');
   G.bumps++;
   G.combo = 0;
   addRage(TUNE.bumpRage);
@@ -958,6 +1066,7 @@ function update(realDt) {
   if (ph === 'jam') pmode = 'jam';
   else if (ph === 'boss') pmode = G.frontLocked ? 'boss' : 'jam';
   else if (ph === 'kill') { pmode = 'idle'; cruiseV = boss.refV(); }
+  else if (ph === 'wreck') { pmode = 'idle'; cruiseV = 0; }
   else if (ph === 'release') { pmode = 'cruise'; cruiseV = G.phaseT > 0.8 ? 27 : boss.refV(); }
   else if (ph === 'cruise') { pmode = 'cruise'; cruiseV = TUNE.cruiseSpeed; }   // 제한속도 110km/h
   else if (ph === 'result') { pmode = 'cruise'; cruiseV = Math.max(0, 22 - G.phaseReal * 6); }
@@ -967,7 +1076,7 @@ function update(realDt) {
     bossRefS: boss.refS(), bossRefV: boss.refV(),
   });
   for (const e of pev) {
-    if (e.type === 'bump') onBump(e.other);
+    if (e.type === 'bump') onBump(e.other, e.relV || 0);
     else if (e.type === 'smash') onSmash(e.other);
     else if (e.type === 'tow') { const oi = traffic.obstacles.indexOf(e.other); if (oi >= 0) { traffic.obstacles.splice(oi, 1); flingObstacle(e.other, true); audio.play('whoosh'); } }
   }
@@ -1010,6 +1119,21 @@ function update(realDt) {
   }
   // 분노: 정체 속에서 서 있으면 쌓인다
   if (jamLike) addRage((TUNE.baseRage + (player.v < 5 ? TUNE.timeRage : 0)) * dt);
+
+  // 견인 → 실패 카드 (오토파일럿은 바로 재도전)
+  if (ph === 'wreck') {
+    G.wreckSpin += dt * 7 * Math.max(0, 1 - G.phaseReal / 1.6);
+    player.mesh.rotation.y = G.wreckSpin;
+    if (G.phaseReal > 1.6 && !G.failShown) {
+      G.failShown = true;
+      const vn = villainNames(G.stage.villains);
+      const p = G.auto ? null : ui.showFail?.({ reason: G.lastDamageReason || '피격', villainName: vn, retryLabel: '원인 발견 지점부터 다시' });
+      if (p && p.then) p.then((choice) => (choice === 'menu' ? goTitle() : retryFromDiscovery()));
+      else setTimeout(retryFromDiscovery, G.auto ? 200 : 900);
+    }
+  }
+  updateDamageFx(dt);
+  syncHP(false);
 
   // 페이즈 진행
   // 발견: 원흉 뒤 35m 안으로 들어오면 / 정면 참교육: 앞줄을 앞질러 원흉 앞으로 끼어들면
@@ -1167,6 +1291,7 @@ function debugSkip(to) {
   if (to === 'kill') return;
 }
 G.debugSkip = debugSkip;
+G.debugDamage = (n, why = '테스트') => applyDamage(n, why);   // 디버그: 내구도 피해 강제
 G.startStage = startStage;
 G.enterPhase = enterPhase;
 G.objs = { player, traffic, boss, weapons, world, fx, camera, scene, renderer };

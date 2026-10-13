@@ -231,6 +231,16 @@ export const MINI_TYPES = {
 
 // 게임플레이 튜닝 값 (main/player/boss/weapons 공유)
 export const TUNE = {
+  // v0.4 내구도(범퍼 5칸). 수치는 가설 ❓ — docs/V04_SPEC.md '플레이어 HP'
+  hp: {
+    max: 100, tier: { light: 10, mid: 20, heavy: 30, fatal: 40 },
+    jamFloor: 20,            // 정체 구간(원흉 정면전 전)에선 1칸 아래로 안 떨어짐 → 원흉 만나기 전 사망 없음
+    invuln: 1.0,             // 피격 후 무적
+    bumpRelV: 6,             // 이 상대속도(m/s) 이상 추돌만 피해
+    bumpDmg: 10, obstacleDmg: 20, coneDmg: 5, miniDmg: 5,
+    healMini: 10, healPhase: 10,
+    retryPayStep: 0.2, retryPayMin: 0.6,
+  },
   playerMaxV: 18,          // 정체 구간 최고속 m/s (~65km/h)
   playerAccel: 9,
   playerBrake: 22,
@@ -270,7 +280,7 @@ export const TUNE = {
 // cat: car(하나 장착) | weapon(하나 장착) | move(보유 시 사용 가능) | finish(하나 장착) | passive(보유 시 적용)
 export const SHOP = [
   { id: 'car_hatch', cat: 'car', name: '참교육 해치', price: 0, kind: 'player', desc: '기본 차. 작고 빨라서 갓길 질주에 최고.', stats: { speed: 1.0, armor: 0 } },
-  { id: 'car_porter', cat: 'car', name: '1톤 포터', price: 180000, kind: 'playerPorter', desc: '튼튼한 짐칸. 추돌 2회까지 무시.', stats: { speed: 0.93, armor: 2 } },
+  { id: 'car_porter', cat: 'car', name: '1톤 포터', price: 180000, kind: 'playerPorter', desc: '튼튼한 짐칸. 내구도 130(기본 100).', stats: { speed: 0.93, hp: 130 } },
   { id: 'car_wrecker', cat: 'car', name: '레커 견인차', price: 450000, kind: 'playerWrecker', desc: '갓길 고장차를 들이받으면 즉시 견인!', stats: { speed: 0.97, armor: 1, tow: true } },
   { id: 'car_patrol', cat: 'car', name: '암행 순찰차 st.', price: 900000, kind: 'playerPatrol', desc: '경적 = 사이렌. 얌체·4차선이 크게 비켜준다.', stats: { speed: 1.08, armor: 0, siren: true } },
   { id: 'wpn_tack', cat: 'weapon', name: '압정', price: 0, proj: 'tack', desc: '기본. 밟으면 펑크.', dmg: 4, rate: 7, spread: 1 },
@@ -284,7 +294,7 @@ export const SHOP = [
   { id: 'fin_heli', cat: 'finish', name: '참교육 헬기', price: 420000, desc: '헬기가 와서 대롱대롱 들고 간다.' },
   { id: 'fin_ufo', cat: 'finish', name: 'UFO 납치', price: 750000, desc: '빛줄기에 빨려 올라가 우주로.' },
   { id: 'pas_4k', cat: 'passive', name: '블박 4K 화질', price: 120000, desc: '선명한 증거 → 포상금 +25%' },
-  { id: 'pas_airbag', cat: 'passive', name: '에어백', price: 200000, desc: '스테이지마다 추돌 3회까지 분노·점수 손해 없음' },
+  { id: 'pas_airbag', cat: 'passive', name: '에어백', price: 200000, desc: '스테이지마다 한 번, 견인될 피해를 내구도 1로 버팀' },
   { id: 'pas_trot', cat: 'passive', name: '트로트 경적', price: 140000, desc: '뽕짝 경적 → 앞차가 더 잘 비켜준다' },
   { id: 'pas_coffee', cat: 'passive', name: '졸음쉼터 커피', price: 240000, desc: '분노 게이지 1칸 채우고 시작' },
 ];

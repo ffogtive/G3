@@ -24,7 +24,7 @@ for (const st of stages) {
   const phases = {}; let last = null; const t0 = Date.now(); let final = null;
   while (Date.now() - t0 < limitMs) {
     await page.waitForTimeout(700);
-    const s = await page.evaluate(() => { const G = window.__game; if (!G || !G.objs) return null; return { ph: G.phase, t: G.time, bumps: G.bumps, rage: G.rage, supers: G.supers, hp: G.objs.boss.hpFrac(), err: G.lastError || null, fps: G.fps }; });
+    const s = await page.evaluate(() => { const G = window.__game; if (!G || !G.objs) return null; return { ph: G.phase, t: G.time, bumps: G.bumps, rage: G.rage, supers: G.supers, hp: G.objs.boss.hpFrac(), php: G.hp, fails: G.fails || 0, err: G.lastError || null, fps: G.fps }; });
     if (!s) continue;
     if (s.ph !== last) {
       phases[s.ph] = +s.t.toFixed(1); last = s.ph;
@@ -34,7 +34,7 @@ for (const st of stages) {
     final = s;
     if (s.ph === 'result') { await page.waitForTimeout(1500); if (shots) await page.screenshot({ path: `${shots}/s${st}-result.png` }); break; }
   }
-  report.push({ stage: st, phases, bumps: final?.bumps, supers: final?.supers, done: final?.ph === 'result', errors: [...new Set(errs)].slice(0, 8) });
+  report.push({ stage: st, phases, bumps: final?.bumps, supers: final?.supers, playerHp: final?.php, fails: final?.fails, done: final?.ph === 'result', errors: [...new Set(errs)].slice(0, 8) });
   console.log(JSON.stringify(report[report.length - 1]));
   await page.close();
 }

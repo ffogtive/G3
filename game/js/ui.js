@@ -29,6 +29,27 @@
 //                 refreshShop: owned 에 새로 생긴 id → 구매 연출(코인 버스트 + '구매 완료!'), equip 변경 → '장착!' 범프
 //  handlers.onBuy?(id) · onEquip?(id) · onShop?(open: boolean)
 //
+// v0.4 API (하위 호환 · 전부 guard — 인자가 없거나 이상해도 throw 하지 않음) — docs/V04_SPEC.md 'HP' · R7
+//  가설: 내 내구도(범퍼 5칸)가 깎이는 게 보이고, 견인 실패 카드가 있고, 판마다 다른 '도로 상황'이 시작 카드에 보이면
+//       긴장감과 판 차별화가 체감된다 ❓
+//  setHP({ hp, max, invuln?, lowFx? }) | setHP(null)
+//                 분노 게이지 위(가로 폰 = 왼쪽) '범퍼 5칸'. 칸 = max/5, 반 칸 단위(올림 → 살아 있으면 최소 반 칸).
+//                 hp 가 줄 때만 깎인 칸이 흔들리며 빨갛게 터짐(+ −N 숫자). 비율 ≤ 0.4 = 주의(노랑 점멸), ≤ 0.2 = 위험(빨강).
+//                 invuln: true → 칸 깜빡임(무적). lowFx: 'auto'(기본, 위험일 때만) | true(강제) | false → 화면 가장자리 빨간 맥동.
+//                 첫 호출 전·null·max ≤ 0 이면 숨김(honkOnly 판 등). 매 프레임 호출 OK (값이 바뀔 때만 DOM 갱신).
+//  showFail({ title?, reason, villainName?, hpLost?, retryLabel? }) : Promise<'retry' | 'menu'>
+//                 견인 실패 카드 ('견인!' 도장 + 레커차 + 사유 + [발견 지점부터 다시] / [메뉴]). 자동 진행 없음.
+//                 Enter = 재도전, Esc = 메뉴 (0.45초 뒤부터, 코어 keydown 으로 새지 않게 막음). hpLost = 마지막 한 방 피해.
+//                 열려 있는 동안 다시 부르면 내용만 바꾸고 같은 Promise 반환. showTitle/showStageCard/showResult 가 뜨면
+//                 조용히 닫히고 Promise 는 settle 되지 않는다(코어가 이미 다른 흐름으로 갔다는 뜻). hideFail() 도 동일.
+//  showStageCard(stage, missions?, road?)
+//                 road = { shoulder: 'open'|'crowded'|'blocked'|'closed'|'dark'|'debris'|'watched'|'merge'|'occupied'|'none',
+//                          honk: 'yield'|'gapRace'|'backfire'|'push'|'ignoredWhileYielding'|'rescue'|'normal'|'bait'|'notify'|'evict'|'echo',
+//                          special?: string, hint?: string }
+//                 → '도로 상황' 아이콘 3개(갓길 / 경적 / 특수) + 전광판 한 줄 힌트(없으면 '이번 판 경적 = ○○').
+//                 모르는 값은 그 칸만 생략. road 가 없으면 기존 카드 그대로. 카드 시간 +1초.
+//  toast(text, kind = 'info', ms?)   kind: 'warn' | 'info' | 'good'. 상단 짧은 알림 (최대 3개, 같은 문구는 ×2 로 합침)
+//
 // 규칙
 //  - #ui 루트 안에 전부 동적으로 생성. 클래스 접두사 'ui-'.
 //  - 매 프레임 호출(setHUD/setNav/showBoss/bubble/vignette)은 값이 바뀔 때만 DOM 을 건드린다.
@@ -155,7 +176,14 @@ const SVG = {
   wrench: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 3.2a5 5 0 0 0-4.5 6.6L3.4 16.5a2.1 2.1 0 0 0 3 3l6.7-6.7a5 5 0 0 0 6.6-4.5l-3 1.6-2.6-.6-.6-2.6z" fill="#fff"/></svg>',
   fuel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5.2A2.2 2.2 0 0 1 6.2 3h6.6A2.2 2.2 0 0 1 15 5.2V21zM6.6 6v4.4h5.8V6z" fill="#fff" fill-rule="evenodd"/><path d="M15 9.2l2.6 1.6v6.6a1.5 1.5 0 0 0 3 0V8.6L18 6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   cup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.6 8h12.8l-1.6 12.4a1.6 1.6 0 0 1-1.6 1.4H8.8a1.6 1.6 0 0 1-1.6-1.4z" fill="#fff"/><rect x="4.4" y="5" width="15.2" height="3" rx="1" fill="#fff"/><path d="M9 3.6q-1.4-1.4 0-2.8M13 3.6q-1.4-1.4 0-2.8" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  // ── v0.4 내구도 · 실패 · 알림
+  carFront: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 4.4h11.6l2.5 6.2H3.7z" fill="#ffd23f" stroke="#17202b" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 6h9l1.5 3.9H6z" fill="#24366b"/><rect x="2" y="10" width="20" height="7.6" rx="2.6" fill="#ffd23f" stroke="#17202b" stroke-width="1.6"/><circle cx="6.1" cy="13.3" r="1.9" fill="#fff6c8" stroke="#17202b" stroke-width="1.1"/><circle cx="17.9" cy="13.3" r="1.9" fill="#fff6c8" stroke="#17202b" stroke-width="1.1"/><rect x="9.3" y="12.3" width="5.4" height="2.1" rx=".6" fill="#17202b" opacity=".55"/><rect x="1.2" y="16" width="21.6" height="3.8" rx="1.9" fill="#c9d0d8" stroke="#17202b" stroke-width="1.6"/><rect x="3" y="19.6" width="3.6" height="2.8" rx=".8" fill="#17202b"/><rect x="17.4" y="19.6" width="3.6" height="2.8" rx=".8" fill="#17202b"/></svg>',
+  retry: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 12.6A7.3 7.3 0 1 1 16.6 6.3" fill="none" stroke="#17202b" stroke-width="5.6" stroke-linecap="round"/><path d="M19.2 12.6A7.3 7.3 0 1 1 16.6 6.3" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M13.4 2.4l7.4 1.8-3.4 6.6z" fill="#fff" stroke="#17202b" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  warnTri: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6L22.4 20.6H1.6z" fill="#ffd23f" stroke="#17202b" stroke-width="2" stroke-linejoin="round"/><path d="M12 8.6v6" stroke="#17202b" stroke-width="2.8" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.5" fill="#17202b"/></svg>',
+  info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#2f6fd6" stroke="#17202b" stroke-width="2"/><circle cx="12" cy="7.4" r="1.7" fill="#fff"/><path d="M12 11v6.4" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
+  road: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 2.5h6.8L21 21.5H3z" fill="#4a515c" stroke="#17202b" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 4.5v2.6M12 10v3M12 16.2v3.6" stroke="#ffd23f" stroke-width="2" stroke-linecap="round"/></svg>',
 };
+
 
 // 블박 화면 대체 그림 (사진이 없을 때) / 미수집 실루엣. viewBox 16:9, 그라데이션 id 없이 단색만 (중복 삽입 안전)
 function dashArt(color = '#d9c9a3', mode = 'photo', seed = 1) {
@@ -198,6 +226,101 @@ const miniCar = (x, y, r = 0, s = 1, col = '#ffc928') => `<g transform="translat
   + `<path d="M-13 -7L-9 -16H8L13 -7z" fill="${col}" ${so()}/><path d="M-8.4 -8.4L-6 -13.6H5.6L8.2 -8.4z" fill="#24366b"/>`
   + `<rect x="-21" y="-8" width="42" height="14" rx="4" fill="${col}" ${so()}/><rect x="16" y="-4" width="5" height="4" rx="1" fill="#fff6c8"/>`
   + `<circle cx="-11" cy="6" r="5.4" fill="#2a2f38" ${so(2.6)}/><circle cx="11" cy="6" r="5.4" fill="#2a2f38" ${so(2.6)}/></g>`;
+// ───────────────────────────── v0.4 도로 상황 아이콘 (갓길 10 · 경적 11 · 특수)
+// 갓길 = 위에서 본 도로 타일(오른쪽 밝은 띠가 갓길) + 모드 표시. 경적 = 파란 지시표지 원 + 경적 + 오른쪽 아래 배지.
+// 특수 = 노란 주의표지 삼각형 + 키워드 그림. 40×40, id 없는 단색 (중복 삽입 안전)
+const RI = {
+  tile: (bg = '#4a515c', sh = '#78808b') => `<rect x="2" y="2" width="36" height="36" rx="8" fill="${bg}" ${so(2.4)}/>`
+    + `<rect x="27" y="3.2" width="9.8" height="33.6" rx="1" fill="${sh}"/><path d="M27 3.5v33" stroke="#fff" stroke-width="1.6"/>`
+    + '<path d="M10.5 5v6M10.5 17v6M10.5 29v6M18.8 5v6M18.8 17v6M18.8 29v6" stroke="#fff" stroke-opacity=".75" stroke-width="1.5"/>',
+  cone: (x, y, s = 1) => `<path d="M${x} ${y - 6 * s}L${x + 3.6 * s} ${y + 3 * s}H${x - 3.6 * s}z" fill="#ff8a1f" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"/><path d="M${x - 2.1 * s} ${y - .2 * s}H${x + 2.1 * s}" stroke="#fff" stroke-width="1.3"/>`,
+  carTop: (x, y, c = '#f4f4f2', w = 6.4, h = 9.6) => `<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="1.8" fill="${c}" stroke="${INK}" stroke-width="1.2"/><rect x="${x - w / 2 + 1.2}" y="${y - h / 2 + 2}" width="${w - 2.4}" height="2.4" rx=".6" fill="#24366b"/>`,
+  horn: '<path d="M7 16.6h3.4l7-4.6v16l-7-4.6H7z" fill="#fff" stroke="#17202b" stroke-width="1.5" stroke-linejoin="round"/><path d="M19.6 16.4l2.2-1.4M20.2 20h2.6M19.6 23.6l2.2 1.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
+  badge: (inner, bg = '#fff') => `<circle cx="29.5" cy="29.5" r="9" fill="${bg}" ${so(2)}/>${inner}`,
+};
+const SH_MODES = {
+  open: { label: '갓길 개방', short: '개방', tone: 'ok', svg: RI.tile() + '<path d="M31.9 33V12" stroke="#22c55e" stroke-width="3.4" stroke-linecap="round"/><path d="M27.6 15.6l4.3-6.4 4.3 6.4z" fill="#22c55e" stroke="#17202b" stroke-width="1.2" stroke-linejoin="round"/>' + RI.carTop(14.6, 24, '#ffd23f') },
+  crowded: { label: '갓길 혼잡(얌체)', short: '혼잡', tone: 'warn', svg: RI.tile() + RI.carTop(31.9, 9.5, '#ff8a1f', 6, 8.6) + RI.carTop(31.9, 20, '#d8342c', 6, 8.6) + RI.carTop(31.9, 30.5, '#ff8a1f', 6, 8.6) },
+  blocked: { label: '갓길 공사 구간', short: '공사 구간', tone: 'warn', svg: RI.tile() + RI.cone(31.9, 16.5, 0.9) + RI.cone(31.9, 24.5, 0.9) + '<path d="M28 33.5h7.8" stroke="#22c55e" stroke-width="2.4" stroke-linecap="round"/><path d="M28 6.5h7.8" stroke="#22c55e" stroke-width="2.4" stroke-linecap="round"/>' },
+  closed: { label: '갓길 폐쇄', short: '폐쇄', tone: 'bad', svg: RI.tile() + '<rect x="28.2" y="4" width="7.4" height="32" fill="#fff"/><path d="M28.2 8l7.4-5M28.2 15l7.4-5M28.2 22l7.4-5M28.2 29l7.4-5M28.2 36l7.4-5" stroke="#ff3b30" stroke-width="2.8"/><rect x="28.2" y="4" width="7.4" height="32" fill="none" stroke="#17202b" stroke-width="1.2"/>' },
+  dark: { label: '어두운 갓길(낙하물)', short: '어둠', tone: 'warn', svg: RI.tile('#1d2330', '#2a3140') + '<path d="M31.9 37L25.5 18h12.8z" fill="#fff3a6" opacity=".55"/><rect x="29.4" y="9" width="5" height="4.4" rx=".8" fill="#2a2f38" stroke="#5a6372" stroke-width="1"/><path d="M8 7.4a4 4 0 1 0 4.6 4.6 3.2 3.2 0 0 1-4.6-4.6z" fill="#ffe14d"/>' },
+  debris: { label: '갓길 낙하물', short: '낙하물', tone: 'warn', svg: RI.tile() + '<circle cx="31.9" cy="11.5" r="3.6" fill="#2a2f38" stroke="#17202b" stroke-width="1.2"/><circle cx="31.9" cy="11.5" r="1.4" fill="#9aa1a9"/><rect x="29" y="20" width="6" height="5" rx=".8" fill="#c98a4a" stroke="#17202b" stroke-width="1.2" transform="rotate(-14 32 22.5)"/><path d="M29 31l2 1.6M33.5 30.2l1.6 2.2M30.6 34.6l2.6-.6" stroke="#ffd23f" stroke-width="1.4" stroke-linecap="round"/>' },
+  watched: { label: '갓길 단속 카메라', short: '단속 카메라', tone: 'warn', svg: RI.tile() + '<path d="M24 34V14h6" fill="none" stroke="#c9d0d8" stroke-width="2.2"/><rect x="27.5" y="9.5" width="9.5" height="7.5" rx="1.6" fill="#f4f4f2" stroke="#17202b" stroke-width="1.3"/><circle cx="32.2" cy="13.2" r="2.1" fill="#24366b"/><path d="M29.5 20.5l-2 2.6M32.2 21v3M35 20.5l2 2.6" stroke="#ffe14d" stroke-width="1.6" stroke-linecap="round"/>' },
+  merge: { label: '갓길=합류차로', short: '합류차로', tone: 'warn', svg: RI.tile() + RI.carTop(31.9, 27, '#2f6fd6', 6, 8.6) + RI.carTop(31.9, 15.6, '#f4f4f2', 6, 8.6) + '<path d="M31.9 9.5Q31.9 5.6 24.5 5.4" fill="none" stroke="#ffd23f" stroke-width="2.4" stroke-linecap="round"/><path d="M26.4 2.6l-4.2 2.8 4.2 2.8z" fill="#ffd23f" stroke="#17202b" stroke-width="1" stroke-linejoin="round"/>' },
+  occupied: { label: '갓길 불법주차', short: '불법주차', tone: 'warn', svg: RI.tile() + RI.carTop(31.9, 12, '#3a3f47', 6, 8.6) + RI.carTop(31.9, 26, '#f4f4f2', 6, 8.6) + '<circle cx="29.4" cy="8.2" r="1.3" fill="#ffb400"/><circle cx="34.4" cy="8.2" r="1.3" fill="#ffb400"/><circle cx="29.4" cy="22.2" r="1.3" fill="#ffb400"/><circle cx="34.4" cy="22.2" r="1.3" fill="#ffb400"/><circle cx="9" cy="9" r="5.6" fill="#2f6fd6" stroke="#17202b" stroke-width="1.4"/><path d="M7.4 12V6.3h2.2a1.7 1.7 0 0 1 0 3.4H7.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>' },
+  none: { label: '갓길 없음(터널)', short: '없음(터널)', tone: 'bad', svg: '<rect x="2" y="2" width="36" height="36" rx="8" fill="#7a808a" ' + so(2.4) + '/><path d="M5 38V21a15 15 0 0 1 30 0v17" fill="#11161e" stroke="#17202b" stroke-width="2"/><path d="M8.5 19a11.5 11.5 0 0 1 23 0" fill="none" stroke="#ffd23f" stroke-width="1.6" stroke-dasharray="1.6 3.2" stroke-linecap="round"/><path d="M14 38l3-12h6l3 12z" fill="#3b3f46"/><path d="M20 28v2.4M20 33v3" stroke="#fff" stroke-width="1.2"/>' },
+};
+const hornBase = (c = '#1f4fa3') => `<circle cx="19" cy="20" r="17" fill="${c}" ${so(2.4)}/><circle cx="19" cy="20" r="14.2" fill="none" stroke="#fff" stroke-width="1.6"/>` + RI.horn;
+const HONK_MODES = {
+  yield: { label: '경적=양보', short: '양보', tone: 'ok', svg: hornBase() + RI.badge('<path d="M25.5 33.5c0-4 2.6-6.6 6.6-6.6" fill="none" stroke="#17a466" stroke-width="2.6" stroke-linecap="round"/><path d="M31 23.6l4.6 3.3-4.6 3.3z" fill="#17a466"/>') },
+  gapRace: { label: '경적=틈 경쟁', short: '틈 경쟁', tone: 'warn', svg: hornBase() + RI.badge('<circle cx="29.5" cy="30.4" r="5.4" fill="#fff" stroke="#17202b" stroke-width="1.6"/><path d="M29.5 30.4v-3.2M29.5 30.4l2.2 1.4" stroke="#ff3b30" stroke-width="1.6" stroke-linecap="round"/><path d="M28 23.4h3" stroke="#17202b" stroke-width="1.8" stroke-linecap="round"/>', '#ffd23f') },
+  backfire: { label: '경적 역효과', short: '역효과', tone: 'bad', svg: hornBase('#c8241a') + RI.badge('<path d="M33.5 26.2a4.6 4.6 0 1 0 .6 5.6" fill="none" stroke="#c8241a" stroke-width="2.4" stroke-linecap="round"/><path d="M31.6 22.6l3.6 3.4-4.6 1.2z" fill="#c8241a"/>') },
+  push: { label: '경적=방향 밀기', short: '방향 밀기', tone: 'warn', svg: hornBase() + RI.badge('<path d="M23.8 29.5h8.6" stroke="#2f6fd6" stroke-width="2.8" stroke-linecap="round"/><path d="M31 25.4l4.6 4.1-4.6 4.1z" fill="#2f6fd6"/><path d="M24.5 25.8v7.4" stroke="#17202b" stroke-width="1.4" stroke-dasharray="1.4 1.4"/>') },
+  ignoredWhileYielding: { label: '양보 대기 차는 무시', short: '대기 차엔 무시', tone: 'warn', svg: hornBase() + RI.badge('<path d="M26 24.6h7l-7 9.8h7z" fill="#ffd23f" stroke="#17202b" stroke-width="1.4" stroke-linejoin="round"/><path d="M26.2 24.6h6.6M26.2 34.4h6.6" stroke="#17202b" stroke-width="2" stroke-linecap="round"/>') },
+  rescue: { label: '경적=구출 교대', short: '구출 교대', tone: 'ok', svg: hornBase() + RI.badge('<path d="M29.5 35s-5.2-3.2-5.2-6.7a2.7 2.7 0 0 1 5.2-1.2 2.7 2.7 0 0 1 5.2 1.2c0 3.5-5.2 6.7-5.2 6.7z" fill="#ff3b30" stroke="#17202b" stroke-width="1.2" stroke-linejoin="round"/>') },
+  normal: { label: '경적 정상', short: '정상', tone: 'ok', svg: hornBase() + RI.badge('<path d="M25.4 29.8l2.8 2.8 5.4-5.6" fill="none" stroke="#17a466" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>') },
+  bait: { label: '경적=미끼', short: '미끼', tone: 'warn', svg: hornBase() + RI.badge('<path d="M30.6 22.6v8.2a3.1 3.1 0 0 1-6.2 0v-1.4" fill="none" stroke="#17202b" stroke-width="2" stroke-linecap="round"/><path d="M24.4 29.4l-1.4 2.2" stroke="#17202b" stroke-width="2" stroke-linecap="round"/><circle cx="33.4" cy="26" r="2.4" fill="#ff3b30" stroke="#17202b" stroke-width="1.2"/>', '#ffd23f') },
+  notify: { label: '경적=알림음', short: '알림음', tone: 'warn', svg: hornBase() + RI.badge('<rect x="25.6" y="23.4" width="7.6" height="12" rx="1.6" fill="#2a2f38" stroke="#17202b" stroke-width="1.2"/><rect x="26.8" y="25" width="5.2" height="7.8" rx=".6" fill="#6aa6ff"/><circle cx="33.6" cy="23.6" r="2.4" fill="#ff3b30" stroke="#17202b" stroke-width="1"/>') },
+  evict: { label: '경적=퇴거 통보', short: '퇴거 통보', tone: 'warn', svg: hornBase() + RI.badge('<rect x="24.2" y="24" width="6.4" height="11" rx=".8" fill="#c98a4a" stroke="#17202b" stroke-width="1.3"/><circle cx="29" cy="29.8" r=".9" fill="#17202b"/><path d="M31 29.5h4.4" stroke="#ff3b30" stroke-width="2.2" stroke-linecap="round"/><path d="M33.6 26.8l2.6 2.7-2.6 2.7" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>') },
+  echo: { label: '경적=메아리', short: '메아리', tone: 'warn', svg: hornBase('#3a3f4a') + RI.badge('<path d="M26.6 26.4a4.4 4.4 0 0 1 0 6.2M29.4 24a8 8 0 0 1 0 11M32.2 22.2a11 11 0 0 1 0 14.6" fill="none" stroke="#8b5cf6" stroke-width="1.9" stroke-linecap="round"/>') },
+};
+// 특수: 키워드 → 주의표지 안 그림 (없으면 '!')
+const SP_GLYPH = [
+  [/안개|fog/i, '<path d="M12.5 22.5h15M11 26.5h18M13.5 30.5h13" stroke="#17202b" stroke-width="2" stroke-linecap="round"/>'],
+  [/밤|야간|어둠|무등화|dark|night/i, '<path d="M18 18.6a5.2 5.2 0 1 0 6 6 4.2 4.2 0 0 1-6-6z" fill="#17202b"/>'],
+  [/카메라|단속|camera/i, '<rect x="13.4" y="20.6" width="13.2" height="9" rx="1.6" fill="#17202b"/><circle cx="21.4" cy="25.1" r="2.6" fill="#ffd23f"/><path d="M15.2 31.6h9.6" stroke="#17202b" stroke-width="1.6"/>'],
+  [/터널|tunnel/i, '<path d="M12.6 32v-5.4a7.4 7.4 0 0 1 14.8 0V32z" fill="#17202b"/>'],
+  [/비|빗길|rain/i, '<path d="M15 20.5l-1.6 3M20.5 20.5l-1.6 3M26 20.5l-1.6 3M17.6 26.5l-1.6 3M23 26.5l-1.6 3" stroke="#17202b" stroke-width="2" stroke-linecap="round"/>'],
+  [/눈|빙판|snow/i, '<path d="M20 19.6v12.4M14.6 22.7l10.8 6.2M14.6 28.9l10.8-6.2" stroke="#17202b" stroke-width="2" stroke-linecap="round"/>'],
+  [/공사|콘|cone/i, '<path d="M20 18.5l4.6 12h-9.2z" fill="#17202b"/><path d="M14 31.4h12" stroke="#17202b" stroke-width="2.2" stroke-linecap="round"/>'],
+  [/합류|merge/i, '<path d="M15 32V24l5-5 5 5v8" fill="none" stroke="#17202b" stroke-width="2.2" stroke-linejoin="round"/><path d="M20 19v13" stroke="#17202b" stroke-width="2.2"/>'],
+];
+function specialSVG(text) {
+  const g = (SP_GLYPH.find(([re]) => re.test(text)) || [0, '<path d="M20 18.4v7.6" stroke="#17202b" stroke-width="3.2" stroke-linecap="round"/><circle cx="20" cy="30" r="1.9" fill="#17202b"/>'])[1];
+  return `<path d="M20 4.2L37.4 34.6H2.6z" fill="#ffd23f" stroke="#c8241a" stroke-width="3.4" stroke-linejoin="round"/><path d="M20 4.2L37.4 34.6H2.6z" fill="none" stroke="#17202b" stroke-width="1.2" stroke-linejoin="round"/>${g}`;
+}
+const roadSVG = (inner) => `<svg viewBox="0 0 40 40" aria-hidden="true">${inner}</svg>`;
+
+// 견인 실패 그림: 레커차(주황)가 플레이어 차(노랑)를 앞바퀴 들어 끌고 감. viewBox 240×110
+function wreckerArt() {
+  return `<svg class="ui-fail__svg" viewBox="0 0 240 110" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect width="240" height="110" fill="#bfe3ff"/>
+    <path d="M0 76 Q30 64 62 72 Q96 60 132 70 Q170 58 204 68 Q224 64 240 68 V80 H0z" fill="#8fc0a0"/>
+    <rect y="78" width="240" height="32" fill="#5b5f66"/>
+    <path d="M0 80.5h240" stroke="#ffcf33" stroke-width="2"/>
+    <path d="M-4 99h248" stroke="#f2f2ee" stroke-width="2.6" stroke-dasharray="16 12"/>
+    <ellipse cx="150" cy="90" rx="64" ry="4.5" fill="#000" opacity=".22"/>
+    <ellipse cx="60" cy="90" rx="34" ry="3.6" fill="#000" opacity=".2"/>
+    <g class="ui-fail__truck">
+      <path d="M108 52 L146 34" stroke="${INK}" stroke-width="8" stroke-linecap="round"/>
+      <path d="M108 52 L146 34" stroke="#ffd23f" stroke-width="3.6" stroke-linecap="round"/>
+      <path d="M108 52 L101 66" stroke="${INK}" stroke-width="2.2"/>
+      <path d="M97.5 64.5h7l-1.4 5.4h-4.2z" fill="#9aa1a9" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
+      <rect x="112" y="56" width="70" height="20" rx="3" fill="#ff8a1f" ${so(3)}/>
+      <rect x="128" y="60" width="34" height="12" rx="2" fill="#fff" stroke="${INK}" stroke-width="1.8"/>
+      <text x="145" y="70" text-anchor="middle" font-size="10.5" font-family="'Black Han Sans','Jua',sans-serif" fill="${INK}">긴급견인</text>
+      <path d="M178 76V44q0-7 7-7h17q5 0 7.6 4.4l9.4 16V76z" fill="#ff8a1f" ${so(3)}/>
+      <path d="M185 43h15.4q3 0 4.6 2.8l6 10.4H185z" fill="#24366b" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>
+      <rect x="214" y="62" width="6" height="5" rx="1.2" fill="#fff6c8" stroke="${INK}" stroke-width="1.2"/>
+      <g class="ui-fail__beacon"><rect x="183" y="29.5" width="9" height="6.5" rx="2" fill="#ffb400" ${so(1.8)}/><rect x="193" y="29.5" width="9" height="6.5" rx="2" fill="#ff3b30" ${so(1.8)}/></g>
+      ${wheel(132, 78, 9.5)}${wheel(200, 78, 9.5)}
+    </g>
+    <g class="ui-fail__towed">
+      <g transform="translate(64 66) rotate(-13) scale(1.5)">
+        <path d="M-13 -7L-9 -16H8L13 -7z" fill="#ffd23f" ${so(2)}/><path d="M-8.4 -8.4L-6 -13.6H5.6L8.2 -8.4z" fill="#24366b"/>
+        <rect x="-21" y="-8" width="42" height="14" rx="4" fill="#ffd23f" ${so(2)}/>
+        <path d="M13 -8.2l4.6 -6.2 3.2 3.4z" fill="#ffd23f" ${so(1.6)}/>
+        <path d="M-6 -2l3 2.4 -2 2.6M4 -3l-2.4 3 2.6 1.8" fill="none" stroke="${INK}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="16" y="-4" width="5" height="4" rx="1" fill="#9aa1a9"/>
+        <circle cx="-11" cy="6" r="5.4" fill="#2a2f38" ${so(2)}/><circle cx="11" cy="6" r="5.4" fill="#2a2f38" ${so(2)}/>
+        <circle cx="-11" cy="6" r="2" fill="#c9d0d8"/><circle cx="11" cy="6" r="2" fill="#c9d0d8"/>
+      </g>
+      <g class="ui-fail__steam"><circle cx="86" cy="38" r="6" fill="#fff" ${so(1.6)}/><circle cx="94" cy="30" r="7.5" fill="#fff" ${so(1.6)}/><circle cx="86" cy="22" r="5" fill="#eef1f4" ${so(1.4)}/></g>
+      <g class="ui-fail__dizzy"><path d="M50 30l1.6 3.4 3.6.4-2.7 2.4.8 3.6-3.3-1.8-3.3 1.8.8-3.6-2.7-2.4 3.6-.4z" fill="#ffd23f" ${so(1.3)}/><path d="M36 38l1.1 2.4 2.5.3-1.9 1.7.6 2.5-2.3-1.3-2.3 1.3.6-2.5-1.9-1.7 2.5-.3z" fill="#ffd23f" ${so(1.1)}/></g>
+    </g>
+  </svg>`;
+}
+
 const ART = {
   car_hatch: () => shadow(46)
     + `<path d="M14 60V42L22 22Q23 19 27 19H72Q76 19 78 22L90 37L102 39Q108 40 108 46V58Q108 62 104 62H18Q14 62 14 60z" fill="#ffc928" ${so()}/>`
@@ -436,6 +559,7 @@ function build() {
 
   // 레이어 (DOM 순서 = 아래→위)
   E.vignette = R.appendChild(el('div', 'ui-vignette', '<div class="ui-vignette__pulse"></div>'));
+  E.hpVig = R.appendChild(el('div', 'ui-hpvig'));   // v0.4 내구도 위험 맥동 (코어의 분노 vignette 와 별도 레이어)
   E.world = R.appendChild(el('div', 'ui-world'));
 
   // HUD: 좌상 스테이지 칩
@@ -455,6 +579,7 @@ function build() {
   E.hint = E.top.appendChild(el('div', 'ui-hint', '<span class="ui-hint__ico">💡</span><span class="ui-hint__t"></span>'));
   E.hint.hidden = true;
   E.hintText = E.hint.querySelector('.ui-hint__t');
+  E.toasts = E.top.appendChild(el('div', 'ui-toasts'));
 
   // 우상: 점수 + 시스템 버튼
   E.scorebox = R.appendChild(el('div', 'ui-scorebox ui-hudpart', '<span class="ui-scorebox__l">SCORE</span><b class="ui-scorebox__n">0</b>'));
@@ -485,6 +610,8 @@ function build() {
   E.title.hidden = true;
   E.result = R.appendChild(el('div', 'ui-screen ui-result'));
   E.result.hidden = true;
+  E.fail = R.appendChild(el('div', 'ui-screen ui-fail'));
+  E.fail.hidden = true;
   E.album = R.appendChild(el('div', 'ui-screen ui-album'));
   E.album.hidden = true;
   E.album.addEventListener('click', () => hideAlbum());   // 책 바깥(배경) 탭 = 닫기
@@ -613,7 +740,10 @@ function buildSpeedo() {
 }
 
 function buildRage() {
-  E.rageEl = R.appendChild(el('div', 'ui-rage ui-hudpart',
+  // v0.4: 하단 독 = [범퍼 5칸(내구도)] + [분노 5칸]. 세로/데스크톱은 위아래, 낮은 가로 화면은 좌우.
+  E.dock = R.appendChild(el('div', 'ui-dock'));
+  buildHP();
+  E.rageEl = E.dock.appendChild(el('div', 'ui-rage ui-hudpart',
     `<span class="ui-rage__ico">${SVG.flame}</span>`
     + '<div class="ui-rage__main"><span class="ui-rage__l">분노<em class="ui-rage__key">R 분노의 경적!</em></span><div class="ui-rage__segs">'
     + '<span class="ui-rage__seg"><i></i></span>'.repeat(RAGE_SEGS)

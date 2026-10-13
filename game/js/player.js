@@ -92,7 +92,7 @@ export class Player {
     this.s -= back;
     this.v = Math.min(this.v, 0) - 1.5;
     this.bumpKick = kick;
-    this.invuln = 0.9;
+    this.invuln = TUNE.hp?.invuln ?? 1.0;   // 피격 후 무적 (v0.4: 1.0초)
   }
 
   // ctx: { input, traffic, mode, bossRefS, bossRefV, cruiseV, brake }
@@ -159,10 +159,11 @@ export class Player {
           // 점프 착지 직후: 다음 차 뒤 틈에 '쏙' 내려앉는 것으로 처리 (추돌·분노·감속 페널티 없음)
           this.v = Math.min(this.v, other.v);
         } else if (this.invuln <= 0) {
+          const relV = this.v - (other.v || 0);   // 추돌 상대속도 (내구도 피해 판정)
           this.v = Math.min(this.v, other.v) * 0.2 - 2.6;
           this.bumpKick = 1;
           this.invuln = 0.45;
-          events.push({ type: 'bump', other });
+          events.push({ type: 'bump', other, relV });
         } else {
           this.v = Math.min(this.v, other.v);
         }
