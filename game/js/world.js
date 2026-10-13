@@ -29,6 +29,7 @@ export class World {
 
     this.sky = null;
     this.ground = null;
+    this.weather = null;
     this.vms = [];
     this.segments = [];
     this.overheads = [];   // 도로 위 구조물 (표지판/전광판/단속카메라) — 카메라 근처에서 반투명 처리
@@ -60,6 +61,46 @@ export class World {
     this.sunDir.set(...P.sunPos).normalize();
     if (this.sky) { scene.remove(this.sky); this.sky.geometry?.dispose(); }
     try { this.sky = SC.makeSkyDome(P.top, P.bottom); scene.add(this.sky); } catch (e) { console.warn('sky', e); this.sky = null; }
+    this._setWeather(P.weather || null);
+  }
+
+  // 날씨 파티클 (비 = 짧은 선, 눈 = 점). 카메라 주변 상자 안에서 순환 → 비용 고정
+  _setWeather(kind) {
+    if (this.weather) { this.scene.remove(this.weather.obj); this.weather.obj.geometry.dispose(); this.weather = null; }
+    if (!kind) return;
+    const N = this.mobile ? 900 : 1800, BX = 70, BY = 40, BZ = 90;
+    const rnd = (a) => (Math.random() - 0.5) * a;
+    let obj, pos;
+    if (kind === 'rain') {
+      pos = new Float32Array(N * 6);
+      for (let i = 0; i < N; i++) { const x = rnd(BX), y = Math.random() * BY, z = rnd(BZ); pos.set([x, y, z, x + 0.05, y - 0.9, z + 0.12], i * 6); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      obj = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xd6e2ee, transparent: true, opacity: 0.55, fog: true }));
+    } else {
+      pos = new Float32Array(N * 3);
+      for (let i = 0; i < N; i++) pos.set([rnd(BX), Math.random() * BY, rnd(BZ)], i * 3);
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      obj = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.32, transparent: true, opacity: 0.95, fog: true }));
+    }
+    obj.frustumCulled = false;
+    this.scene.add(obj);
+    this.weather = { kind, obj, pos, N, BY, speed: kind === 'rain' ? 26 : 2.6, stride: kind === 'rain' ? 6 : 3 };
+  }
+
+  _updateWeather(camera, dt) {
+    const w = this.weather;
+    if (!w) return;
+    w.obj.position.set(camera.position.x, camera.position.y - w.BY * 0.6, camera.position.z - 20);
+    const a = w.pos, st = w.stride, dy = w.speed * dt;
+    const t = performance.now() * 0.001;
+    for (let i = 0; i < w.N; i++) {
+      const o = i * st;
+      a[o + 1] -= dy;
+      if (st === 6) a[o + 4] -= dy;
+      else a[o] += Math.sin(t + i) * 0.01; // 눈은 살랑살랑
+      if (a[o + 1] < 0) { a[o + 1] += w.BY; if (st === 6) a[o + 4] += w.BY; }
+    }
+    w.obj.geometry.attributes.position.needsUpdate = true;
   }
 
   clear() {
@@ -92,7 +133,7 @@ export class World {
 
     if (SC.makeGround) {
       try {
-        this.ground = SC.makeGround({ night, color: night ? 0x1f3a2a : undefined });
+        this.ground = SC.makeGround({ night, color: night ? 0x1f3a2a : (this.preset.ground ?? undefined) });
         this.ground.position.z = -(sMin + sMax) / 2;
         this.root.add(this.ground);
       } catch (e) { console.warn('ground', e); }
@@ -170,8 +211,9 @@ export class World {
   }
 
   // 매 프레임: 하늘 돔은 카메라를 따라오고, 태양·그림자 카메라는 초점을 따라온다
-  update(camera, focus) {
+  update(camera, focus, dt = 1 / 60) {
     if (this.sky) this.sky.position.copy(camera.position);
+    this._updateWeather(camera, dt);
     // 카메라 바로 앞(시선 경로)에 있는 머리 위 구조물은 반투명하게
     const cz = camera.position.z, cy = camera.position.y;
     for (const o of this.overheads) {

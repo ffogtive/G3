@@ -4,7 +4,7 @@
 //      대비가 쾌감의 본체. 연출 타이밍은 전부 이 파일에서 조율한다.
 import * as THREE from 'three';
 import {
-  STAGES, TUNE, laneX, toKmh, THANKS_LINES, BUMP_LINES, YIELD_LINES, NOWAY_LINES, NUM_LANES, LANE_W,
+  STAGES as HANDMADE, TUNE, laneX, toKmh, THANKS_LINES, BUMP_LINES, YIELD_LINES, NOWAY_LINES, NUM_LANES, LANE_W,
   LETIN_LINES, FRONT_RAGE_LINES, CHEATER_LINES, SHOULDER_LANE,
 } from './config.js';
 import { Input } from './input.js';
@@ -18,6 +18,13 @@ import { audio } from './audio.js';
 import { initUI, ui } from './ui.js';
 import * as SC from './scenery.js';
 import { setHeadlights } from './vehicles.js';
+import { computeReward, applyReward } from './rewards.js';
+import CATALOG from './data/villain_catalog.js';
+import { buildStages } from './stagegen.js';
+
+// 스테이지 목록: 리서치 카탈로그(100종)가 있으면 생성, 없으면 손으로 만든 5개
+const STAGES = buildStages(CATALOG, HANDMADE);
+const CHAPTERS = CATALOG?.chapters || null;
 
 const params = new URLSearchParams(location.search);
 const IS_TOUCH = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
@@ -28,12 +35,16 @@ const SAVE_KEY = 'lane1.progress.v1';
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, stars: p.stars || {}, best: p.best || {} };
+    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, stars: p.stars || {}, best: p.best || {}, wallet: p.wallet || 0, subs: p.subs || 0, album: p.album || {} };
   } catch { /* 저장소 없음 */ }
-  return { unlocked: 1, stars: {}, best: {} };
+  return { unlocked: 1, stars: {}, best: {}, wallet: 0, subs: 0, album: {} };
 }
 function saveProgress() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.progress)); } catch { /* 무시 */ }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.progress)); }
+  catch {
+    // 용량 초과 시 오래된 블박 사진부터 비움
+    try { for (const k in G.progress.album || {}) G.progress.album[k].photo = null; localStorage.setItem(SAVE_KEY, JSON.stringify(G.progress)); } catch { /* 무시 */ }
+  }
 }
 
 // ───────────────────────────── 렌더러/씬
@@ -218,6 +229,7 @@ function setupStage(stage) {
   G.rage = 0; G.score = 0; G.combo = 0; G.maxCombo = 0; G.bumps = 0; G.supers = 0; G.hits = 0;
   G.releaseShown = 0;
   G.releaseAt = 0;
+  G.cheaters = 0;
 }
 
 function startStage(idx) {
@@ -252,7 +264,7 @@ function enterPhase(name) {
   const stage = G.stage;
   switch (name) {
     case 'title': {
-      ui.showTitle(STAGES, G.progress);
+      ui.showTitle(STAGES, G.progress, CHAPTERS);
       audio.startMusic('menu');
       audio.startAmbience(null);
       fx.speedLines(0);
@@ -315,6 +327,8 @@ function enterPhase(name) {
       ui.setTouchVisible(false);
       clearBubbles();
       G.killS = G.killVillain.s;
+      G.photoAt = G.realTime + 0.45; // 폭발+슬로모 순간을 블박 캡처
+      G.photo = null;
       break;
     }
     case 'release': {
@@ -358,6 +372,8 @@ function showResult() {
   const score = Math.round(G.score + freed * 5 + cath * 40);
   const mm = Math.floor(total / 60), ss = Math.floor(total % 60);
   const p = G.progress;
+  const reward = computeReward(stage, { stars, cath, freed, bumps: G.bumps, cheaters: G.cheaters || 0 }, Math.floor(G.time * 1000) % 997 + 1);
+  const { milestone } = applyReward(p, stage, reward, G.photo);
   p.unlocked = Math.min(STAGES.length, Math.max(p.unlocked, G.stageIdx + 2));
   p.stars[stage.id] = Math.max(p.stars[stage.id] || 0, stars);
   p.best[stage.id] = Math.max(p.best[stage.id] || 0, score);
@@ -376,7 +392,9 @@ function showResult() {
       { label: '분노 미사일', value: `${G.supers}발` },
     ],
     isLast: G.stageIdx >= STAGES.length - 1,
+    reward: { ...reward, photo: G.photo, wallet: p.wallet, subs: p.subs, milestone, stageId: stage.id, cause: stage.cause },
   });
+  if (milestone) setTimeout(() => audio.play('stageClear'), 2600);
   audio.play('stageClear');
   for (let i = 0; i < stars; i++) setTimeout(() => audio.play('star', { pitch: 1 + i * 0.25 }), 700 + i * 380);
 }
@@ -811,7 +829,7 @@ function step(realDt) {
   fx.update(fxDt);
   releaseWave.update(fxDt);
   updateCamera(realDt);
-  world.update(camera, _focus.set(player.x, 0, -(G.phase === 'release' ? G.killS - 40 : player.s + 10)));
+  world.update(camera, _focus.set(player.x, 0, -(G.phase === 'release' ? G.killS - 40 : player.s + 10)), realDt);
 }
 function frame(now) {
   requestAnimationFrame(frame);
@@ -825,8 +843,25 @@ function frame(now) {
     updateBubbles();
   }
   renderer.render(scene, camera);
+  if (G.photoAt && G.realTime >= G.photoAt) { G.photoAt = 0; G.photo = captureDashcam(); }
 }
 const _focus = new THREE.Vector3();
+
+// 블박 캡처: 렌더 직후 캔버스를 작게 줄여 JPEG (도감 카드용, ~10KB)
+const _shot = document.createElement('canvas');
+function captureDashcam() {
+  try {
+    const W = 256, H = 144;
+    _shot.width = W; _shot.height = H;
+    const g = _shot.getContext('2d');
+    const src = renderer.domElement;
+    const sa = src.width / src.height, da = W / H;
+    let sw = src.width, sh = src.height, sx = 0, sy = 0;
+    if (sa > da) { sw = sh * da; sx = (src.width - sw) / 2; } else { sh = sw / da; sy = (src.height - sh) / 2; }
+    g.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+    return _shot.toDataURL('image/jpeg', 0.62);
+  } catch { return null; }
+}
 
 function onResize() {
   renderer.setSize(innerWidth, innerHeight, false);

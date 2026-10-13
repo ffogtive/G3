@@ -32,8 +32,10 @@ export class Villain {
     this.baseS = s;          // 정속 기준 위치 (돌진 오프셋 제외) — 교통·플레이어는 이걸 기준으로
     this.s = s;
     this.lungeOff = 0;
-    this.v = stage.jamSpeed;
-    this.vNominal = stage.jamSpeed;
+    // 정차형 빌런(사고 후 다툼·차선 위 정차 등)은 멈춰서 길을 막는다
+    this.stopped = !!spec.stopped;
+    this.vNominal = this.stopped ? 0 : stage.jamSpeed;
+    this.v = this.vNominal;
     this.hp = spec.hp;
     this.maxHp = spec.hp;
     this.tires = 4;
@@ -469,6 +471,7 @@ export class BossManager {
       v.marker.scale.setScalar(1 + Math.min(1.2, Math.max(0, far)));
 
       // 메시
+      if (v.stopped) setHazard(v.mesh, Math.floor(this.time * 2) % 2 === 0);
       v.flash = Math.max(0, v.flash - dt * 9);
       setFlash(v.mesh, v.flash);
       setBrake(v.mesh, false);

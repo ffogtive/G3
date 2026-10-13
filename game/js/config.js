@@ -49,6 +49,9 @@ export const SKY = {
   sunset: { top: 0x5a6bd6, bottom: 0xffb27a, fog: 0xf3b48c, fogNear: 110, fogFar: 400, sun: 0xffc18a, sunI: 2.2, hemiSky: 0xffc9a0, hemiGround: 0x6a5a6a, hemiI: 1.1, sunPos: [-70, 35, -60], night: false },
   morning:{ top: 0x8fc9e8, bottom: 0xf2f6ee, fog: 0xe6efe9, fogNear: 70, fogFar: 330, sun: 0xfff1d6, sunI: 2.1, hemiSky: 0xdfeef2, hemiGround: 0x8a9a7a, hemiI: 1.35, sunPos: [50, 45, 40], night: false },
   night:  { top: 0x0b1030, bottom: 0x2a2f5c, fog: 0x1c2148, fogNear: 60, fogFar: 340, sun: 0x8fa6ff, sunI: 0.7, hemiSky: 0x4a5a9a, hemiGround: 0x1a1a2a, hemiI: 0.9, sunPos: [30, 60, 20], night: true },
+  rain:   { top: 0x56626f, bottom: 0xa3aeb9, fog: 0x95a0ab, fogNear: 45, fogFar: 250, sun: 0xc9d4e0, sunI: 1.0, hemiSky: 0xaab6c4, hemiGround: 0x4a5560, hemiI: 1.2, sunPos: [-30, 70, 20], night: false, weather: 'rain' },
+  snow:   { top: 0xaebdd0, bottom: 0xeef3f8, fog: 0xe3eaf1, fogNear: 45, fogFar: 250, sun: 0xffffff, sunI: 1.5, hemiSky: 0xe8f0ff, hemiGround: 0xc8d0dc, hemiI: 1.5, sunPos: [-40, 60, 30], night: false, weather: 'snow', ground: 0xeef2f6 },
+  fog:    { top: 0xbfc8ce, bottom: 0xdde2e5, fog: 0xd5dbdf, fogNear: 14, fogFar: 120, sun: 0xffffff, sunI: 1.3, hemiSky: 0xe0e6ea, hemiGround: 0x8a9488, hemiI: 1.4, sunPos: [-40, 80, 30], night: false },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -71,6 +74,8 @@ export const STAGES = [
     villainLine: '"규정속도 지키는데 뭐가 문제죠?"',
     blurb: '추월차선(1차선)을 혼자 정속주행. 2~4차선은 화물차라 아무도 못 지나간다.',
     cause: '1차선 저속차량',
+    violation: '지정차로 위반 (1차로 저속 점유)',
+    fine: 40000,               // 범칙금(원) → 포상금 기준
     sky: 'day',
     jamLength: 170,          // 실제 시뮬 거리(m). 연출상 표시 거리는 displayKm
     displayKm: 3.2,
@@ -98,6 +103,8 @@ export const STAGES = [
     villainLine: '"형님 먼저~ 아우 먼저~"',
     blurb: '25톤 두 대가 1·2차선을 나란히 막고 무전 수다 중. 3·4차선도 화물차 행렬.',
     cause: '화물차 병렬 주행',
+    violation: '지정차로 위반 (화물차 1·2차로 병렬)',
+    fine: 50000,               // 범칙금(원) → 포상금 기준
     sky: 'sunset',
     jamLength: 190,
     displayKm: 5.8,
@@ -126,6 +133,8 @@ export const STAGES = [
     villainLine: '"차선? 그게 뭐임?"',
     blurb: '1·2차선을 물고 달리다가 추월하려는 차가 오면 옆으로 막아버린다.',
     cause: '차선 걸침 주행',
+    violation: '차로 통행방법 위반 (두 차로 걸침)',
+    fine: 30000,               // 범칙금(원) → 포상금 기준
     sky: 'morning',
     jamLength: 200,
     displayKm: 7.1,
@@ -153,6 +162,8 @@ export const STAGES = [
     villainLine: '"ㅋㅋㅋ 잠만 이것만 보고"',
     blurb: '숏폼 보면서 1~3차선을 갈지자로. 무서워서 아무도 옆으로 못 지나간다.',
     cause: '휴대폰 보며 갈지자 운전',
+    violation: '운전 중 휴대전화 사용',
+    fine: 60000,               // 범칙금(원) → 포상금 기준
     sky: 'night',
     jamLength: 200,
     displayKm: 9.4,
@@ -180,6 +191,8 @@ export const STAGES = [
     villainLine: '"허허, 젊은 것들이 급하긴"',
     blurb: '시속 15km 경운기가 1차선을 점령. 옆 차선은 벌초 가는 트럭 행렬.',
     cause: '1차선 경운기',
+    violation: '고속도로 통행금지 위반 (농기계)',
+    fine: 30000,               // 범칙금(원) → 포상금 기준
     sky: 'day',
     jamLength: 220,
     displayKm: 12.7,
