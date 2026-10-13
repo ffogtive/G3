@@ -67,9 +67,16 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
 // 이동 템플릿 → 엔진 플래그
 const STOPPED_MV = new Set(['stopped_block', 'rubberneck', 'pedestrian_group']);
-const ZIG_MV = new Set(['zigzag', 'tailgate_racer']);
+// 안전거리 0m(tailgate_racer)는 지그재그가 아니다 — 앞차에 들러붙는 행동(tailgater 모듈)으로 간다 (사용자 지적)
+const ZIG_MV = new Set(['zigzag']);
 const WIDE_MV = new Set(['straddle', 'wide_load']);
 const mvOf = (m) => String(m || 'lane_cruise').replace(/^NEW:/, '');
+
+// v0.4 시그니처 행동 모듈 (docs/V04_SPEC.md). 1챕터부터 판별 모듈을 붙이고, 나머지는 패밀리 매핑으로 확장
+export const SIG_BY_ID = {
+  1: 'occupy', 2: 'cutin_snap', 3: 'duo_link', 4: 'straddle_mirror', 5: 'blinker_liar',
+  6: 'tailgater', 7: 'speed_kangaroo', 8: 'merge_reflex', 9: 'phone_drift', 10: 'landlord',
+};
 
 // 빌런 배치: 카탈로그 lane·count를 그대로 쓴다 (빌런이 막은 차로 = 정체의 원인, 나머지 차로 = 앞줄 저속차 벽)
 function layout(e, kind, diff, rng) {
@@ -240,6 +247,7 @@ export function stageFromEntry(e) {
     difficulty: diff,
     newAssets: e.new_assets || [],
     wrongWay: mvOf(e.movement) === 'wrong_way',
+    sig: e.sig || SIG_BY_ID[e.id] || null,
   };
   return stage;
 }
@@ -272,7 +280,7 @@ export function buildStages(catalog, handmade = []) {
         ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id, frontRow: fillFrontRow(hm),
         zig: hm.zig ?? !!hm.attacks?.zigzag, zigCenter: hm.zigCenter ?? (hm.attacks?.zigzag ? 1 : undefined),
         fine: g.fine, payout: g.payout, card: g.card, violation: g.violation,
-        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty,
+        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty, sig: g.sig,
       });
     } else out.push(stageFromEntry(e));
   }

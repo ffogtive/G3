@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import {
   laneX, LANE_W, NUM_LANES, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, TUNE, OPP_LANE_X, SHOULDER_LANE, MINI_TYPES,
 } from './config.js';
-import { buildVehicle, setBrake, setHazard, setHeadlights } from './vehicles.js';
+import { buildVehicle, setBrake, setHazard, setHeadlights, setBlinker } from './vehicles.js';
 import { buildShoulderObstacle } from './shoulder.js';
 
 // 결정적 난수 (스테이지마다 같은 배치)
@@ -399,12 +399,14 @@ export class Traffic {
       // 차선 변경 진행
       if (c.lcT < 1) {
         c.lcT = Math.min(1, c.lcT + dt / c.lcDur);
+        if (c.blinkSide) setBlinker(c.mesh, c.blinkSide, t + (c.id % 7) * 0.09);
         const e = c.lcT * c.lcT * (3 - 2 * c.lcT);
         const nx = laneX(c.laneFrom) + (laneX(c.laneTo) - laneX(c.laneFrom)) * e;
         c.yaw = -Math.atan2((nx - c.x) / Math.max(dt, 1e-4), Math.max(2, c.v)) * 0.8;
         c.x = nx;
         if (c.lcT >= 1) {
           c.lane = c.laneTo; c.yaw = 0;
+          if (c.blinkSide) { setBlinker(c.mesh, null); c.blinkSide = null; }
           if (c.isCheater && c.lane !== SHOULDER_LANE) c.isCheater = false;
         }
       } else if (c.released && t > c.nextLcAt) {
@@ -518,6 +520,8 @@ export class Traffic {
   }
 
   _startLaneChange(c, tl, dur) {
+    // 정상 운전자는 깜빡이를 켜고 들어간다 (얌체·잔챙이 칼치기는 안 켬 → 빌런과의 대비)
+    c.blinkSide = (c.isCheater || c.mini) ? null : (tl > c.lane ? 'right' : 'left');
     c.laneFrom = c.lane; c.laneTo = tl; c.lcT = 0; c.lcDur = dur;
     c.lane = tl;
   }
