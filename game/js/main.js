@@ -200,6 +200,8 @@ function onEquip(id) {
 }
 
 // 잔챙이 빌런 행동 (꽁초·쓰레기 투척 / 갓길 칼치기)
+// 얼어붙은 정체 옆 고장차: 레커가 와서 견인 (소프트락 방지)
+traffic.onAutoTow = (o) => { flingObstacle(o, true); hud.popAt(new THREE.Vector3(o.x, 3.2, -o.s), '레커 출동!', 'warn'); audio.play('whoosh'); };
 traffic.onMiniAct = (c, type) => {
   if (!['jam', 'boss'].includes(G.phase)) return;
   const T = MINI_TYPES[type];

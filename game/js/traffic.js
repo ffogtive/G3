@@ -463,6 +463,14 @@ export class Traffic {
     const tl = player.lane === SHOULDER_LANE ? NUM_LANES - 1 : Math.min(SHOULDER_LANE, player.lane + 1);
     this.letIn(tl, player);
     this.assists = (this.assists || 0) + 1;
+    // 갓길 고장차 옆에서 정체가 얼어붙으면(정차형 빌런 판) 끼워줄 틈이 영영 안 생긴다 → 두 번 갇히면 레커 출동·견인
+    if (player.lane >= NUM_LANES - 1) {
+      const ob = this.obstacles.find((o) => !o.smash && o.s - o.len / 2 < player.s + 16 && o.s + o.len / 2 > player.s - 6);
+      if (ob && (ob.stuckN = (ob.stuckN || 0) + 1) >= 2) {
+        this.obstacles.splice(this.obstacles.indexOf(ob), 1);
+        this.onAutoTow?.(ob);
+      }
+    }
   }
 
   // 차선 tl 이 플레이어 옆에 자리를 만든다: 앞쪽 차는 살짝 당기고 뒤쪽 차는 멈칫
