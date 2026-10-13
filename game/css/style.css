@@ -1768,6 +1768,8 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .ui-card__honk i { font-style: normal; opacity: .55; }
 /* 결과: 처분 카드 도장 */
 .ui-fine__amt small { margin-left: 3px; font-family: var(--ui-fb); font-size: 11px; }
+/* 형사 조문처럼 긴 위반 내용은 2줄까지 (도장이 블박 화면을 덮지 않게) */
+.ui-fine__v { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ui-fine--crime { color: #b5170f; border-color: #b5170f; box-shadow: inset 0 0 0 2px rgba(255, 250, 238, .93), inset 0 0 0 4.5px #b5170f; }
 .ui-fine--crime .ui-fine__t { padding: 4px 4px 4px .14em; color: #fff; background: #c8241a; border-bottom: 0; border-radius: 4px; }
 .ui-fine--crime .ui-fine__amt b { font-size: 22px; }

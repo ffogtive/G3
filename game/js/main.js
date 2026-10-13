@@ -467,12 +467,18 @@ function enterPhase(name) {
       break;
     }
     case 'release': {
-      traffic.release(G.time);
-      world.setVMS('소통 원활\n1차선은 추월차선!', '#3dff7f');
+      // 빌런이 막던 차로부터 개방 (1차선 정속 → 1차선, 갓길 쪽 정차 → 4차선 …)
+      const blocked = [...new Set(G.stage.villains.flatMap((v) => Number.isInteger(v.lane) ? [v.lane] : [Math.floor(v.lane), Math.ceil(v.lane)]))].sort();
+      const openLane = G.stage.zig ? (G.stage.zigCenter ?? 1) : (blocked[0] ?? 0);
+      traffic.release(G.time, undefined, openLane);
+      world.setVMS(blocked.includes(0) && !G.stage.zig ? '소통 원활\n1차선은 추월차선!' : '소통 원활\n안전운전 하세요', '#3dff7f');
+      const openText = G.stage.honkOnly ? '구조 완료! 차로 개방!'
+        : (G.stage.zig || blocked.length >= 3) ? '전 차로 개방!'
+        : `${blocked.map((l) => l + 1).join('·')}차선 개방!`;
       audio.cheerHorns();
       audio.startAmbience(null);
       setTimeout(() => { if (G.phase === 'release' || G.phase === 'cruise') audio.startMusic('release'); }, 600);
-      ui.banner('1차선 개방!', 'go', 1100);
+      ui.banner(openText, 'go', 1100);
       setTimeout(() => (G.phase === 'release' || G.phase === 'cruise') && ui.banner('뻥 뚫렸다!!', 'big', 2400), 1250);
       ui.setReleaseCounter(0);
       fx.confetti(new THREE.Vector3(0, 0, -(G.killS - 30)), 220, 46);

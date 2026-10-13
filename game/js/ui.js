@@ -1280,7 +1280,7 @@ function stageTileHTML(s, i, label, P, opts) {
   const cls = `ui-stagecard ui-stagecard--sm${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${kd ? ` is-${kd}` : ''} is-case-${ck}`;
   const aria = `${label} ${kd ? KIND_LABEL[kd] + ' ' : ''}${stageTitle(s)}${ck !== 'fine' ? ' (' + CASE[ck].tag + ')' : ''}`;
   return `<button type="button" class="${cls}" data-i="${i}" style="--i:${opts.k}" aria-label="${esc(aria)}">
-      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${kd ? `<em>${KIND_LABEL[kd]}</em>` : ''}</span><span class="ui-stars ui-stagecard__hstars">${st}</span></span>
+      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${kd ? `<em>${kd === 'final' ? '최종' : KIND_LABEL[kd]}</em>` : ''}</span><span class="ui-stars ui-stagecard__hstars">${st}</span></span>
       <span class="ui-stagecard__body">
         <span class="ui-stagecard__title">${caseChip(ck, 'ui-casechip--tile')}${esc(stageTitle(s))}</span>
         <span class="ui-stagecard__meta"><span class="ui-stars">${st}</span>${locked ? '' : `<span class="ui-stagecard__best">${best > 0 ? 'BEST ' + fmt(best) : ''}</span>`}</span>

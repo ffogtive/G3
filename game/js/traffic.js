@@ -277,14 +277,15 @@ export class Traffic {
   }
 
   // 해방: 빌런 자리(1차선)부터, 차선별 지연 + 앞→뒤 물결
-  release(time, waveSpeed = TUNE.releaseWaveSpeed) {
+  // openLane: 빌런이 막고 있던 차로 = 가장 먼저 풀리는 차로 (거기서 멀수록 조금씩 늦게)
+  release(time, waveSpeed = TUNE.releaseWaveSpeed, openLane = 0) {
     this.released = true;
     this.releaseTime = time;
     const front = this.frontLine;
     const [lo, hi] = TUNE.releaseSpeed;
     const [tlo, thi] = TUNE.truckFreeSpeed;
     for (const c of this.cars) {
-      const laneDelay = Math.min(3, c.lane) * TUNE.releaseLaneDelay;
+      const laneDelay = Math.min(3, Math.abs(Math.min(3, c.lane) - openLane)) * TUNE.releaseLaneDelay;
       c.releaseAt = time + Math.max(0, front - c.s) / waveSpeed + laneDelay + (c.isWall ? 0.35 : 0.08);
       c.vFree = c.slow ? tlo + this.rng() * (thi - tlo) : lo + this.rng() * (hi - lo);
     }

@@ -147,6 +147,34 @@ function shoulderFor(diff, rng, setting) {
   return list;
 }
 
+// 도로 표기: 고속도로는 노선 방패 + 방향, 국도는 'N호선' 방패, 도심·교량은 도로명 그대로 (임의 노선을 섞지 않는다)
+function roadInfo(e, rng) {
+  const road = String(e.road || '').trim();
+  const km = () => `${Math.round(3 + rng() * 25)}km`;
+  const r = routeOf(road);
+  if (r) {
+    const m = road.match(/(\S+고속도로)\s*(.*)/);
+    return { highway: m ? m[1] : `${r.key}고속도로`, direction: (m && m[2]) || r.signs[0][0] + ' 방향', route: r.route, signs: r.signs };
+  }
+  const nat = road.match(/^국도\s*(\d+)호선\s*(.*)$/);
+  if (nat) {
+    const rest = nat[2].replace(/\s*구간$/, '').trim();
+    const place = (rest.split(/[\s~]/)[0] || '읍내').replace(/[()]/g, '');
+    return { highway: `국도 ${nat[1]}호선`, direction: rest || '시내 방향', route: +nat[1], signs: [[place, km()], ['시내', km()]] };
+  }
+  // 첫 단어가 도로명(…로·대로·길·교·방조제)일 때만 '도로명 / 구간'으로 나누고, 아니면 장소 이름 전체를 쓴다
+  const clean = road.replace(/\s*\(.*\)\s*$/, '').trim() || '시내 도로';
+  const urbanHit = URBAN.find((u) => clean.startsWith(u));
+  const first = clean.split(/\s+/)[0];
+  let highway = clean, rest = '';
+  if (urbanHit) { highway = urbanHit; rest = clean.slice(urbanHit.length).trim(); }
+  else if (/(로|길|교|방조제)$/.test(first) && clean.length > first.length) { highway = first; rest = clean.slice(first.length).trim(); }
+  if (rest === '도로') rest = '';
+  const direction = rest || (URBAN.includes(highway) ? (rng() < 0.5 ? '잠실 방향' : '여의도 방향') : '시내 방향');
+  const route = highway === '올림픽대로' ? 88 : highway === '경인고속도로' ? 120 : '시';
+  return { highway, direction, route, signs: [['시청', km()], ['외곽순환', km()]] };
+}
+
 // 카탈로그 항목 1개 → 스테이지
 export function stageFromEntry(e) {
   const diff = clamp(e.difficulty_f ?? e.difficulty ?? 3, 1, 10);
@@ -156,25 +184,7 @@ export function stageFromEntry(e) {
   const isBoss = e.boss ?? ((e.id % 10) === 0);
   const hpMul = isBoss ? 1.6 : e.elite ? 1.3 : 1;
   for (const v of lay.villains) v.hp = Math.round(v.hp * hpMul);
-  // 도로 이름
-  let road = String(e.road || '');
-  let r = routeOf(road);
-  let highway, direction;
-  if (r) {
-    const m = road.match(/(\S+고속도로)\s*(.*)/);
-    highway = m ? m[1] : `${r.key}고속도로`;
-    direction = (m && m[2]) || r.signs[0][0] + ' 방향';
-  } else if (/도심|시내|간선|대로|강변|올림픽/.test(road + e.setting)) {
-    highway = URBAN.find((u) => road.includes(u)) || URBAN[(e.id || 0) % URBAN.length];
-    direction = road.replace(highway, '').trim() || (rng() < 0.5 ? '잠실 방향' : '여의도 방향');
-    r = { route: highway === '올림픽대로' ? 88 : highway === '경인고속도로' ? 120 : '시', signs: [['잠실', '6km'], ['여의도', '11km']] };
-  } else {
-    const keys = Object.keys(ROUTES);
-    const k = keys[(e.id * 7) % keys.length];
-    r = { key: k, route: ROUTES[k][0], signs: ROUTES[k][1] };
-    highway = road && /도로|길|IC|JC|톨게이트|터널|교/.test(road) ? road.split(' ')[0] : `${k}고속도로`;
-    direction = r.signs[0][0] + ' 방향';
-  }
+  const { highway, direction, route, signs } = roadInfo(e, rng);
   // 정체 길이: 리서치 문장에 km가 있으면 그 값(사실 근거), 없으면 난이도로 추정
   const kmHit = String(e.jam_causality || '').match(/(\d+(?:\.\d+)?)\s*km/);
   const kmFromText = kmHit ? +kmHit[1] : NaN;
@@ -185,7 +195,7 @@ export function stageFromEntry(e) {
   const stage = {
     id: e.id,
     chapter: e.chapter || Math.ceil(e.id / 10),
-    highway, direction, route: r.route,
+    highway, direction, route,
     title: e.title || e.name_ko,
     villainLine: e.intro_line ? `"${String(e.intro_line).replace(/^"|"$/g, '')}"` : '"..."',
     blurb: e.jam_causality || '',
@@ -210,7 +220,7 @@ export function stageFromEntry(e) {
     attackInterval: [Math.max(1.3, 2.7 - diff * 0.12), Math.max(2.0, 3.8 - diff * 0.14)],
     taunts: (e.taunts && e.taunts.length ? e.taunts : ['비켜 비켜~']).slice(0, 6),
     defeatLine: e.defeat_line || '',
-    signs: r.signs,
+    signs,
     vms: (e.jam_causality || '').split('→')[0].trim().slice(0, 14) || '안전운전 하세요',
     boss: isBoss,
     elite: !!e.elite,
