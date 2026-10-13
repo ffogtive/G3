@@ -1,0 +1,37 @@
+name: lane1_chamgyoyuk
+description: "1차선 참교육 — Three.js 웹 게임(dist/index.html)을 감싸는 Flutter WebView 껍데기 앱"
+publish_to: 'none'
+
+# version: <빌드 이름>+<빌드 번호>
+#  - iOS: CFBundleShortVersionString / CFBundleVersion
+#  - Android: versionName / versionCode
+# 스토어에 올릴 때마다 + 뒤 빌드 번호를 올린다.
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # WebView (WKWebView / Android WebView).
+  # 6.2.0-beta.3 을 쓰는 이유 (6.1.5 stable 대신):
+  #  - iOS Swift Package Manager 지원 → Mac 에 CocoaPods 없이 Xcode 빌드 가능
+  #    (Flutter 3.47 은 SwiftPM 이 기본값, ios/Podfile 이 없는 게 정상)
+  #  - App Store 2.5.1(비공개 API) 반려 이슈 #2754 수정본
+  # 6.2.0 stable 이 나오면 ^6.2.0 으로 올리면 된다.
+  flutter_inappwebview: ^6.2.0-beta.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # 게임 번들. 저장소 루트에서 `npm run build:app` 으로 갱신
+  # (dist/index.html → app/assets/web/index.html 복사).
+  assets:
+    - assets/web/
