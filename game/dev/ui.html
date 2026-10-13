@@ -28,6 +28,10 @@
 //            shop : &wallet=350000 &owned=wpn_caltrop,pas_4k &tab=car|weapon|move|finish|passive &buy=<id>(자동 구매 연출) &equip=<id>
 //            hud  : &minis=1/3 (0/0 = 숨김) &boost=0..1 &jump=0|1 (터치 점프 버튼) &jumpcd=0..1 &ragemode=horn|bomb|siren
 //   catalog: &cat=1 &stage=81(형사) 74(표창·경적만) 31(계도) 50(보스) 91(엘리트) 73(보너스) 100(최종보스) · title/album: &cat=1 &unlocked=100
+//   v0.4   : hp   &hp=37 &max=100 &phase=boss|jam &inv=1 &lowfx=0|1 &hit=20(0.8초 뒤 피격 연출) &demo=1(100→0 반복 피격) &toast=1
+//            fail &reason=돌진에%20들이받힘 &who=정속주행%20김사장 &lost=40 &retry=라벨 &title=제목  (Enter=retry, Esc=menu → 콘솔)
+//            card &road=<갓길>,<경적>[,<특수>] (예: none,echo · bait=merge,bait,합류 테이퍼) &hint=문구 &mis=none
+//            roads (갓길 10 · 경적 11 · 특수 아이콘 갤러리) · toast (warn/info/good 샘플 + 같은 문구 합치기)
 import { initUI, ui } from '../js/ui.js';
 import { STAGES as HANDMADE, THANKS_LINES, SHOP } from '../js/config.js';
 import CATALOG from '../js/data/villain_catalog.js';
@@ -50,7 +54,7 @@ window.ui = ui; window.STAGES = STAGES;
 
 // 개발 바
 const bar = document.getElementById('devbar');
-for (const s of ['title', 'card', 'hud', 'boss', 'release', 'result', 'album', 'shop', 'pause', 'boot']) {
+for (const s of ['title', 'card', 'hud', 'boss', 'release', 'result', 'album', 'shop', 'pause', 'boot', 'hp', 'fail', 'roads', 'toast']) {
   const a = document.createElement('a');
   const q = new URLSearchParams(P); q.set('screen', s); a.href = '?' + q; a.textContent = s; bar.appendChild(a);
 }
@@ -285,9 +289,73 @@ switch (screen) {
     if (BIG) { const ch = CAT ? CATALOG.chapters : CHAPTERS; ui.showTitle(STAGES_X, progress, ch); ui.showAlbum(STAGES_X, progress, ch); }
     else { ui.showTitle(STAGES, progress); ui.showAlbum(STAGES, progress); }
     break;
-  case 'card':
-    onLoad(() => ui.showStageCard(stage, MISSIONS ? MISSIONS.map(({ label }) => ({ label })) : undefined).then(() => console.log('card resolved')));
+  case 'card': {
+    // &road=none,echo[,특수] → v0.4 도로 상황 (없으면 기존 카드)
+    const rp = P.get('road');
+    const [sh, hk, ...sp] = (rp || '').split(',');
+    const road = rp ? { shoulder: sh || undefined, honk: hk || undefined, special: sp.join(',') || undefined, hint: P.get('hint') || undefined } : undefined;
+    if (P.get('hold') === '1') { const st = document.createElement('style'); st.textContent = '.ui-card__timer i{animation-play-state:paused!important}'; document.head.appendChild(st); }
+    onLoad(() => ui.showStageCard(stage, MISSIONS ? MISSIONS.map(({ label }) => ({ label })) : undefined, road).then(() => console.log('card resolved')));
     break;
+  }
+  case 'hp': {
+    // v0.4 내구도 '범퍼 5칸'
+    const max = +(P.get('max') ?? 100), hp0 = +(P.get('hp') ?? 37);
+    const phase = P.get('phase') || 'boss';
+    playHUD(phase, phase === 'boss' ? { combo: 4, rage: 0.4, progress: 0.97, boss: { name: stage.villains[0].name, hp: 0.62, tires: 3 } } : { rage: 0.4 });
+    const lowFx = P.get('lowfx') === '1' ? true : P.get('lowfx') === '0' ? false : undefined;
+    let hp = hp0;
+    const push = (inv) => ui.setHP({ hp, max, invuln: inv ?? (P.get('inv') === '1'), lowFx });
+    push();
+    window.setHP = (v, inv) => { hp = v; push(inv); };
+    if (P.get('hit')) setTimeout(() => { hp = Math.max(0, hp - +P.get('hit')); push(true); }, 800);
+    if (P.get('demo') === '1') {
+      hp = max; push();
+      const dmg = [10, 20, 5, 30, 10, 40];
+      let i = 0;
+      setInterval(() => { if (hp <= 0) { hp = max; push(false); return; } hp = Math.max(0, hp - dmg[i++ % dmg.length] * max / 100); push(true); }, 1300);
+    }
+    if (P.get('toast') === '1') setTimeout(() => { ui.toast('또 빵? (경적 피로)', 'warn'); ui.toast('레커 출동!', 'good'); }, 300);
+    break;
+  }
+  case 'fail': {
+    playHUD('boss', { combo: 0, rage: 0.2, progress: 0.97, boss: { name: stage.villains[0].name, hp: 0.41, tires: 2 } });
+    ui.setHP({ hp: 0, max: 100 });
+    onLoad(() => setTimeout(() => {
+      ui.showFail({
+        title: P.get('title') || undefined,
+        reason: P.get('reason') ?? '돌진에 들이받힘',
+        villainName: P.get('who') ?? stage.villains.map((v) => v.name).join(' & '),
+        hpLost: +(P.get('lost') ?? 40),
+        retryLabel: P.get('retry') || undefined,
+      }).then((c) => { console.log('fail choice', c); window.__failChoice = c; });
+    }, 60));
+    break;
+  }
+  case 'toast': {
+    playHUD('jam', { rage: 0.3 });
+    const seq = [['또 빵? (경적 피로)', 'warn'], ['틈 없음', 'info'], ['레커 출동!', 'good'], ['또 빵? (경적 피로)', 'warn']];
+    seq.forEach(([t, k], i) => setTimeout(() => ui.toast(t, k), 200 + i * 250));
+    break;
+  }
+  case 'roads': {
+    // 아이콘 갤러리: 카드를 조합마다 띄워서 .ui-road 를 복사 (개발용)
+    const SH = ['open', 'crowded', 'blocked', 'closed', 'dark', 'debris', 'watched', 'merge', 'occupied', 'none', 'open'];
+    const HK = ['yield', 'gapRace', 'backfire', 'push', 'ignoredWhileYielding', 'rescue', 'normal', 'bait', 'notify', 'evict', 'echo'];
+    const SP = ['안개', '야간', '카메라 3곳', '터널', '빗길', '눈길', '공사 구간', '합류 테이퍼', '', '기차 차량', ''];
+    const gal = document.createElement('div');
+    gal.style.cssText = 'position:fixed;inset:0;z-index:60;overflow:auto;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:8px;align-content:start;background:#2a3140';
+    gal.className = 'ui-root';
+    onLoad(() => {
+      SH.forEach((sh, i) => {
+        ui.showStageCard(stage, undefined, { shoulder: sh, honk: HK[i], special: SP[i] || undefined });
+        const r = document.querySelector('#ui .ui-road');
+        if (r) { const c = r.cloneNode(true); c.style.margin = '0'; c.querySelectorAll('.ui-road__tile').forEach((t) => { t.style.animation = 'none'; }); gal.appendChild(c); }
+      });
+      document.body.appendChild(gal);
+    });
+    break;
+  }
   case 'hud':
     playHUD('jam', {
       combo: 0, rage: 0.58,

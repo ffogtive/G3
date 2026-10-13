@@ -35,7 +35,7 @@
 //  setHP({ hp, max, invuln?, lowFx? }) | setHP(null)
 //                 분노 게이지 위(가로 폰 = 왼쪽) '범퍼 5칸'. 칸 = max/5, 반 칸 단위(올림 → 살아 있으면 최소 반 칸).
 //                 hp 가 줄 때만 깎인 칸이 흔들리며 빨갛게 터짐(+ −N 숫자). 비율 ≤ 0.4 = 주의(노랑 점멸), ≤ 0.2 = 위험(빨강).
-//                 invuln: true → 칸 깜빡임(무적). lowFx: 'auto'(기본, 위험일 때만) | true(강제) | false → 화면 가장자리 빨간 맥동.
+//                 invuln: true → 1초 깜빡임(무적, 계속 true 면 연장) · 숫자 = 그 초 · false = 끔. lowFx: 'auto'(기본, 위험일 때만) | true(강제) | false → 화면 가장자리 빨간 맥동.
 //                 첫 호출 전·null·max ≤ 0 이면 숨김(honkOnly 판 등). 매 프레임 호출 OK (값이 바뀔 때만 DOM 갱신).
 //  showFail({ title?, reason, villainName?, hpLost?, retryLabel? }) : Promise<'retry' | 'menu'>
 //                 견인 실패 카드 ('견인!' 도장 + 레커차 + 사유 + [발견 지점부터 다시] / [메뉴]). 자동 진행 없음.
@@ -753,6 +753,132 @@ function buildRage() {
   E.segFill = E.segs.map((s) => s.firstElementChild);
 }
 
+// ───────────────────────────── v0.4 내구도 '범퍼 5칸'
+// 가설: 내 피가 닳는 게 분노 게이지 바로 위에서 보이면 텔을 읽을 동기가 생긴다 ❓
+// 칸 = max/5, 반 칸 단위 (올림: 살아 있으면 최소 반 칸). 칸 상태 data-s = 2(온전) | 1(반 깨짐) | 0(빈 칸)
+const HP_SEGS = 5;
+const HPS = { on: false, hp: -1, max: -1, halves: -1, n: -1, tier: null, inv: null, invTimer: 0, low: null, dmg: 0, dmgT: 0, dmgEl: null, fx: 0 };
+function buildHP() {
+  E.hp = E.dock.appendChild(el('div', 'ui-hp ui-hudpart',
+    `<span class="ui-hp__ico">${SVG.carFront}</span>`
+    + '<div class="ui-hp__main"><span class="ui-hp__l"><span class="ui-hp__lt">범퍼</span><em class="ui-hp__tag"></em><b class="ui-hp__n">0</b></span><div class="ui-hp__cells">'
+    + '<span class="ui-hp__cell" data-s="2"><i class="ui-hp__ghost"></i><i class="ui-hp__fill"></i></span>'.repeat(HP_SEGS)
+    + '</div></div>'));
+  E.hp.setAttribute('role', 'meter');
+  E.hp.setAttribute('aria-label', '내구도');
+  E.hpCells = [...E.hp.querySelectorAll('.ui-hp__cell')];
+  E.hpN = E.hp.querySelector('.ui-hp__n');
+  E.hpTag = E.hp.querySelector('.ui-hp__tag');
+  E.hpIco = E.hp.querySelector('.ui-hp__ico');
+}
+function hpOff() {
+  if (!HPS.on) return;
+  clearTimeout(HPS.invTimer);
+  Object.assign(HPS, { on: false, hp: -1, max: -1, halves: -1, n: -1, tier: null, inv: null, low: null, dmg: 0 });
+  E.hp.classList.remove('is-on', 'is-warn', 'is-danger', 'is-inv', 'is-dead');
+  E.hpVig.classList.remove('is-on');
+}
+function setHP(s) {
+  if (s == null || typeof s !== 'object') { hpOff(); return; }
+  const max = 'max' in s ? num(s.max, NaN) : (HPS.max > 0 ? HPS.max : 100);
+  if (!(max > 0)) { hpOff(); return; }
+  let hp = num(s.hp, NaN);
+  if (!Number.isFinite(hp)) { if (!HPS.on) return; hp = HPS.hp; }   // hp 없이 invuln 만 바꾸는 호출 허용
+  hp = clamp(hp, 0, max);
+  const first = !HPS.on;
+  if (first) { HPS.on = true; E.hp.classList.add('is-on'); }
+  const prevHp = HPS.hp, prevHalves = HPS.halves, sameMax = HPS.max === max;
+  const ratio = hp / max;
+  const halves = hp <= 0 ? 0 : clamp(Math.ceil(ratio * HP_SEGS * 2 - 1e-6), 1, HP_SEGS * 2);
+  if (halves !== HPS.halves) {
+    HPS.halves = halves;
+    E.hpCells.forEach((c, i) => { const st = String(clamp(halves - i * 2, 0, 2)); if (c.dataset.s !== st) c.dataset.s = st; });
+    E.hp.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+  }
+  const n = hp > 0 ? Math.max(1, Math.round(hp)) : 0;
+  if (n !== HPS.n) { HPS.n = n; E.hpN.textContent = n; }
+  // 주의(≤ 2칸) · 위험(≤ 1칸) — 표시 칸과 같은 기준
+  const tier = hp <= 0 ? 'dead' : ratio <= 0.2 + 1e-9 ? 'danger' : ratio <= 0.4 + 1e-9 ? 'warn' : 'ok';
+  if (tier !== HPS.tier) {
+    const was = HPS.tier;
+    HPS.tier = tier;
+    E.hp.classList.toggle('is-warn', tier === 'warn');
+    E.hp.classList.toggle('is-danger', tier === 'danger' || tier === 'dead');
+    E.hp.classList.toggle('is-dead', tier === 'dead');
+    E.hpTag.textContent = tier === 'warn' ? '주의' : tier === 'danger' ? '위험!' : tier === 'dead' ? '견인' : '';
+    if (was && was !== 'ok' && tier !== 'ok' && was !== tier) bump(E.hpTag, 'hpTag', 0, KF.bigBump, 300);
+  }
+  // 값이 줄 때만 피격 연출 (첫 호출 · 최대치 변경 = 연출 없음)
+  if (!first && sameMax && prevHp >= 0 && hp < prevHp - 1e-6) hpHit(prevHalves, halves, prevHp - hp);
+  HPS.hp = hp; HPS.max = max;
+  // 무적 깜빡임: true = 1초(계속 true 로 부르면 연장), 숫자 = 그 초만큼, false = 즉시 끔, 생략 = 그대로
+  if ('invuln' in s) {
+    const v = s.invuln;
+    const sec = v === true ? 1 : typeof v === 'number' && v > 0 ? Math.min(5, v) : 0;
+    clearTimeout(HPS.invTimer);
+    if (sec > 0 && hp > 0) HPS.invTimer = setTimeout(() => { HPS.inv = false; E.hp.classList.remove('is-inv'); }, sec * 1000);
+    const inv = sec > 0 && hp > 0;
+    if (inv !== HPS.inv) { HPS.inv = inv; E.hp.classList.toggle('is-inv', inv); }
+  }
+  const low = s.lowFx === true || (s.lowFx !== false && (tier === 'danger' || tier === 'dead'));
+  if (low !== HPS.low) { HPS.low = low; E.hpVig.classList.toggle('is-on', low); }
+}
+KF.hpCell = [
+  { transform: 'none', filter: 'none' },
+  { transform: 'translate(-2px,-3px) scale(1.3) rotate(-8deg)', filter: 'brightness(2.2) saturate(1.6)', offset: 0.14 },
+  { transform: 'translate(3px,1px) scale(1.12) rotate(6deg)', filter: 'brightness(1.4)', offset: 0.34 },
+  { transform: 'translate(-2px,0) rotate(-3deg)', offset: 0.56 },
+  { transform: 'translate(1px,0) rotate(1deg)', offset: 0.78 },
+  { transform: 'none', filter: 'none' },
+];
+KF.hpIco = [{ transform: 'none' }, { transform: 'scale(1.25) rotate(-14deg)', filter: 'brightness(1.6) sepia(1) saturate(6) hue-rotate(-30deg)', offset: 0.2 }, { transform: 'rotate(8deg)', offset: 0.5 }, { transform: 'none', filter: 'none' }];
+const HP_FX_MAX = 36;
+function hpFx(node, kf, opt) {
+  if (HPS.fx >= HP_FX_MAX) { node.remove(); return; }
+  HPS.fx++;
+  E.hp.appendChild(node);
+  const a = anim(node, kf, opt);
+  const done = () => { HPS.fx--; node.remove(); };
+  if (a) a.onfinish = a.oncancel = done; else done();
+}
+function hpHit(prevHalves, halves, dmg) {
+  bump(E.hp, 'hpShake', 60, KF.shake, 320);
+  anim(E.hpIco, KF.hpIco, { duration: 420, easing: 'ease-out' });
+  if (reduceMotion) return;
+  // 깎인 칸 (같은 반 칸 안의 작은 피해면 경계 칸만 살짝)
+  const hit = [];
+  for (let i = 0; i < HP_SEGS; i++) if (clamp(halves - i * 2, 0, 2) < clamp(prevHalves - i * 2, 0, 2)) hit.push(i);
+  const soft = !hit.length;
+  if (soft) hit.push(clamp(Math.ceil(halves / 2) - 1, 0, HP_SEGS - 1));
+  for (const i of hit) {
+    const c = E.hpCells[i];
+    anim(c, KF.hpCell, { duration: soft ? 300 : 460, easing: 'ease-out' });
+    if (soft) continue;
+    const x = c.offsetLeft + c.offsetWidth * (halves - i * 2 >= 1 ? 0.75 : 0.5), y = c.offsetTop + c.offsetHeight / 2;
+    // 빨간 폭발 링 + 범퍼 파편
+    const ring = el('i', 'ui-hp__boom');
+    ring.style.left = x + 'px'; ring.style.top = y + 'px';
+    hpFx(ring, [{ transform: 'translate(-50%,-50%) scale(.3)', opacity: 1 }, { transform: 'translate(-50%,-50%) scale(1.5)', opacity: 0.9, offset: 0.35 }, { transform: 'translate(-50%,-50%) scale(2.1)', opacity: 0 }], { duration: 420, easing: 'ease-out' });
+    for (let k = 0; k < 5; k++) {
+      const sh = el('i', 'ui-hp__shard' + (k % 2 ? ' is-red' : ''));
+      sh.style.left = x + 'px'; sh.style.top = y + 'px';
+      const a = (-160 + 140 * (k / 4) + (Math.random() - 0.5) * 30) * Math.PI / 180, d = 22 + Math.random() * 18, r = (Math.random() - 0.5) * 540;
+      const dx = Math.cos(a) * d, dy = Math.sin(a) * d;
+      hpFx(sh, [{ transform: 'translate(-50%,-50%) rotate(0deg) scale(1)', opacity: 1 }, { transform: `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px)) rotate(${r.toFixed(0)}deg) scale(.9)`, opacity: 1, offset: 0.55 }, { transform: `translate(calc(-50% + ${(dx * 1.2).toFixed(1)}px), calc(-50% + ${(dy + 26).toFixed(1)}px)) rotate(${(r * 1.4).toFixed(0)}deg) scale(.6)`, opacity: 0 }], { duration: 560 + k * 30, easing: 'cubic-bezier(.2,.7,.4,1)' });
+    }
+  }
+  // −N 숫자 (0.5초 안의 연타는 합산)
+  const t = now();
+  HPS.dmg = t - HPS.dmgT < 500 && HPS.dmgEl && HPS.dmgEl.isConnected ? HPS.dmg + dmg : dmg;
+  HPS.dmgT = t;
+  const txt = '−' + Math.max(1, Math.round(HPS.dmg));
+  if (HPS.dmgEl && HPS.dmgEl.isConnected) HPS.dmgEl.remove();
+  const de = el('b', 'ui-hp__dmg');
+  de.textContent = txt;
+  HPS.dmgEl = de;
+  hpFx(de, [{ transform: 'translate(-50%,0) scale(.4)', opacity: 0 }, { transform: 'translate(-50%,-14px) scale(1.25)', opacity: 1, offset: 0.18 }, { transform: 'translate(-50%,-20px) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translate(-50%,-30px) scale(.9)', opacity: 0 }], { duration: 900, easing: 'ease-out' });
+}
+
 // ───────────────────────────── 터치 컨트롤
 const touchBtns = [];
 function buildTouch() {
@@ -1274,6 +1400,43 @@ function hint(text, ms = 2600) {
   hintT = setTimeout(() => setShown(E.hint, false, 260), ms);
 }
 
+// ───────────────────────────── v0.4 토스트 (짧은 상단 알림: '또 빵? (경적 피로)', '틈 없음', '레커 출동!')
+// 힌트(💡 길게)와 달리 짧고 자주 뜬다. 최대 3개, 같은 문구는 새로 쌓지 않고 '×2' 로 합친다.
+const TOAST_ICO = { warn: () => SVG.warnTri, info: () => SVG.info, good: () => SVG.check };
+const TQ = [];
+function dropToast(t, fast = false) {
+  if (!t || t.out) return;
+  t.out = true;
+  clearTimeout(t.timer);
+  t.node.classList.add('is-out');
+  setTimeout(() => { t.node.remove(); const i = TQ.indexOf(t); if (i >= 0) TQ.splice(i, 1); }, fast || reduceMotion ? 100 : 240);
+}
+function toast(text, kind = 'info', ms) {
+  text = String(text ?? '').trim().slice(0, 80);
+  if (!text) return;
+  kind = TOAST_ICO[kind] ? kind : 'info';
+  ms = clamp(num(ms, kind === 'warn' ? 1900 : 1600), 500, 10000);
+  const same = TQ.find((t) => !t.out && t.text === text && t.kind === kind);
+  if (same) {
+    same.n++;
+    same.cnt.textContent = '×' + same.n;
+    same.cnt.hidden = false;
+    bump(same.node, 'toast' + text, 0, KF.bigBump, 240);
+    clearTimeout(same.timer);
+    same.timer = setTimeout(() => dropToast(same), ms);
+    return;
+  }
+  const live = TQ.filter((t) => !t.out);
+  while (live.length >= 3) dropToast(live.shift(), true);
+  const node = el('div', `ui-toast ui-toast--${kind} is-in`, `<span class="ui-toast__ico">${TOAST_ICO[kind]()}</span><span class="ui-toast__t"></span><b class="ui-toast__n" hidden></b>`);
+  node.querySelector('.ui-toast__t').textContent = text;
+  node.setAttribute('role', 'status');
+  E.toasts.prepend(node);
+  const t = { node, text, kind, n: 1, cnt: node.querySelector('.ui-toast__n'), out: false, timer: 0 };
+  t.timer = setTimeout(() => dropToast(t), ms);
+  TQ.push(t);
+}
+
 // ───────────────────────────── 타이틀 (챕터 × 스테이지, 지갑/구독자 칩, 제보 앨범)
 // 가설: 100 스테이지도 "챕터 탭 + 현재 챕터 10칸"만 그리면 한눈에 들어오고 빠르다.
 const TS = { stages: [], progress: null, chapters: null, shop: null, P: null, groups: [], unlocked: 1, startIdx: 0, grid: false, multi: false, active: -1, list: null, head: null, tabs: null };
@@ -1460,6 +1623,7 @@ function showTitle(stages, progress, chapters, shop) {
   const startIdx = clamp(unlocked - 1, 0, Math.max(0, n - 1));
 
   finishCard();
+  closeFail(null);
   setHudOn(false);
   hideBoss();
   clearBubbles();
@@ -1999,6 +2163,31 @@ function popMissions(panel, ms) {
   });
 }
 
+// ───────────────────────────── v0.4 도로 상황 (R7: 갓길 / 경적 / 특수 아이콘 3개 + 전광판 한 줄 힌트)
+// 가설: 판마다 다른 갓길·경적 규칙이 시작 카드에서 3초 안에 읽히면 '갓길+빵 만능' 습관이 깨진다 ❓
+function normRoad(r) {
+  if (!r || typeof r !== 'object') return null;
+  const sh = typeof r.shoulder === 'string' && Object.hasOwn(SH_MODES, r.shoulder) ? r.shoulder : null;
+  const hk = typeof r.honk === 'string' && Object.hasOwn(HONK_MODES, r.honk) ? r.honk : null;
+  const sp = (typeof r.special === 'string' || typeof r.special === 'number') ? String(r.special).trim().slice(0, 40) : '';
+  let hint = (typeof r.hint === 'string' || typeof r.hint === 'number') ? String(r.hint).trim().slice(0, 60) : '';
+  if (!hint) hint = hk ? `이번 판 경적 = ${HONK_MODES[hk].short}` : sh ? `이번 판 갓길 = ${SH_MODES[sh].short}` : '';
+  if (!sh && !hk && !sp && !hint) return null;
+  return { sh, hk, sp, hint };
+}
+function roadHTML(rd) {
+  const tiles = [];
+  const tile = (kind, cls, tone, label, svg) => `<li class="ui-road__tile ui-road__tile--${cls} is-${tone}" style="--i:${tiles.length}"><span class="ui-road__ico">${roadSVG(svg)}</span><span class="ui-road__txt"><small>${kind}</small><b>${esc(label)}</b></span></li>`;
+  if (rd.sh) { const m = SH_MODES[rd.sh]; tiles.push(tile('갓길', 'sh', m.tone, m.label, m.svg)); }
+  if (rd.hk) { const m = HONK_MODES[rd.hk]; tiles.push(tile('경적', 'hk', m.tone, m.label, m.svg)); }
+  if (rd.sp) tiles.push(tile('특수', 'sp', 'warn', rd.sp, specialSVG(rd.sp)));
+  return `<div class="ui-road" aria-label="도로 상황">
+      <div class="ui-road__head"><span class="ui-road__tag">${SVG.road}도로 상황</span><span class="ui-road__sub">판마다 규칙이 달라요</span></div>
+      ${tiles.length ? `<ul class="ui-road__tiles" style="--n:${tiles.length}">${tiles.join('')}</ul>` : ''}
+      ${rd.hint ? `<div class="ui-vms ui-road__vms"><span>${esc(rd.hint)}</span></div>` : ''}
+    </div>`;
+}
+
 // ───────────────────────────── 스테이지 카드
 let cardState = null;
 function finishCard() {
@@ -2012,8 +2201,9 @@ function finishCard() {
   setShown(E.card, false, 320);
   try { st.resolve(); } catch { /* */ }
 }
-function showStageCard(stage, missions) {
+function showStageCard(stage, missions, road) {
   finishCard();
+  closeFail(null);
   const s = stage || {};
   setStage(stage);
   setHudOn(false);
@@ -2025,10 +2215,12 @@ function showStageCard(stage, missions) {
   const ms = normMissions(missions);
   const kd = stageKind(s), ck = caseKind(s.card);
   const honk = s.honkOnly ? `<div class="ui-card__honk"><span class="ui-card__honkico">${SVG.horn}</span><b>구조 상황</b><i>·</i><span>압정 금지</span><i>·</i><span>경적으로 깨우기</span></div>` : '';
-  // 미션이 있으면 읽을 시간을 조금 더 (탭/키로 바로 스킵 가능)
-  const dur = ms ? 3400 : 2600;
+  const rd = normRoad(road);
+  // 미션 · 도로 상황이 있으면 읽을 시간을 조금 더 (탭/키로 바로 스킵 가능)
+  const dur = (ms ? 3400 : 2600) + (rd ? 1000 : 0);
+  E.card.classList.toggle('has-road', !!rd);
   E.card.innerHTML = `
-    <div class="ui-card__panel${kd ? ` is-${kd}` : ''} is-case-${ck}${ms ? ' has-mis' : ''}${honk ? ' has-honk' : ''}" style="--card-ms:${dur}ms">
+    <div class="ui-card__panel${kd ? ` is-${kd}` : ''} is-case-${ck}${ms ? ' has-mis' : ''}${honk ? ' has-honk' : ''}${rd ? ' has-road' : ''}" style="--card-ms:${dur}ms">
       <div class="ui-sign ui-sign--card">${shieldHTML(s.route, 'ui-shield--big')}<span class="ui-sign__txt"><b>${esc(s.highway)}</b><span>${esc(s.direction)} <i class="ui-sign__dirarrow">▶</i></span></span></div>
       <div class="ui-card__body">
         <div class="ui-card__no">STAGE ${esc(idx)}${kindBadge(kd)}<span class="ui-card__tag ui-card__tag--${ck}">${ck === 'rescue' ? SVG.horn : SVG.angry}${CASE[ck].tag}</span></div>
@@ -2038,6 +2230,7 @@ function showStageCard(stage, missions) {
         <div class="ui-card__jam"><span class="ui-card__jamtag">정체</span><b>${esc(s.displayKm ?? '?')}km</b>${s.villainSpeedLabel ? `<span class="ui-card__spd">원흉 ${esc(s.villainSpeedLabel)}</span>` : ''}</div>
         ${honk}
       </div>
+      ${rd ? roadHTML(rd) : ''}
       ${ms ? `<div class="ui-card__mis"><div class="ui-card__mishead"><span class="ui-card__mistag"><span class="ui-star is-on">${SVG.star}</span>별 미션</span><span class="ui-card__missub">하나 달성할 때마다 ★ 1개</span></div>${missionsHTML(ms, 'card')}</div>` : ''}
       <div class="ui-card__tap">탭하여 바로 시작</div>
       <div class="ui-card__timer"><i></i></div>
@@ -2068,6 +2261,7 @@ const later = (ms, fn, real = false) => { resT.push(setTimeout(() => { try { fn(
 function showResult(r) {
   r = r || {};
   finishCard();
+  closeFail(null);
   setHudOn(false);
   hideBoss();
   clearBubbles();
@@ -2342,6 +2536,82 @@ function showRewardResult(r, w) {
 }
 function hideResult() { clearResultTimers(); setShown(E.result, false, 300); }
 
+// ───────────────────────────── v0.4 견인 실패 카드
+// 가설: 실패가 '견인!' 개그 + 바로 재도전 버튼이면 긴장은 남고 짜증은 안 남는다 ❓
+// 자동 진행 없음. Enter = 재도전, Esc = 메뉴. 다시 부르면 내용만 바꾸고 같은 Promise.
+const FS = { open: false, armed: false, resolve: null, promise: null, armT: 0, onKey: null };
+function closeFail(choice) {
+  if (!FS.open) return;
+  FS.open = false;
+  FS.armed = false;
+  clearTimeout(FS.armT);
+  removeEventListener('keydown', FS.onKey, true);
+  E.fail.classList.remove('is-armed');
+  setShown(E.fail, false, 300);
+  const r = FS.resolve;
+  FS.resolve = null;
+  FS.promise = null;
+  if (choice && r) { try { r(choice); } catch { /* */ } }
+}
+function pickFail(choice) {
+  if (!FS.open || !FS.armed) return;
+  closeFail(choice === 'menu' ? 'menu' : 'retry');
+}
+function showFail(o) {
+  o = o && typeof o === 'object' ? o : {};
+  const txt = (v, d, n = 60) => { const t = (typeof v === 'string' || typeof v === 'number') ? String(v).trim().slice(0, n) : ''; return t || d; };
+  const title = txt(o.title, '참교육 실패', 24);
+  const reason = txt(o.reason, '차가 더는 못 버텼다');
+  const who = txt(o.villainName, '', 40);
+  const lost = Math.max(0, Math.round(num(o.hpLost)));
+  const retryLabel = txt(o.retryLabel, '발견 지점부터 다시', 24);
+  finishCard();
+  hideAlbum();
+  hideShop();
+  if (isShown(E.result)) hideResult();
+  setShown(E.title, false, 320);
+  setPausedVisible(false);
+  hideBoss();
+  clearBubbles();
+  setHudOn(false);
+  const P = E.fail;
+  P.innerHTML = `
+    <div class="ui-fail__panel" role="dialog" aria-label="${esc(title)}">
+      <div class="ui-fail__head"><b class="ui-fail__title">${esc(title)}</b></div>
+      <div class="ui-fail__art">${wreckerArt()}<div class="ui-fail__stamp"><span>견인!</span></div></div>
+      <div class="ui-fail__body">
+        <div class="ui-fail__why"><span class="ui-fail__lbl">사유</span><b class="ui-fail__reason">${esc(reason)}</b></div>
+        ${who || lost ? `<div class="ui-fail__meta">${who ? `<span class="ui-fail__who"><i>${SVG.angry}</i>${esc(who)}</span>` : ''}${lost ? `<span class="ui-fail__lost">마지막 한 방 <b>−${lost}</b></span>` : ''}</div>` : ''}
+      </div>
+      <div class="ui-fail__btns"></div>
+    </div>`;
+  const bw = P.querySelector('.ui-fail__btns');
+  bw.appendChild(btn('ui-btn--yellow ui-btn--lg ui-fail__retry', `<span class="ui-btn__ico">${SVG.retry}</span><span>${esc(retryLabel)}</span><kbd class="ui-fail__kbd">Enter</kbd>`, () => pickFail('retry'), retryLabel));
+  bw.appendChild(btn('ui-btn--grey ui-fail__menu', '<span>메뉴</span><kbd class="ui-fail__kbd">Esc</kbd>', () => pickFail('menu'), '메뉴'));
+  if (!FS.open) {
+    FS.open = true;
+    FS.armed = false;
+    P.classList.remove('is-armed');
+    setShown(P, true);
+    try { P.scrollTop = 0; } catch { /* */ }
+    // 코어 keydown(Esc = 일시정지 등)으로 새지 않게 캡처 단계에서 막고, 0.45초 뒤부터 반응 (피격 순간 연타 방지)
+    FS.onKey = (e) => {
+      if (!FS.open) return;
+      const enter = e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter';
+      const esc_ = e.key === 'Escape' || e.code === 'Escape';
+      if (!enter && !esc_) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!e.repeat) pickFail(esc_ ? 'menu' : 'retry');
+    };
+    addEventListener('keydown', FS.onKey, true);
+    FS.armT = setTimeout(() => { if (FS.open) { FS.armed = true; P.classList.add('is-armed'); } }, 450);
+  }
+  if (!FS.promise) FS.promise = new Promise((resolve) => { FS.resolve = resolve; });
+  return FS.promise;
+}
+function hideFail() { closeFail(null); }
+
 // ───────────────────────────── 기타
 function setTouchVisible(on) {
   on = !!on;
@@ -2385,7 +2655,7 @@ export const ui = {
   isOverlayOpen: () => { try { return !!overlayOpen(); } catch { return false; } },   // 차고·앨범이 열려 있으면 Enter로 스테이지 시작 금지
   showTitle: guard(showTitle),
   hideTitle: guard(hideTitle),
-  showStageCard: guard((s, m) => showStageCard(s, m), () => Promise.resolve()),
+  showStageCard: guard((s, m, r) => showStageCard(s, m, r), () => Promise.resolve()),
   setHUD: guard(setHUD),
   setNav: guard(setNav),
   showBoss: guard(showBoss),
@@ -2411,4 +2681,9 @@ export const ui = {
   showShop: guard(showShop),
   hideShop: guard(hideShop),
   refreshShop: guard(refreshShop),
+  // v0.4
+  setHP: guard(setHP),
+  showFail: guard(showFail, () => new Promise((res) => setTimeout(() => res('retry'), 900))),   // UI 고장 시: 갇히지 않게 0.9초 뒤 재도전
+  hideFail: guard(hideFail),
+  toast: guard(toast),
 };

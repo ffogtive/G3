@@ -1950,6 +1950,269 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 @keyframes ui-holo { 0% { transform: translateX(-110%); } 45%, 100% { transform: translateX(110%); } }
 @keyframes ui-shutter { 0% { opacity: .95; } 100% { opacity: 0; } }
 
+/* ═════════════ v0.4 내구도(범퍼 5칸) · 견인 실패 카드 · 도로 상황 · 토스트
+   가설: 내 내구도가 분노 게이지 바로 위에서 깎이는 게 보이고(피격 = 칸이 흔들리며 빨갛게 터짐),
+        실패가 '견인!' 개그 + 즉시 재도전이고, 시작 카드에 판별 갓길·경적 규칙이 보이면 긴장감과 판 차별화가 체감된다 ❓ */
+
+/* 하단 독: [범퍼] 위 + [분노] 아래. 낮은 가로 화면은 [범퍼][분노] 좌우 (차를 덜 가림) */
+.ui-dock {
+  position: absolute; z-index: 3; left: 50%; translate: -50% 0; bottom: calc(var(--sab) + 16px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.ui-dock > .ui-rage { position: relative; z-index: auto; left: auto; bottom: auto; translate: none; }
+.ui-root--touch .ui-dock { bottom: calc(var(--sab) + 116px); }
+/* 넓은 화면: [범퍼][분노] 좌우 한 줄 (세로로 쌓으면 플레이어 차 바로 아래를 가림). 속도계와 안 겹치는 폭부터 */
+@media (min-width: 860px) { .ui-dock { flex-direction: row; align-items: flex-end; } }
+.ui-root.ui-root--hud[data-phase="release"] .ui-hp,
+.ui-root.ui-root--hud[data-phase="cruise"] .ui-hp { opacity: 0; visibility: hidden; }
+
+.ui-hp {
+  position: relative; display: none; align-items: center; gap: 8px; padding: 6px 13px 7px 8px;
+  background: rgba(23, 32, 43, .85); border: 3px solid var(--ui-ink); border-radius: 16px;
+  box-shadow: 0 4px 0 var(--ui-ink);
+}
+.ui-hp.is-on { display: flex; }
+.ui-hp__ico {
+  position: relative; width: 42px; height: 42px; flex: none; display: grid; place-items: center; box-sizing: border-box;
+  background: linear-gradient(180deg, #3ce08e, #17a466); border: 2.5px solid var(--ui-ink); border-radius: 11px;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), inset 0 0 0 2px rgba(255, 255, 255, .55);
+}
+.ui-hp__ico svg { width: 30px; height: 30px; display: block; filter: drop-shadow(0 1.5px 0 rgba(0, 0, 0, .35)); }
+.ui-hp__main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ui-hp__l { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #b9f5cf; letter-spacing: .04em; line-height: 1; white-space: nowrap; }
+.ui-hp__tag { display: none; font-style: normal; font-family: var(--ui-fd); font-size: 12px; letter-spacing: 0; color: var(--ui-ink); background: var(--ui-amber); border: 2px solid var(--ui-ink); border-radius: 6px; padding: 2px 6px 1px; }
+.ui-hp__n { margin-left: auto; font-family: var(--ui-fd); font-weight: 400; font-size: 15px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 0; text-shadow: 0 2px 0 var(--ui-ink); }
+.ui-hp__cells { display: flex; gap: 5px; }
+.ui-hp__cell {
+  --c-hi: #a6ffcb; --c: #2fd17e; --c-lo: #129a45;
+  position: relative; width: 34px; height: 19px; overflow: hidden; box-sizing: border-box;
+  background: #0f141b; border: 2.5px solid var(--ui-ink); border-radius: 6px 6px 9px 9px;
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, .5), 0 0 0 1.5px rgba(255, 255, 255, .12);
+}
+/* 깨진 칸 바닥: 금 간 자국 (채움이 없는 부분에서만 보임) */
+.ui-hp__cell::before {
+  content: ''; position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 19'%3E%3Cpath d='M18 0l-3 5 4 3-3 5 3 6M19 8l6-2 3 4M15 5l-6 2-3 4M16 13l-5 2' fill='none' stroke='%23ff5a4f' stroke-opacity='.6' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.ui-hp__fill, .ui-hp__ghost { position: absolute; inset: 0; clip-path: polygon(0 0, 100% 0, 100% 30%, 100% 55%, 100% 78%, 100% 100%, 0 100%); }
+.ui-hp__fill { background: linear-gradient(180deg, var(--c-hi), var(--c) 52%, var(--c-lo)); }
+.ui-hp__fill::after { content: ''; position: absolute; left: 3px; right: 3px; top: 2px; height: 4px; border-radius: 9px; background: rgba(255, 255, 255, .55); }
+/* 피해 잔상(빨강) — 0.3초 버티다가 깎인 만큼 쑥 줄어든다 */
+.ui-hp__ghost { background: #ff3b30; transition: clip-path .34s .3s ease-in; }
+.ui-hp__cell[data-s="1"] .ui-hp__fill, .ui-hp__cell[data-s="1"] .ui-hp__ghost { clip-path: polygon(0 0, 56% 0, 45% 30%, 57% 55%, 46% 78%, 53% 100%, 0 100%); }
+.ui-hp__cell[data-s="0"] .ui-hp__fill, .ui-hp__cell[data-s="0"] .ui-hp__ghost { clip-path: polygon(0 0, 0 0, 0 30%, 0 55%, 0 78%, 0 100%, 0 100%); }
+/* 주의(≤ 2칸): 노랑 + 테두리 점멸 · 위험(≤ 1칸): 빨강 + 맥동 */
+.ui-hp.is-warn .ui-hp__cell { --c-hi: #fff0a0; --c: #ffc21a; --c-lo: #e08a00; }
+.ui-hp.is-warn .ui-hp__ico { background: linear-gradient(180deg, #ffe680, #ffb400); }
+.ui-hp.is-warn .ui-hp__l { color: #ffe39a; }
+.ui-hp.is-warn { animation: ui-hpWarn 1s steps(1, end) infinite; }
+.ui-hp.is-danger .ui-hp__cell { --c-hi: #ff9b91; --c: #ff3b30; --c-lo: #c21d14; }
+.ui-hp.is-danger .ui-hp__ghost { background: #ffe14d; }
+.ui-hp.is-danger .ui-hp__ico { background: linear-gradient(180deg, #ff8a80, #e2231a); }
+.ui-hp.is-danger .ui-hp__l { color: #ffb3ab; }
+.ui-hp.is-danger .ui-hp__n { color: #ff8a80; }
+.ui-hp.is-danger { animation: ui-hpDanger .45s ease-in-out infinite alternate; }
+.ui-hp.is-warn .ui-hp__tag, .ui-hp.is-danger .ui-hp__tag { display: inline-block; animation: ui-blink .8s steps(2, jump-none) infinite; }
+.ui-hp.is-danger .ui-hp__tag { color: #fff; background: var(--ui-red); animation-duration: .4s; }
+.ui-hp.is-dead .ui-hp__ico { background: #6d7682; filter: grayscale(.6); }
+.ui-hp.is-dead .ui-hp__tag { color: #fff; background: #6d7682; animation: none; }
+/* 무적(피격 직후): 칸 · 아이콘 깜빡임 */
+.ui-hp.is-inv .ui-hp__cells, .ui-hp.is-inv .ui-hp__ico { animation: ui-blink .16s steps(2, jump-none) infinite; }
+/* 피격 이펙트 (JS 가 만들고 끝나면 지움) */
+.ui-hp__boom, .ui-hp__shard, .ui-hp__dmg { position: absolute; z-index: 2; pointer-events: none; will-change: transform, opacity; }
+.ui-hp__boom { left: 0; top: 0; width: 30px; height: 30px; box-sizing: border-box; border-radius: 50%; border: 4px solid #ff3b30; background: radial-gradient(circle, rgba(255, 244, 190, .95) 0 22%, rgba(255, 110, 40, .85) 44%, rgba(255, 59, 48, 0) 70%); }
+.ui-hp__shard { left: 0; top: 0; width: 8px; height: 5px; background: #e9edf2; border: 1.5px solid var(--ui-ink); border-radius: 1.5px; }
+.ui-hp__shard.is-red { background: #ff3b30; }
+.ui-hp__dmg { right: -6px; top: -12px; z-index: 3; font-family: var(--ui-fd); font-weight: 400; font-size: 24px; line-height: 1; color: #ff5a4f; white-space: nowrap; text-shadow: var(--ui-o2), 0 3px 0 var(--ui-ink); }
+/* 위험: 화면 가장자리 빨간 심장박동 (코어의 분노 vignette 와 별도 레이어) */
+.ui-hpvig {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; visibility: hidden;
+  background: radial-gradient(ellipse 82% 78% at 50% 50%, rgba(200, 0, 0, 0) 52%, rgba(225, 25, 15, .5) 84%, rgba(150, 0, 0, .85) 100%);
+}
+.ui-root--hud .ui-hpvig.is-on { visibility: visible; animation: ui-hpBeat 1.05s ease-in-out infinite; }
+.ui-root--hud[data-phase="release"] .ui-hpvig, .ui-root--hud[data-phase="cruise"] .ui-hpvig { visibility: hidden; }
+
+/* ───────────── 토스트 (상단 짧은 알림) */
+.ui-toasts { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; pointer-events: none; }
+.ui-toasts:empty { display: none; }
+.ui-toast {
+  display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; max-width: min(calc(100vw - 24px), 460px);
+  padding: 4px 15px 5px 5px; border: 3px solid var(--ui-ink); border-radius: 20px; box-shadow: 0 3px 0 var(--ui-ink);
+  font-family: var(--ui-fd); font-weight: 400; font-size: 17px; line-height: 1.15; color: var(--ui-ink); background: #fff;
+}
+.ui-toast__ico { width: 25px; height: 25px; flex: none; }
+.ui-toast__ico svg { width: 100%; height: 100%; display: block; }
+.ui-toast__t { min-width: 0; word-break: keep-all; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ui-toast__n { flex: none; font-weight: 400; font-size: 13px; line-height: 1; color: #fff; background: var(--ui-ink); border-radius: 8px; padding: 3px 6px 2px; }
+.ui-toast--warn { background: linear-gradient(180deg, #ffe680, #ffc21a); }
+.ui-toast--good { color: #fff; background: linear-gradient(180deg, #3ce08e, #17a466); text-shadow: var(--ui-o2); }
+.ui-toast--good .ui-toast__n { color: var(--ui-ink); background: #fff; text-shadow: none; }
+.ui-toast.is-in { animation: ui-popDown .34s cubic-bezier(.3, 1.6, .5, 1) both; }
+.ui-toast.is-out { animation: ui-fadeUp .24s ease-in both; }
+
+/* ───────────── 견인 실패 카드 */
+.ui-fail {
+  z-index: 11; display: flex; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; touch-action: pan-y; overscroll-behavior: contain;
+  padding: calc(var(--sat) + 14px) calc(var(--sar) + 14px) calc(var(--sab) + 14px) calc(var(--sal) + 14px);
+  background: radial-gradient(ellipse at 50% 42%, rgba(70, 10, 6, .38), rgba(12, 6, 8, .8));
+}
+.ui-fail__panel {
+  position: relative; width: min(440px, 100%); margin: auto; box-sizing: border-box; overflow: hidden;
+  background: var(--ui-cream); color: var(--ui-ink); border: 4px solid var(--ui-ink); border-radius: 24px; box-shadow: 0 8px 0 var(--ui-ink);
+}
+.ui-fail.is-in .ui-fail__panel { animation: ui-dropIn .55s cubic-bezier(.25, 1.5, .5, 1) both; }
+.ui-fail.is-out .ui-fail__panel { animation: ui-flyUp .28s ease-in both; }
+.ui-fail__head {
+  grid-area: head; padding: 9px 14px 10px; text-align: center; border-bottom: 4px solid var(--ui-ink);
+  background: repeating-linear-gradient(-45deg, #ffb400 0 14px, #17202b 14px 28px);
+}
+.ui-fail__title {
+  display: inline-block; padding: 5px 18px 7px; font-family: var(--ui-fd); font-weight: 400; font-size: 27px; line-height: 1; color: #fff; white-space: nowrap;
+  background: linear-gradient(180deg, #ff6b61, var(--ui-red) 50%, var(--ui-red-lo)); border: 3px solid var(--ui-ink); border-radius: 11px;
+  box-shadow: 0 3px 0 var(--ui-ink), inset 0 2px 0 rgba(255, 255, 255, .35); text-shadow: var(--ui-o2), 0 2px 0 var(--ui-ink);
+}
+.ui-fail__art { grid-area: art; position: relative; height: 158px; overflow: hidden; border-bottom: 4px solid var(--ui-ink); background: #bfe3ff; }
+.ui-fail__svg { display: block; width: 100%; height: 100%; }
+.ui-fail__svg g { transform-box: view-box; }
+.ui-fail.is-in .ui-fail__truck, .ui-fail.is-in .ui-fail__towed { animation: ui-failDrive .9s .1s cubic-bezier(.2, .9, .3, 1.05) both; }
+.ui-fail__beacon rect:first-child { animation: ui-blink .5s steps(2, jump-none) infinite; }
+.ui-fail__beacon rect:last-child { animation: ui-blink .5s .25s steps(2, jump-none) infinite; }
+.ui-fail__steam { transform-origin: 86px 40px; animation: ui-failSteam 1.4s ease-out infinite; }
+.ui-fail__dizzy { transform-origin: 45px 36px; animation: ui-failDizzy 1.8s linear infinite; }
+.ui-fail__stamp {
+  position: absolute; right: 12px; top: 10px; rotate: -9deg;
+  font-family: var(--ui-fd); font-weight: 400; font-size: 46px; line-height: 1; color: #e2231a; white-space: nowrap;
+  padding: 4px 14px 8px; border: 5px solid #e2231a; border-radius: 13px; background: rgba(255, 247, 227, .86);
+  box-shadow: inset 0 0 0 3px rgba(255, 247, 227, .9), inset 0 0 0 6px #e2231a, 0 3px 0 rgba(23, 32, 43, .35);
+  animation: ui-stamp .45s .55s cubic-bezier(.2, 1.3, .4, 1) both;
+}
+.ui-fail__body { grid-area: body; display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 14px 16px 2px; }
+.ui-fail__why {
+  display: flex; align-items: center; gap: 9px; max-width: 100%; box-sizing: border-box; padding: 6px 16px 7px 6px;
+  background: #fff; border: 3px solid var(--ui-ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ui-ink);
+}
+.ui-fail__lbl { flex: none; font-family: var(--ui-fd); font-size: 13px; line-height: 1; color: #fff; background: var(--ui-ink); border-radius: 8px; padding: 5px 8px 4px; }
+.ui-fail__reason { min-width: 0; font-family: var(--ui-fd); font-weight: 400; font-size: 21px; line-height: 1.15; word-break: keep-all; overflow-wrap: anywhere; }
+.ui-fail__meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px; font-size: 14px; color: #5a6270; }
+.ui-fail__who { display: inline-flex; align-items: center; gap: 5px; }
+.ui-fail__who i { width: 20px; height: 20px; flex: none; }
+.ui-fail__who i svg { width: 100%; height: 100%; display: block; }
+.ui-fail__lost b { font-family: var(--ui-fd); font-weight: 400; font-size: 17px; color: var(--ui-red); }
+.ui-fail__btns { grid-area: btns; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px 10px; padding: 16px 16px 20px; }
+.ui-fail__btns .ui-btn { pointer-events: none; }
+.ui-fail.is-armed .ui-fail__btns .ui-btn { pointer-events: auto; }
+.ui-fail__retry .ui-btn__ico svg { width: 1em; height: 1em; }
+.ui-fail__kbd {
+  font-family: var(--ui-fd); font-size: 11px; line-height: 1.2; color: var(--ui-ink); text-shadow: none; letter-spacing: 0;
+  background: rgba(255, 255, 255, .92); border: 2px solid var(--ui-ink); border-bottom-width: 3px; border-radius: 6px; padding: 1px 5px 0; margin-left: 3px;
+}
+.ui-root--touch .ui-fail__kbd { display: none; }
+
+/* ───────────── 스테이지 카드: 도로 상황 (갓길 / 경적 / 특수 + 전광판 힌트) */
+.ui-card__panel.has-road { width: min(480px, 100%); }
+.ui-road { grid-area: road; margin: 6px 14px 2px; padding: 7px 8px 8px; background: #dde6ef; border: 3px solid var(--ui-ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ui-ink); }
+.ui-road__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 0 2px 7px; }
+.ui-road__sub { min-width: 0; font-size: 12px; color: #5a6b80; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-road__tag { flex: none; display: inline-flex; align-items: center; gap: 4px; font-family: var(--ui-fd); font-size: 15px; line-height: 1; color: #fff; background: var(--ui-ink); border-radius: 8px; padding: 3px 9px 3px 4px; white-space: nowrap; }
+.ui-road__tag svg { width: 18px; height: 18px; display: block; }
+.ui-road__vms.ui-vms {
+  margin-top: 8px; padding: 5px 12px 6px; font-size: 16px; line-height: 1.25; letter-spacing: .03em; text-align: center; white-space: normal; word-break: keep-all;
+  border-radius: 8px; box-shadow: inset 0 0 0 2px #2c333d, 0 3px 0 var(--ui-ink);
+}
+.ui-road__vms.ui-vms span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; animation: ui-vmsBlink 2.4s steps(1, end) 1s infinite; }
+.ui-road__tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 6px; }
+.ui-road__tile {
+  display: flex; align-items: center; gap: 5px; min-width: 0; box-sizing: border-box; padding: 4px 6px 4px 4px;
+  background: #fff; border: 2.5px solid var(--ui-ink); border-radius: 12px; box-shadow: 0 3px 0 var(--ui-ink);
+  animation: ui-rowIn .35s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(var(--i, 0) * 90ms + 300ms);
+}
+.ui-road__ico { width: 38px; height: 38px; flex: none; }
+.ui-road__ico svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.ui-road__txt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; text-align: left; }
+.ui-road__txt small { font-family: var(--ui-fd); font-size: 10.5px; line-height: 1; padding: 2px 5px 1px; border-radius: 5px; color: #fff; background: #17a466; }
+.ui-road__tile.is-warn small { background: #e08a00; }
+.ui-road__tile.is-bad small { background: var(--ui-red); }
+.ui-road__txt b { font-weight: 400; font-size: 13px; line-height: 1.18; word-break: keep-all; overflow-wrap: anywhere; }
+
+/* ───────────── v0.4 반응형 */
+@media (max-width: 640px) {
+  .ui-dock { gap: 6px; }
+  .ui-hp { gap: 6px; padding: 5px 10px 6px 6px; border-radius: 16px; }
+  .ui-hp__ico { width: 32px; height: 32px; border-radius: 9px; }
+  .ui-hp__ico svg { width: 23px; height: 23px; }
+  .ui-hp__l { font-size: 11.5px; gap: 5px; }
+  .ui-hp__n { font-size: 13px; }
+  .ui-hp__tag { font-size: 11px; padding: 1px 5px 0; }
+  .ui-hp__cell { width: 24px; height: 17px; }
+  .ui-hp__cells { gap: 4px; }
+  .ui-hp__dmg { font-size: 20px; }
+  .ui-toast { font-size: 15px; padding: 3px 12px 4px 4px; }
+  .ui-toast__ico { width: 22px; height: 22px; }
+  .ui-fail__art { height: 140px; }
+  .ui-fail__stamp { font-size: 38px; right: 8px; top: 8px; padding: 3px 11px 6px; border-width: 4px; }
+  .ui-fail__title { font-size: 23px; }
+  .ui-fail__reason { font-size: 19px; }
+  .ui-fail__btns { gap: 10px 8px; padding: 14px 10px 16px; }
+  .ui-fail__btns .ui-btn { font-size: 18px; padding: .56em 1.05em .6em; }
+  .ui-fail__btns .ui-fail__retry { font-size: 21px; flex-basis: 100%; max-width: 300px; }
+  .ui-road { margin: 4px 10px 2px; padding: 6px 6px 7px; }
+  .ui-road__tag { font-size: 13px; padding: 3px 7px 3px 3px; }
+  .ui-road__tag svg { width: 16px; height: 16px; }
+  .ui-road__vms.ui-vms { font-size: 14px; padding: 4px 8px 5px; margin-top: 7px; }
+  .ui-road__sub { font-size: 11px; }
+  .ui-road__tiles { gap: 5px; }
+  .ui-road__tile { flex-direction: column; gap: 3px; padding: 5px 3px 6px; text-align: center; }
+  .ui-road__txt { align-items: center; text-align: center; }
+  .ui-road__txt b { font-size: 12px; }
+  .ui-road__ico { width: 36px; height: 36px; }
+}
+.ui-root--touch .ui-hp { gap: 6px; padding: 5px 10px 6px 6px; }
+.ui-root--touch .ui-hp__ico { width: 32px; height: 32px; border-radius: 9px; }
+.ui-root--touch .ui-hp__ico svg { width: 23px; height: 23px; }
+.ui-root--touch .ui-hp__cell { width: 21px; height: 17px; }
+.ui-root--touch .ui-hp__cells { gap: 4px; }
+.ui-root--touch .ui-hp__l { font-size: 11.5px; }
+.ui-root--touch .ui-dock { gap: 6px; }
+/* 낮은 화면(폰 가로 · 낮은 데스크톱 창) */
+@media (max-height: 500px) and (min-width: 736px) { .ui-dock { flex-direction: row; align-items: flex-end; } }
+@media (max-height: 500px) {
+  .ui-root--touch .ui-dock { bottom: calc(var(--sab) + 14px); }
+  /* 실패 카드: 그림 왼쪽 · 사유+버튼 오른쪽 */
+  .ui-fail { padding-top: calc(var(--sat) + 8px); padding-bottom: calc(var(--sab) + 8px); }
+  .ui-fail__panel { width: min(720px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "head head" "art body" "art btns"; grid-template-rows: auto 1fr auto; }
+  .ui-fail__head { padding: 6px 12px 7px; }
+  .ui-fail__title { font-size: 22px; padding: 4px 14px 5px; }
+  .ui-fail__art { height: auto; min-height: 170px; border-bottom: 0; border-right: 4px solid var(--ui-ink); }
+  .ui-fail__body { justify-content: center; padding: 12px 14px 0; }
+  .ui-fail__btns { padding: 10px 12px 14px; }
+  .ui-fail__btns .ui-fail__retry { flex-basis: auto; font-size: 20px; }
+  /* 도로 상황이 붙은 시작 카드: 왼쪽 = 빌런 소개, 오른쪽 = 도로 상황 + 별 미션 */
+  .ui-card__panel.has-road { width: min(800px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); grid-template-areas: "sign sign" "body road" "body mis" "tap tap" "timer timer"; grid-template-rows: auto auto 1fr auto auto; }
+  .ui-card__panel.has-road > .ui-sign--card { grid-area: sign; }
+  .ui-card__panel.has-road > .ui-card__body { grid-area: body; justify-content: center; }
+  .ui-card__panel.has-road > .ui-card__mis { grid-area: mis; align-self: start; margin: 8px 12px 4px 0; }
+  .ui-card__panel.has-road > .ui-card__tap { grid-area: tap; }
+  .ui-card__panel.has-road > .ui-card__timer { grid-area: timer; }
+  .ui-card__panel.has-road > .ui-road { margin: 8px 12px 0 0; padding: 5px 6px 6px; }
+  .ui-card__panel.has-road.has-honk .ui-card__line { display: block; }
+  .ui-road__head { margin-bottom: 5px; }
+  .ui-road__vms.ui-vms { margin-top: 6px; font-size: 14px; padding: 3px 8px 4px; }
+  .ui-road__ico { width: 32px; height: 32px; }
+  .ui-road__txt b { font-size: 12px; }
+}
+/* 낮은 데스크톱 (1280×720 등): 도로 상황 + 미션 카드가 한 화면에 들어가게 위 여백을 줄임 */
+@media (min-width: 641px) and (min-height: 501px) and (max-height: 820px) {
+  .ui-card.has-road { padding-top: calc(var(--sat) + 2.5vh); }
+  .ui-card__panel.has-road.has-mis .ui-card__blurb { display: none; }
+}
+
+@keyframes ui-hpWarn { 0%, 100% { box-shadow: 0 4px 0 var(--ui-ink), 0 0 0 3px #ffb400; } 50% { box-shadow: 0 4px 0 var(--ui-ink); } }
+@keyframes ui-hpDanger { from { box-shadow: 0 4px 0 var(--ui-ink), 0 0 0 3px rgba(255, 59, 48, .95); } to { box-shadow: 0 4px 0 var(--ui-ink), 0 0 0 8px rgba(255, 59, 48, .3); } }
+@keyframes ui-hpBeat { 0%, 100% { opacity: .18; } 12% { opacity: .9; } 24% { opacity: .35; } 36% { opacity: .75; } 62% { opacity: .18; } }
+@keyframes ui-failDrive { 0% { transform: translateX(150px); } 70% { transform: translateX(-6px); } 100% { transform: none; } }
+@keyframes ui-failSteam { 0% { transform: translateY(6px) scale(.5); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(-10px) scale(1.15); opacity: 0; } }
+@keyframes ui-failDizzy { to { transform: rotate(360deg); } }
+
 /* ───────────── 키프레임 */
 @keyframes ui-spin { to { rotate: 360deg; } }
 @keyframes ui-fadeIn { from { opacity: 0; } }
@@ -1999,4 +2262,5 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
     transition-duration: .01ms !important;
   }
   .ui-vignette.is-hot .ui-vignette__pulse { animation: none !important; }
+  .ui-root--hud .ui-hpvig.is-on { animation: none !important; opacity: .5; }
 }

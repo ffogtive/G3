@@ -73,6 +73,7 @@ export class Player {
   requestLane(dir, traffic) {
     const tl = this.lane + dir;
     if (tl < 0 || tl > MAX_LANE) { this._wiggle(dir); return 'edge'; }
+    if (tl === SHOULDER_LANE && this.shoulderClosed) { this._wiggle(dir); return 'closed'; }   // 갓길 폐쇄·터널
     if (this.lcT < 0.65) return 'busy';
     if (!this.ghost && traffic) {
       const blocker = traffic.canMergeInto ? traffic.canMergeInto(tl, this) : traffic.laneBlocked(tl, this.s - this.len / 2 - 0.35, this.s + this.len / 2 + 0.35, this);

@@ -71,6 +71,8 @@ export class Traffic {
     for (const c of this.cars) this.scene.remove(c.mesh);
     for (const c of this.opp) this.scene.remove(c.mesh);
     for (const o of this.obstacles) this.scene.remove(o.mesh);
+    for (const d of this.decor || []) this.scene.remove(d);
+    this.decor = [];
     this.cars.length = 0;
     this.opp.length = 0;
     this.obstacles.length = 0;
@@ -111,6 +113,10 @@ export class Traffic {
     this.night = night;
     this.rng = rng;
     this.nextCheater = null;   // 스테이지마다 첫 얌체는 시작 후 6초 뒤 (G.time은 전역 시계라 이전 판 마감이 남으면 안 됨)
+    // 접근 규칙 (판별): 갓길 모드 · 끼워주기 틈 검사 · 경적 피로 · 고무줄
+    this.approach = { ...TUNE.approach, ...(stage.approach || {}) };
+    this.shoulderClosed = ['closed', 'none'].includes(this.approach.shoulder);
+    this.stuckFor = 0;
     const sFront = Math.max(...villains.map((v) => v.s));
     this.frontLine = sFront;
     this.frontV = stage.jamSpeed;
@@ -157,22 +163,34 @@ export class Traffic {
       }
     }
 
-    // ③ 갓길: 장애물 + 얌체
-    const spec = stage.shoulder || [['breakdown', 1], ['cones', 1], ['cheater', 1]];
+    // ③ 갓길: 장애물 + 얌체 (갓길 모드별)
+    const mode = this.approach.shoulder;
+    let spec = stage.shoulder || [['breakdown', 1], ['cones', 1], ['cheater', 1]];
+    if (this.shoulderClosed) spec = [];                                        // 폐쇄·터널: 갓길로 못 감
+    else if (mode === 'crowded') spec = [...spec.filter(([k]) => k !== 'cheater'), ['cheater', 3]];
+    else if (mode === 'dark') spec = [['debris', 3], ['breakdown', 1], ['cheater', 1]];   // 무등화 낙하물
+    else if (mode === 'debris') spec = [['debris', 4], ['cheater', 1]];
     const list = [];
     for (const [k, n] of spec) for (let i = 0; i < n; i++) list.push(k);
+    if (mode === 'closed') this._buildShoulderBarrier(playerStart.s - 20, sFront + 30);
+    if (mode === 'blocked') {
+      // 갓길 중간 60m 공사 구간: 콘이 줄지어 있어 날리면 콘마다 내구도 −5
+      const b0 = playerStart.s + (sFront - playerStart.s) * 0.45;
+      for (let k = 0; k < 5; k++) list.push({ kind: 'cones', at: b0 + k * 12 });
+    }
     // 섞기
     for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
     const s0 = playerStart.s + 38, s1 = sFront - 22;
     const step = (s1 - s0) / Math.max(1, list.length);
-    list.forEach((kind, i) => {
-      const s = s0 + step * (i + 0.25 + rng() * 0.5);
+    list.forEach((item, i) => {
+      const kind = typeof item === 'string' ? item : item.kind;
+      const s = typeof item === 'string' ? s0 + step * (i + 0.25 + rng() * 0.5) : item.at;
       if (kind === 'cheater') {
         const c = this._makeCar(rng, pickWeighted(rng, [['sedan', 3], ['suv', 2], ['compact', 1]]), SHOULDER_LANE, s, 4.5, { isCheater: true });
         c.cheaterV = 4 + rng() * 2.5;
         return;
       }
-      const ob = buildShoulderObstacle(kind, rng);
+      const ob = buildShoulderObstacle(kind, rng, { dark: mode === 'dark' });
       ob.group.position.set(laneX(SHOULDER_LANE) - 0.1, 0, -s);
       this.scene.add(ob.group);
       const e = { id: CAR_ID++, kind, mesh: ob.group, s, x: laneX(SHOULDER_LANE) - 0.1, len: ob.len, w: ob.w, v: 0, isObstacle: true, hazardCar: ob.hazardCar, smash: kind !== 'breakdown' };
@@ -460,12 +478,17 @@ export class Traffic {
 
   // 갇힘 보조: 1.6초 이상 거의 못 움직이면, 진행하고 싶은 옆 차선이 자리를 내준다
   _stuckAssist(dt, player) {
-    if (player.v < 2.5 && player.mode === 'jam') this.stuckT = (this.stuckT || 0) + dt;
-    else this.stuckT = Math.max(0, (this.stuckT || 0) - dt * 2);
-    if (this.stuckT < 1.2) return;
+    const A = this.approach || TUNE.approach;
+    if (player.v < 2.5 && player.mode === 'jam') { this.stuckT = (this.stuckT || 0) + dt; this.stuckFor = (this.stuckFor || 0) + dt; }
+    else { this.stuckT = Math.max(0, (this.stuckT || 0) - dt * 2); this.stuckFor = 0; }
+    if (this.stuckT < (A.rubber ?? 2.5)) return;
     this.stuckT = 0;
-    const tl = player.lane === SHOULDER_LANE ? NUM_LANES - 1 : Math.min(SHOULDER_LANE, player.lane + 1);
-    this.letIn(tl, player);
+    let tl = player.lane === SHOULDER_LANE ? NUM_LANES - 1 : Math.min(SHOULDER_LANE, player.lane + 1);
+    if (tl === SHOULDER_LANE && this.shoulderClosed) tl = NUM_LANES - 1 === player.lane ? player.lane - 1 : tl - 1;
+    // 고무줄: 판별 틈만 여는 게 원칙이지만, 4초 넘게 못 움직이면 가장 가까운 틈을 강제로 연다 (소프트락 방지)
+    const force = !A.gapCheck || this.stuckFor > (A.rubberSafety ?? 4);
+    if (force || this._hasGap(tl, player)) this.letIn(tl, player, { force: true });
+    else if (player.lane < NUM_LANES && this.stuckFor > 1) this._pullAhead(player);
     this.assists = (this.assists || 0) + 1;
     // 갓길 고장차 옆에서 정체가 얼어붙으면(정차형 빌런 판) 끼워줄 틈이 영영 안 생긴다 → 두 번 갇히면 레커 출동·견인
     if (player.lane >= NUM_LANES - 1) {
@@ -477,13 +500,54 @@ export class Traffic {
     }
   }
 
+  _hasGap(tl, player) {
+    const need = (player.len || 4.2) + 1.0;
+    let ahead = null, behind = null;
+    for (const o of this.buckets[tl] || []) {
+      if (o === player) continue;
+      if (o.s >= player.s) { if (!ahead || o.s < ahead.s) ahead = o; }
+      else if (!behind || o.s > behind.s) behind = o;
+    }
+    const front = ahead ? ahead.s - ahead.len / 2 : Infinity;
+    const back = behind ? behind.s + behind.len / 2 : -Infinity;
+    if (front - back < need) return false;
+    // 틈이 내 위치 ±6m 안에 걸쳐 있어야
+    return front > player.s - 6 && back < player.s + 6;
+  }
+
+  // 갓길 폐쇄: 콘 + 방호벽 띠 (장식, 충돌 없음 — 플레이어가 갓길로 못 들어감)
+  _buildShoulderBarrier(sA, sB) {
+    const g = new THREE.Group();
+    const rng = this.rng || Math.random;
+    for (let s = sA; s < sB; s += 6) {
+      const ob = buildShoulderObstacle('cones', rng);
+      ob.group.position.set(laneX(SHOULDER_LANE) - 1.2, 0, -s);
+      ob.group.scale.set(1, 1, 0.5);
+      g.add(ob.group);
+    }
+    this.scene.add(g);
+    this.decor = this.decor || [];
+    this.decor.push(g);
+  }
+
+  // 내 차로 앞차들을 살짝 당겨 숨통 (강제 개방 전 단계)
+  _pullAhead(player) {
+    for (const o of this.buckets[player.lane] || []) {
+      if (!this.cars.includes(o) || o.isWall || o.released) continue;
+      const d = o.s - player.s;
+      if (d > 0 && d < 18) { o.pullT = Math.max(o.pullT, 1.2); }
+    }
+  }
+
   // 구조형 마무리: 원인 차량이 갓길로 빠질 때 그 사이 차로의 앞줄 벽이 뒤로 물러나 길을 터 줌
   dropWalls(lanes, meters = 9) {
     for (const c of this.cars) if (c.isWall && lanes.includes(c.lane)) c.wallBack = meters;
   }
 
   // 차선 tl 이 플레이어 옆에 자리를 만든다: 앞쪽 차는 살짝 당기고 뒤쪽 차는 멈칫
-  letIn(tl, player) {
+  letIn(tl, player, opts = {}) {
+    // 실제 틈 검사: 목표 차로 ±6m 안에 (내 차 길이 + 1m) 이상의 틈이 있어야 끼워준다 (고무줄 강제 개방은 예외)
+    if (this.approach?.gapCheck && !opts.force && !this._hasGap(tl, player)) return null;
     let who = null;
     for (const o of this.buckets[tl] || []) {
       if (!this.cars.includes(o) || o.isWall || o.released) continue;
@@ -536,7 +600,7 @@ export class Traffic {
       // 갓길 얌체 → 4차선으로 복귀 (4차선 뒤차가 멈칫해서 자리 줌)
       // 갓길에 완전히 들어온 얌체만 (진입·복귀 중엔 순간이동·이중 보상 방지 — rageHorn과 같은 가드)
       if (who && who.isCheater && who.lcT >= 1 && who.lane === SHOULDER_LANE && gap < (opts.siren ? 50 : 30)) {
-        this.letIn(NUM_LANES - 1, who);
+        this.letIn(NUM_LANES - 1, who, { force: true });
         this._startLaneChange(who, NUM_LANES - 1, 1.1);
         who.cheaterV = 0;
         return { car: who, kind: 'cheater' };
@@ -549,6 +613,12 @@ export class Traffic {
       return null;
     }
     if (!who || gap > range - 2 || !who.mesh || who.released) return null;
+    // 경적 피로: 같은 차에 2번째는 절반만, 3번째부터 무시('또 빵?'). 8초마다 한 단계 풀림
+    if (this.approach?.fatigue && this.cars.includes(who)) {
+      if (who.honkT && this.time - who.honkT > 8) who.honkN = Math.max(0, (who.honkN || 0) - 1);
+      who.honkN = (who.honkN || 0) + 1; who.honkT = this.time;
+      if (who.honkN >= 3 || (who.honkN === 2 && this.rng() < 0.5)) return { car: who, kind: 'tired' };
+    }
     // 앞차가 옆으로 비켜줄 수 있으면 비켜줌
     if (this.cars.includes(who) && !who.isWall && who.lcT >= 1) {
       const opts = [who.lane - 1, who.lane + 1].filter((l) => l >= 0 && l < NUM_LANES);
@@ -567,6 +637,8 @@ export class Traffic {
     const out = { smashed: [], towed: [], cheaters: [], startled: [] };
     for (const o of [...this.obstacles]) {
       if (o.s < s0 || o.s > s1) continue;
+      // 콘·낙하물만 날린다. 고장차는 경적으로 사라지지 않음 (레커 장착 또는 '지인 주차' 판만 견인)
+      if (!o.smash && !(this.approach?.shoulder === 'occupied' || player.stats?.tow)) continue;
       this.obstacles.splice(this.obstacles.indexOf(o), 1);
       (o.smash ? out.smashed : out.towed).push(o);
     }
@@ -574,7 +646,7 @@ export class Traffic {
       if (c.released) continue;
       if (c.s < s0 || c.s > s1) continue;
       if ((c.isCheater || c.lane === SHOULDER_LANE) && c.lcT >= 1) {
-        this.letIn(NUM_LANES - 1, c);
+        this.letIn(NUM_LANES - 1, c, { force: true });
         this._startLaneChange(c, NUM_LANES - 1, 0.7);
         c.cheaterV = 0;
         out.cheaters.push(c);

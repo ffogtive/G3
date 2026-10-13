@@ -232,6 +232,9 @@ export const MINI_TYPES = {
 // 게임플레이 튜닝 값 (main/player/boss/weapons 공유)
 export const TUNE = {
   // v0.4 내구도(범퍼 5칸). 수치는 가설 ❓ — docs/V04_SPEC.md '플레이어 HP'
+  honkCool: 1.0,            // v0.4: 0.3 → 1.0 (빵 연타 만능 제거)
+  // 접근 규칙 기본값 (판별 stage.approach가 덮어씀). docs/V04_SPEC.md '접근 다양화'
+  approach: { shoulder: 'open', honk: 'yield', gapCheck: true, fatigue: true, rubber: 2.5, rubberSafety: 4.0, rageHorn: 24 },
   hp: {
     max: 100, tier: { light: 10, mid: 20, heavy: 30, fatal: 40 },
     jamFloor: 20,            // 정체 구간(원흉 정면전 전)에선 1칸 아래로 안 떨어짐 → 원흉 만나기 전 사망 없음

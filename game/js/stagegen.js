@@ -73,6 +73,20 @@ const WIDE_MV = new Set(['straddle', 'wide_load']);
 const mvOf = (m) => String(m || 'lane_cruise').replace(/^NEW:/, '');
 
 // v0.4 시그니처 행동 모듈 (docs/V04_SPEC.md). 1챕터부터 판별 모듈을 붙이고, 나머지는 패밀리 매핑으로 확장
+// 1챕터 접근 매트릭스 (갓길 모드 / 경적 의미 / 시작 카드 힌트). '갓길+빵'이 정답인 판은 1-1 하나뿐
+export const APPROACH_BY_ID = {
+  1: { shoulder: 'open', honk: 'yield', gapCheck: false, fatigue: false, rubber: 1.2, hint: '튜토리얼: 갓길 + 경적이 통하는 유일한 판 (1차로 기차 차량은 안 비켜줌)' },
+  2: { shoulder: 'open', honk: 'gapRace', hint: '경적으로 연 틈은 0.8초 안에 들어가야 내 것' },
+  3: { shoulder: 'crowded', honk: 'backfire', hint: '수다 듀오 근처에서 경적 = 역효과. 조용히 기다리면 4차로가 끼워줌' },
+  4: { shoulder: 'blocked', honk: 'push', hint: '갓길 중간 공사 구간. 안개 속 차선물기를 경적으로 밀어내기' },
+  5: { shoulder: 'closed', honk: 'ignoredWhileYielding', hint: '갓길 폐쇄. 좀비 깜빡이에 양보하느라 멈칫한 1차로 틈을 노려라' },
+  6: { shoulder: 'dark', honk: 'rescue', hint: '밤 갓길엔 무등화 낙하물. 경적 = 피해차 구출 교대' },
+  7: { shoulder: 'watched', honk: 'normal', hint: '갓길 단속 카메라 지점 주의. 카메라 매듭 안에선 경적 무효' },
+  8: { shoulder: 'merge', honk: 'bait', hint: '갓길이 합류차로. 경적 = 남의 깜빡이를 켜게 하는 미끼' },
+  9: { shoulder: 'debris', honk: 'notify', hint: '갓길 낙하물 지대. 경적 = 알림음(폰을 보게 만듦)' },
+  10: { shoulder: 'occupied', honk: 'evict', fatigue: true, hint: '갓길 지인 주차. 경적 2회 = 세입자 퇴거 통보' },
+};
+
 export const SIG_BY_ID = {
   1: 'occupy', 2: 'cutin_snap', 3: 'duo_link', 4: 'straddle_mirror', 5: 'blinker_liar',
   6: 'tailgater', 7: 'speed_kangaroo', 8: 'merge_reflex', 9: 'phone_drift', 10: 'landlord',
@@ -248,6 +262,7 @@ export function stageFromEntry(e) {
     newAssets: e.new_assets || [],
     wrongWay: mvOf(e.movement) === 'wrong_way',
     sig: e.sig || SIG_BY_ID[e.id] || null,
+    approach: e.approach || APPROACH_BY_ID[e.id] || null,
   };
   return stage;
 }
@@ -280,7 +295,7 @@ export function buildStages(catalog, handmade = []) {
         ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id, frontRow: fillFrontRow(hm),
         zig: hm.zig ?? !!hm.attacks?.zigzag, zigCenter: hm.zigCenter ?? (hm.attacks?.zigzag ? 1 : undefined),
         fine: g.fine, payout: g.payout, card: g.card, violation: g.violation,
-        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty, sig: g.sig,
+        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty, sig: g.sig, approach: g.approach,
       });
     } else out.push(stageFromEntry(e));
   }

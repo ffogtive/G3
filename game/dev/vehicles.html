@@ -37,6 +37,13 @@
 //            &side=mix|left|right|hazard|off  &cam=chase|boss  &anim=1(실제 0.33s 점멸)  &brake=0
 //        | bikes (v0.4: 폭주족 바이크 4종 뒤/앞 + 라이더 포즈 8종 + 삼각별 세단 + 넘어짐/들이받기 조합; &rows=0123)
 //        | tunnel (v0.4: 터널 안 정체 + 폭주족 + 삼각별 세단. &cam=chase(기본)|portal(입구 접근)|inside(안쪽 낮은 캠)|all(3분할))
+//  v0.4.1 (단계 4·10·13·17 + 부록 A)
+//        | steer (깜빡이 템포·빌런 후광·앞바퀴 조향: 0 = 추격캠 깜빡이(보통/하이퍼/후광×1.8) / 1 = 앞 3/4 조향 ±30° / 2 = 위에서 조향 각 + 비detailed 차체 요 2°)
+//        | stage56 (1-5·1-6 전용: 초보운전 경차·암행순찰차(꺼짐/켜짐)·갓길 추돌사고 현장)  &anim=1 → 스트로브·비상등 점멸
+//        | violators (숨은 위반: 번호판 normal/none/covered/temp 를 바짝 뒤(&gap=4.5)·멀리 35m 추격캠으로 + 승합차 머릿수(&pax=5,6) 옆 나란히(&vcam=boss|chase|side))
+//        | damage (setDamage 0~4 × 플레이어 4종, 추격캠 뒤 + L2·L4 앞 3/4)
+//        | props1 (1챕터 판 소품: 단속 갠트리·천사링·날개·뿔·자·합류 테이퍼·비상주차대·낙하물·임대 깃발·노면 데칼·빗길)
+//        | p1 (메아리터널 마감: 바이크 LOD·하차/달리기·킥스탠드·리더 깃대·회장님 세단·천장등 제어)
 //  ?off=x,y,z (카메라 방향 오프셋 강제)  ?car=playerPatrol (items 피니시 조합 / jam 의 플레이어 차)
 //  ?night=1  ?brake=1 ?hazard=1 ?head=1 ?flash=0..1 ?detailed=1(NPC도 detailed) ?anim=1(바퀴/비상등 애니)
 //  ?kinds=sedan,bus  ?proj=0(투사체 줄 숨김)  ?stats=1(콘솔/하단 요약)  ?stage=N (jam 뷰 원흉)  ?seed=N
@@ -66,7 +73,7 @@ const sky = night ? SKY.night : SKY.day;
 // ── UI
 const ui = document.getElementById('ui');
 const base = new URLSearchParams(location.search);
-for (const v of ['rear', 'boss', 'intro', 'front', 'side', 'top', 'lineup', 'jam', 'items', 'blinker', 'bikes', 'tunnel']) {
+for (const v of ['rear', 'boss', 'intro', 'front', 'side', 'top', 'lineup', 'jam', 'items', 'blinker', 'bikes', 'tunnel', 'steer', 'stage56', 'violators', 'damage', 'props1', 'p1']) {
   const p = new URLSearchParams(base); p.set('view', v);
   const a = document.createElement('a'); a.href = '?' + p; a.textContent = v; if (v === view) a.className = 'on'; ui.appendChild(a);
 }
@@ -594,12 +601,141 @@ function renderTunnel() {
   V.MAT.blinkHalo.size = HALO;
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// v0.4.1 뷰: steer / stage56 / violators / damage / props1 / p1
+// ════════════════════════════════════════════════════════════════════════
+const animHooks = [];   // anim=1 일 때 매 프레임 f(t)
+let stations = null;    // [{ cam, x, y, w, h (화면 비율), focus:[x,z] }] — 한 씬을 여러 카메라로 분할 렌더
+function renderStations() {
+  const W = innerWidth, H = innerHeight;
+  renderer.setScissorTest(true);
+  for (const st of stations) {
+    const x = st.x * W, y = st.y * H, w = st.w * W, h = st.h * H;
+    st.cam.aspect = w / h; st.cam.updateProjectionMatrix();
+    if (st.amb !== undefined) applyAmbience(st.amb);
+    aimSun(st.focus[0], st.focus[1], st.sun || 45);
+    V.MAT.blinkHalo.size = HALO * (h / H);
+    renderer.setViewport(x, H - y - h, w, h); renderer.setScissor(x, H - y - h, w, h);
+    renderer.render(scene, st.cam);
+  }
+  V.MAT.blinkHalo.size = HALO;
+}
+function stationLabels() {
+  for (const st of stations) {
+    const el = document.createElement('div'); el.className = 'lb'; el.innerHTML = st.label || '';
+    el.style.left = st.x * innerWidth + 4 + 'px'; el.style.top = st.y * innerHeight + 4 + 'px'; labels.appendChild(el);
+  }
+}
+// 게임 추격캠 / 보스캠 (main.js 와 같은 오프셋) — 스테이션 원점 (ox, oz) 기준, 플레이어 (px, pz)
+function stCam(ox, px, pz, mode = 'chase') {
+  const cam = new THREE.PerspectiveCamera(mode === 'boss' ? 46 : 42, 1, 0.5, 1400);
+  if (mode === 'boss') { cam.position.set(ox + px * 0.4 + 3.4, 11.5, pz + 12); cam.lookAt(ox + px * 0.45, 0.6, pz - 10.5); }
+  else if (mode === 'side') { cam.position.set(ox + px + 4.5, 4.2, pz + 7.5); cam.lookAt(ox + px - 2.6, 1.2, pz - 1.0); }
+  else { cam.position.set(ox + px * 0.45 + 2.4, 12.5, pz + 16); cam.lookAt(ox + px * 0.6, 0.4, pz - 11); }
+  return cam;
+}
+function stationRoad(ox, len = 160, cz = -50) { const r = makeRoad(40, len, cz); r.position.x = ox; scene.add(r); return r; }
+const colorOf = (k) => VILLAIN_COLOR[k] ?? (k === 'sedan' ? 0xf4f4f2 : k === 'compact' ? 0xd8342c : k === 'suv' ? 0x2b2d31 : k === 'van' ? 0xe9ecef : k === 'truck' ? 0xf4f4f2 : k === 'bus' ? 0x2f6fd6 : undefined);
+
+// ── ?view=steer : 0 = 추격캠 깜빡이 (보통 / 하이퍼 / 빌런 후광 ×1.8) · 1 = 앞 3/4 조향 ±30° · 2 = 위에서 (조향 각 / 비detailed 차체 요)
+function setupSteer() {
+  scene.add(makeRoad(60, 80));
+  const rowsOn = (Q.get('rows') || '012').split('').map(Number);
+  const add = (name, obj, row, off, rowW = 1) => { if (!rowsOn.includes(row)) return obj; scene.add(obj); entries.push({ kind: name, obj, row, off: Q.has('off') ? null : off, rowW, isProj: true, combo: true }); return obj; };
+  const B0 = [['player', 'left', 1, 1], ['villainSuv', 'left', 1, 1.8], ['villainSuv', 'left', 2, 1.8], ['sedan', 'right', 2, 1], ['motorbike', 'left', 1, 1.8], ['beginner', 'hazard', 1, 1]];
+  for (const [k, side, tempo, halo] of B0) {
+    const v = V.buildVehicle(k, { color: colorOf(k) });
+    v.userData.__bl = { side, tempo, halo };
+    V.setBlinker(v, side, true, { tempo, halo });
+    add(`${k} ${side} ${tempo === 2 ? '하이퍼 1/3s' : '보통 2/3s'}${halo !== 1 ? ' 후광×' + halo : ''}`, v, 0, OFFS.rear, 1.15);
+  }
+  const S1 = [['player', 1], ['villainSuv', -1], ['playerPorter', 1], ['motorbike', 1], ['starSedan', -1], ['tractor', 1]];
+  for (const [k, sg] of S1) { const v = V.buildVehicle(k, { color: colorOf(k) }); v.userData.__steer = sg; V.setSteer(v, sg * V.STEER_MAX); add(`${k} steer ${sg > 0 ? '왼 +30°' : '오 −30°'}`, v, 1, OFFS.front, 1.0); }
+  const S2 = [['player', 1, false], ['villainSuv', -1, false], ['sedan', 1, true], ['sedan', 0, true], ['taxi', -1, true]];
+  for (const [k, sg, nd] of S2) { const v = V.buildVehicle(k, { color: colorOf(k), detailed: nd ? false : undefined }); v.userData.__steer = sg; V.setSteer(v, sg * V.STEER_MAX); add(`${k}${nd ? ' (비detailed 요 2°)' : ''} ${sg ? (sg > 0 ? '+30°' : '−30°') : '0°'}`, v, 2, OFFS.top, 0.9); }
+  animHooks.push((t) => {
+    for (const e of entries) {
+      const u = e.obj.userData;
+      if (u.__bl) V.setBlinker(e.obj, u.__bl.side, t, { tempo: u.__bl.tempo });
+      if (u.__steer !== undefined) V.setSteer(e.obj, (u.__steer || 1) * V.STEER_MAX * Math.sin(t * 1.6));
+    }
+  });
+  applyLights(); layout();
+}
+
+// ── ?view=stage56 : 1-5·1-6 전용 차량 (0 = 추격캠 뒤 / 1 = 앞·옆 + 사고 현장)
+function setupStage56() {
+  scene.add(makeRoad(60, 80));
+  const add = (name, obj, row, off, rowW = 1) => { scene.add(obj); entries.push({ kind: name, obj, row, off, rowW, isProj: true, combo: true }); return obj; };
+  const b0 = add('beginner v0 (모닝형)', V.buildVehicle('beginner', { variant: 0 }), 0, OFFS.rear, 1.1);
+  const b1 = add('beginner v1 (박스형) 비상등', V.buildVehicle('beginner', { variant: 1 }), 0, OFFS.rear, 1.1); b1.userData.__hz = true;
+  add('unmarked 꺼짐 (평범)', V.buildVehicle('unmarked'), 0, OFFS.rear, 1.1);
+  const u1 = add('unmarked 점등 setStrobe', V.buildVehicle('unmarked'), 0, OFFS.rear, 1.1); V.setStrobe(u1, true); u1.userData.__st = true;
+  const u2 = add('unmarked detailed 점등 (앞)', V.buildVehicle('unmarked', { detailed: true }), 1, OFFS.front, 0.9); V.setStrobe(u2, true); u2.userData.__st = true;
+  add('beginner detailed (겁먹은 운전자)', V.buildVehicle('beginner', { detailed: true }), 1, [-4.5, 2.4, -6], 0.9);
+  const cs = V.buildFxProp('crashScene'); add('crashScene 갓길 추돌 (추격캠)', cs, 1, [2.4, 12.5, 16], 1.3);
+  const cs2 = V.buildFxProp('crashScene'); add('crashScene (앞·옆)', cs2, 1, [-9, 5, -12], 1.3);
+  animHooks.push((t) => {
+    for (const e of entries) { const u = e.obj.userData; if (u.__st) V.setStrobe(e.obj, t); if (u.__hz) V.setHazard(e.obj, Math.floor(t * 2.4) % 2 === 0); if (u.update) u.update(t); }
+  });
+  applyLights();
+  for (const e of entries) if (e.obj.userData.__st) V.setStrobe(e.obj, true);
+  layout();
+}
+
+// ── ?view=violators : 숨은 위반 차량 (게임 추격캠 그대로, 스테이션 4개)
+function setupViolators() {
+  stations = [];
+  const plates = [['sedan', 'normal'], ['sedan', 'none'], ['suv', 'covered'], ['sedan', 'temp']];
+  const near = +(Q.get('gap') || 4.5);
+  [[0, near, '바짝 뒤 ' + near + 'm (구분돼야 함)'], [100, 35, '멀리 35m (티 안 나야 함)']].forEach(([ox, gap, lb], i) => {
+    stationRoad(ox);
+    const pl = V.buildVehicle(Q.get('car') || 'player'); pl.position.set(ox + laneX(1), 0, 0); scene.add(pl); V.setBrake(pl, true);
+    plates.forEach(([k, plate], l) => {
+      const v = V.buildVehicle(k, { color: [0xf4f4f2, 0x9aa1a9, 0x2b2d31, 0x2a5db0][l], plate, seed: l });
+      v.position.set(ox + laneX(l), 0, -(gap + 2.1 + v.userData.length / 2)); scene.add(v); jamCars.push(v); V.setBrake(v, state.brake);
+      if (gap < 10) { const el = document.createElement('div'); el.className = 'lb'; el.textContent = plate; el.dataset.anchor = 1; v.userData.__label = plate; }
+    });
+    stations.push({ cam: stCam(ox, laneX(1), 0), x: (i % 2) * 0.5, y: 0, w: 0.5, h: 0.5, focus: [ox, -20], label: `<b>번호판 ${lb}</b>  1차로 normal · 2차로 none · 3차로 covered · 4차로 temp` });
+  });
+  const vans = Q.has('pax') ? Q.get('pax').split(',').map(Number) : [5, 6];
+  vans.forEach((n, i) => {
+    const ox = 200 + i * 100; stationRoad(ox);
+    const pl = V.buildVehicle(Q.get('car') || 'player'); pl.position.set(ox + laneX(1), 0, 0); scene.add(pl);
+    const van = V.buildVehicle('van', { color: [0xe9ecef, 0x2b2d31, 0x9aa1a9][i % 3], passengers: n }); van.position.set(ox + laneX(0), 0, -0.6); scene.add(van); jamCars.push(van);
+    for (const [l, z] of [[0, -9], [0, 8], [2, -3], [3, -6]]) { const c = V.buildVehicle('sedan', { color: 0xf4f4f2, seed: l + z }); c.position.set(ox + laneX(l), 0, z); scene.add(c); jamCars.push(c); }
+    const bl = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 150), new THREE.MeshLambertMaterial({ color: 0x3a6fd0, transparent: true, opacity: 0.25 })); bl.rotation.x = -Math.PI / 2; bl.position.set(ox + laneX(0), 0.015, -50); scene.add(bl);
+    stations.push({ cam: stCam(ox, laneX(1), 0, Q.get('vcam') || 'boss'), x: (i % 2) * 0.5, y: 0.5, w: 0.5, h: 0.5, focus: [ox, -5], label: `<b>버스전용차로 승합 ${n}명 ${n < 6 ? '(위반)' : '(합법)'}</b> — 옆 나란히 (보스캠)` });
+  });
+  scene.fog = new THREE.Fog(sky.fog, sky.fogNear, sky.fogFar);
+  applyLights(); stationLabels();
+}
+
+// ── ?view=damage : setDamage 0~4 × 플레이어 4종 (추격캠 뒤) + L4 앞 3/4
+function setupDamage() {
+  scene.add(makeRoad(60, 80));
+  const kinds2 = Q.has('kinds') ? kinds : SHOP_CARS;
+  kinds2.forEach((k, ri) => {
+    for (let L = 0; L <= 4; L++) { const v = V.buildVehicle(k, { detailed: true }); V.setDamage(v, L); scene.add(v); entries.push({ kind: `${k} L${L}`, obj: v, row: ri, off: OFFS.rear, isProj: true, combo: true }); }
+    for (const L of [2, 4]) { const v = V.buildVehicle(k, { detailed: true }); V.setDamage(v, L); scene.add(v); entries.push({ kind: `${k} L${L} 앞`, obj: v, row: ri, off: OFFS.front, isProj: true, combo: true }); }
+  });
+  applyLights(); layout();
+}
+function setupProps1() { setupTiles(); }
+function setupP1() { setupTiles(); }
+
 if (view === 'jam') setupJam();
 else if (view === 'lineup') setupLineup();
 else if (view === 'items') setupItems();
 else if (view === 'blinker') { jamCars = []; setupBlinker(); }
 else if (view === 'bikes') setupBikes();
 else if (view === 'tunnel') { jamCars = []; setupTunnel(); }
+else if (view === 'steer') setupSteer();
+else if (view === 'stage56') setupStage56();
+else if (view === 'violators') { jamCars = []; setupViolators(); }
+else if (view === 'damage') setupDamage();
+else if (view === 'props1') { jamCars = []; setupProps1(); }
+else if (view === 'p1') { jamCars = []; setupP1(); }
 else setupTiles();
 
 let last = performance.now();
@@ -623,7 +759,9 @@ function frame(now) {
   }
   if (dirty) {
     renderer.setScissorTest(view !== 'jam' && view !== 'lineup' && view !== 'blinker');
-    if (view === 'tunnel') renderTunnel();
+    if (state.anim && animHooks.length) { const t = now / 1000; for (const f of animHooks) f(t); }
+    if (stations) renderStations();
+    else if (view === 'tunnel') renderTunnel();
     else if (view === 'blinker') { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, fullCam); }
     else if (view === 'jam') { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, jamCam); }
     else if (view === 'lineup') { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, lineupCam); }
@@ -633,7 +771,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (view !== 'jam' && view !== 'lineup' && view !== 'blinker' && view !== 'tunnel') layout(); if (fullCam) { fullCam.aspect = innerWidth / innerHeight; fullCam.updateProjectionMatrix(); } dirty = true; });
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (!stations && view !== 'jam' && view !== 'lineup' && view !== 'blinker' && view !== 'tunnel') layout(); if (fullCam) { fullCam.aspect = innerWidth / innerHeight; fullCam.updateProjectionMatrix(); } dirty = true; });
 // 폰트 로드 후 (꿀수박 간판) 다시 그리기
 document.fonts?.ready.then(() => { dirty = true; });
 </script>

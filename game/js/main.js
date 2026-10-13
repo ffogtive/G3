@@ -247,7 +247,7 @@ function rageHorn() {
   ui.flash('#ffd23a', 120);
   ui.banner('분노의 경적!!', 'warn', 900);
   for (let i = 0; i < 4; i++) fx.shockwave(new THREE.Vector3(laneX(SHOULDER_LANE) - 1.2, 0.1, -(player.s + 6 + i * 10)), 9 + i * 2.5, 0xffd23a);
-  const r = traffic.rageHorn(player, TUNE.rageHornRange);
+  const r = traffic.rageHorn(player, traffic.approach?.rageHorn ?? TUNE.rageHornRange);
   for (const o of r.smashed) flingObstacle(o, false);
   for (const o of r.towed) flingObstacle(o, true);
   for (const c of r.cheaters) { bubble('rh' + c.id, CHEATER_LINES[Math.floor(Math.random() * CHEATER_LINES.length)], 'thanks', 1.4, carTop(c, 0.8)); G.cheaters++; G.score += 300; }
@@ -370,6 +370,7 @@ function setupStage(stage) {
   player.armorLeft = player.stats.armor || 0;
   G.airbag = owns('pas_airbag') ? 1 : 0;   // 견인될 피해를 한 번 버팀
   // 내구도: 판마다 만땅. 판별 피해 배율(1챕터 초반은 반만), 이후 챕터는 조금씩 아프게
+  player.shoulderClosed = !!traffic.shoulderClosed;   // 갓길 폐쇄·터널 판
   G.maxHp = player.stats.hp || TUNE.hp.max;
   G.hp = G.maxHp; G.hpShown = -1; G.dmgLevel = -1; G.wrecked = false; G.failShown = false; G.phaseHealed = false;
   G.dmgMul = stageDamageMul(stage);
@@ -430,7 +431,7 @@ function enterPhase(name) {
       fx.speedLines(0);
       const v0 = boss.villains[0];
       v0.taunt = { text: stage.villainLine.replace(/"/g, ''), until: G.time + 3.2 };
-      ui.showStageCard(stage, stageMissions()).then(() => { if (G.phase === 'intro') { G.introStage = 1; G.introT2 = 0; } });
+      ui.showStageCard(stage, stageMissions(), roadInfo(stage)).then(() => { if (G.phase === 'intro') { G.introStage = 1; G.introT2 = 0; } });
       break;
     }
     case 'jam': {
@@ -705,6 +706,12 @@ function retryFromDiscovery() {
   ui.banner(`재도전 ${fails}회차 · 포상금 ×${G.payRetryMul.toFixed(1)}`, 'warn', 1400);
 }
 
+// 시작 카드 '도로 상황' (갓길 / 경적 / 특수 + 힌트)
+function roadInfo(stage) {
+  const A = { ...TUNE.approach, ...(stage.approach || {}) };
+  return { shoulder: A.shoulder, honk: A.honk, special: stage.honkOnly ? '구조 상황 · 압정 금지' : (stage.boss ? '보스' : stage.elite ? '엘리트' : ''), hint: A.hint || '' };
+}
+
 // 빌런 공격 → 피해 등급 (경 10 / 중 20 / 강 30 / 필살 40)
 const CAUSE_TIER = { lunge: 'fatal', highbeam: 'light', horn: 'light', smoke: 'light', swerve: 'heavy', selfie: 'light' };
 function onPlayerHit(ev) {
@@ -806,6 +813,22 @@ function autopilot(phase) {
   if (phase === 'jam' || (phase === 'boss' && !G.frontLocked)) {
     if (traffic.miniTarget(player) || (phase === 'boss' && boss.targetFor(player))) out.fire = true;
     if (G.rage >= TUNE.superCost * 2 && traffic.gapAhead(SHOULDER_LANE, player.s, player).gap < 20 && Math.random() < 0.05) out.super = true;
+    // 갓길 폐쇄·터널: 차로 사이로 — 앞 틈이 더 넓은 옆 차로로 옮기고, 막히면 경적
+    if (traffic.shoulderClosed) {
+      const front = player.s + player.len / 2;
+      const gapIn = (l) => traffic.gapAhead(l, front - (l === player.lane ? 0 : player.len + 0.8), player).gap;
+      const cur = gapIn(player.lane);
+      let best = player.lane, bg = cur;
+      for (const d of [-1, 1]) {
+        const l = player.lane + d;
+        if (l < 0 || l > NUM_LANES - 1 || traffic.canMergeInto(l, player, 0.5)) continue;
+        const g = gapIn(l);
+        if (g > bg + 2) { bg = g; best = l; }
+      }
+      if (cur < 12 && best !== player.lane) { out[best < player.lane ? 'left' : 'right'] = true; autoNext = G.realTime + 0.3; }
+      else if (cur < 6) { out.horn = true; autoNext = G.realTime + 0.5; }
+      return out;
+    }
     // 전략: 갓길로 빠져서 달리고, 갓길이 막히면 경적 → 4차선으로 잠깐 끼었다가 다시 갓길
     const SL = SHOULDER_LANE;
     const front = player.s + player.len / 2;
@@ -1017,6 +1040,7 @@ function update(realDt) {
   if ((ph === 'jam' || ph === 'boss' || ph === 'cruise') && (wantLeft || wantRight)) {
     const r = player.requestLane(wantLeft ? -1 : 1, traffic);
     if (r === 'ok') audio.play('laneChange', { volume: 0.5 });
+    else if (r === 'closed' && G.realTime - (G.closedToastAt || 0) > 2) { G.closedToastAt = G.realTime; ui.toast?.(traffic.approach?.shoulder === 'none' ? '터널: 갓길 없음!' : '갓길 폐쇄! 차로 사이로 뚫어야 한다', 'warn'); }
     else if (r && r.blocked) {
       const b = r.blocked;
       if (b.mesh && !b.isPlayer) {
@@ -1025,7 +1049,7 @@ function update(realDt) {
       }
     }
   }
-  if (wantHorn && G.realTime - G.lastHorn > 0.3 && (ph === 'jam' || ph === 'boss')) {
+  if (wantHorn && G.realTime - G.lastHorn > TUNE.honkCool && (ph === 'jam' || ph === 'boss')) {
     G.lastHorn = G.realTime;
     audio.play('horn', { volume: 0.7 });
     hud.popAt(player.mesh.position.clone().setY(2.6), '빵!', 'warn');
@@ -1045,6 +1069,7 @@ function update(realDt) {
         } else if (r.kind === 'yield') bubble(key, pick(YIELD_LINES), 'thanks', 1.2, carTop(r.car, 0.8));
         else if (r.kind === 'letin') bubble(key, pick(LETIN_LINES), 'thanks', 1.2, carTop(r.car, 0.8));
         else if (r.kind === 'noway') { bubble(key, pick(NOWAY_LINES), 'angry', 1.1, carTop(r.car, 0.8)); addRage(TUNE.nowayRage); }
+        else if (r.kind === 'tired') { bubble(key, pick(['또 빵?', '빵빵 그만!', '귀 아파요', '들었다고요']), 'angry', 1.2, carTop(r.car, 0.8)); ui.toast?.('경적 피로: 같은 차에 계속 빵 → 안 비켜줌', 'warn'); }
       }
     }
   }

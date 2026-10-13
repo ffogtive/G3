@@ -42,7 +42,8 @@ function triangle() {
 }
 
 // 반환: { group, len, w, hazardCar? }  — group 원점 = 장애물 구간의 중심 (s 방향), 앞쪽이 −Z
-export function buildShoulderObstacle(kind, rng) {
+// opts.dark: 무등화(비상등·삼각대 없음) — 밤 '어둠' 갓길 모드
+export function buildShoulderObstacle(kind, rng, opts = {}) {
   const group = new THREE.Group();
   if (kind === 'breakdown') {
     const kinds = ['sedan', 'van', 'pickup1t', 'compact'];
@@ -51,9 +52,9 @@ export function buildShoulderObstacle(kind, rng) {
     car.position.z = -2.4;               // 차는 앞쪽
     car.rotation.y = (rng() - 0.5) * 0.12;
     group.add(car);
-    const t = triangle(); t.position.z = len / 2 + 1.5 - 2.4; group.add(t); // 차 뒤 삼각대
+    if (!opts.dark) { const t = triangle(); t.position.z = len / 2 + 1.5 - 2.4; group.add(t); } // 차 뒤 삼각대 (무등화 차는 없음)
     // 보닛 열린 느낌: 차 옆에 서 있는 박스(사람 대신 짐)
-    return { group, len: len + 3.4, w: 2.1, hazardCar: car };
+    return { group, len: len + 3.4, w: 2.1, hazardCar: opts.dark ? null : car };
   }
   if (kind === 'cones') {
     const n = 6;
