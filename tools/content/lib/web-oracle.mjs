@@ -126,6 +126,9 @@ export async function webTicks(baseUrl, stageId, nTicks, { query = 'skip=jam', f
           player: { s: p.s, x: p.x, w: p.w, len: p.len, lane: p.lane, v: p.v, mode: p.mode },
           villains: (ctx.villains || []).map((v) => ({ s: v.s, baseS: v.baseS, x: v.x, w: v.w, len: v.len, v: v.v, vNominal: v.vNominal, alive: v.alive })),
           extras: (ctx.extras || []).map((e) => ({ s: e.s, x: e.x, w: e.w, len: e.len, v: e.v, alive: e.alive })),
+          // Math.sin of the packed-lane stop&go factor, same expression as traffic.js:406 (t = ctx.time, lane 0..4).
+          // Recorded because libm sin differs between engines in the last ulp (see golden.math).
+          sinLf: [0, 1, 2, 3, 4].map((l) => Math.sin(ctx.time * 0.42 + l * 1.9)),
         };
         draws = [];
         try { return proto.update.call(this, dt, ctx); } finally {

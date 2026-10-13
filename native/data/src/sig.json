@@ -1,0 +1,17 @@
+{
+  "_doc": "stagegen input (resolved into stages.json): stage id → signature behaviour module",
+  "byId": {
+    "1": "occupy",
+    "10": "landlord",
+    "2": "cutin_snap",
+    "3": "duo_link",
+    "4": "straddle_mirror",
+    "5": "blinker_liar",
+    "6": "tailgater",
+    "7": "speed_kangaroo",
+    "8": "merge_reflex",
+    "9": "phone_drift"
+  },
+  "schema_version": 1,
+  "source": "stagegen.js SIG_BY_ID @ 753549a"
+}

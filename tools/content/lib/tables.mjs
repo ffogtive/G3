@@ -27,7 +27,7 @@ export const TRAFFIC = {
     personalSpan: k(0.06, 95),
     lcDurDefault: k(1.8, 92),
     vFreeDefault: k(30, 98),
-    slowKinds: new K(['truck', 'bus', 'pickup1t'], 'traffic.js:45', { pattern: "'truck', 'bus', 'pickup1t'" }),
+    slowKinds: new K(['truck', 'bus', 'pickup1t'], 'traffic.js:47', { pattern: "'truck', 'bus', 'pickup1t'" }),
   },
   spawn: {
     _doc: 'spawnJam. RNG order is defined by the golden trace native/tests/golden/rng_trace_stage{1,5,6}.json',

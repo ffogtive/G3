@@ -1,0 +1,176 @@
+{
+  "defaults": {
+    "car": "car_hatch",
+    "finish": "fin_rocket",
+    "weapon": "wpn_tack"
+  },
+  "items": [
+    {
+      "cat": "car",
+      "desc": "기본 차. 작고 빨라서 갓길 질주에 최고.",
+      "id": "car_hatch",
+      "kind": "player",
+      "name": "참교육 해치",
+      "price": 0,
+      "stats": {
+        "armor": 0,
+        "speed": 1
+      }
+    },
+    {
+      "cat": "car",
+      "desc": "튼튼한 짐칸. 내구도 130(기본 100).",
+      "id": "car_porter",
+      "kind": "playerPorter",
+      "name": "1톤 포터",
+      "price": 180000,
+      "stats": {
+        "hp": 130,
+        "speed": 0.93
+      }
+    },
+    {
+      "cat": "car",
+      "desc": "갓길 고장차를 들이받으면 즉시 견인!",
+      "id": "car_wrecker",
+      "kind": "playerWrecker",
+      "name": "레커 견인차",
+      "price": 450000,
+      "stats": {
+        "armor": 1,
+        "speed": 0.97,
+        "tow": true
+      }
+    },
+    {
+      "cat": "car",
+      "desc": "경적 = 사이렌. 얌체·4차선이 크게 비켜준다.",
+      "id": "car_patrol",
+      "kind": "playerPatrol",
+      "name": "암행 순찰차 st.",
+      "price": 900000,
+      "stats": {
+        "armor": 0,
+        "siren": true,
+        "speed": 1.08
+      }
+    },
+    {
+      "cat": "weapon",
+      "desc": "기본. 밟으면 펑크.",
+      "dmg": 4,
+      "id": "wpn_tack",
+      "name": "압정",
+      "price": 0,
+      "proj": "tack",
+      "rate": 7,
+      "spread": 1
+    },
+    {
+      "cat": "weapon",
+      "desc": "한 번에 3개 흩뿌려서 잘 맞는다.",
+      "dmg": 2.2,
+      "id": "wpn_caltrop",
+      "name": "마름쇠 3연발",
+      "price": 150000,
+      "proj": "caltrop",
+      "rate": 6,
+      "spread": 3
+    },
+    {
+      "cat": "weapon",
+      "desc": "앞유리 범벅! 맞으면 빌런 공격이 느려진다.",
+      "dmg": 7,
+      "id": "wpn_water",
+      "name": "물풍선",
+      "price": 280000,
+      "proj": "waterBalloon",
+      "rate": 3.5,
+      "slow": 0.55,
+      "spread": 1
+    },
+    {
+      "cat": "weapon",
+      "desc": "타이어에 껌이 쩍. 데미지 1.6배.",
+      "dmg": 6.4,
+      "id": "wpn_gum",
+      "name": "껌 폭탄",
+      "price": 520000,
+      "proj": "gum",
+      "rate": 5,
+      "spread": 1
+    },
+    {
+      "cat": "move",
+      "desc": "↑(점프 버튼): 앞차를 훌쩍 뛰어넘기. 쿨 4초.",
+      "id": "mv_jump",
+      "name": "참교육 점프",
+      "price": 220000
+    },
+    {
+      "cat": "move",
+      "desc": "드론이 위에서 따라오며 잔챙이 빌런·원흉에 자동 사격.",
+      "id": "mv_drone",
+      "name": "블박 드론",
+      "price": 600000
+    },
+    {
+      "cat": "finish",
+      "desc": "하늘 저편으로 반짝★ (기본 피니시)",
+      "id": "fin_rocket",
+      "name": "로켓 발사",
+      "price": 0
+    },
+    {
+      "cat": "finish",
+      "desc": "풍선 다발에 매달려 둥실둥실 날아간다.",
+      "id": "fin_balloon",
+      "name": "풍선 둥실",
+      "price": 160000
+    },
+    {
+      "cat": "finish",
+      "desc": "헬기가 와서 대롱대롱 들고 간다.",
+      "id": "fin_heli",
+      "name": "참교육 헬기",
+      "price": 420000
+    },
+    {
+      "cat": "finish",
+      "desc": "빛줄기에 빨려 올라가 우주로.",
+      "id": "fin_ufo",
+      "name": "UFO 납치",
+      "price": 750000
+    },
+    {
+      "cat": "passive",
+      "desc": "선명한 증거 → 포상금 +25%",
+      "id": "pas_4k",
+      "name": "블박 4K 화질",
+      "price": 120000
+    },
+    {
+      "cat": "passive",
+      "desc": "스테이지마다 한 번, 견인될 피해를 내구도 1로 버팀",
+      "id": "pas_airbag",
+      "name": "에어백",
+      "price": 200000
+    },
+    {
+      "cat": "passive",
+      "desc": "뽕짝 경적 → 앞차가 더 잘 비켜준다",
+      "id": "pas_trot",
+      "name": "트로트 경적",
+      "price": 140000
+    },
+    {
+      "cat": "passive",
+      "desc": "분노 게이지 1칸 채우고 시작",
+      "id": "pas_coffee",
+      "name": "졸음쉼터 커피",
+      "price": 240000
+    }
+  ],
+  "schema_version": 1,
+  "source": "config.js SHOP/SHOP_DEFAULT @ 753549a"
+}

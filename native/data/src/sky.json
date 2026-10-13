@@ -1,0 +1,112 @@
+{
+  "_doc": "presets: colors are 0xRRGGBB ints (sRGB). stageSky: per-stage override applied by stagegen (stage id → preset). Godot light conversion values are added in M1a (NATIVE_PORT 2).",
+  "presets": {
+    "day": {
+      "bottom": 14217471,
+      "fog": 13626111,
+      "fogFar": 420,
+      "fogNear": 120,
+      "hemiGround": 9083498,
+      "hemiI": 1.25,
+      "hemiSky": 12575999,
+      "night": false,
+      "sun": 16774364,
+      "sunI": 2.6,
+      "sunPos": [-40, 80, 30],
+      "top": 6273279
+    },
+    "fog": {
+      "bottom": 14541541,
+      "fog": 14015455,
+      "fogFar": 120,
+      "fogNear": 14,
+      "hemiGround": 9081992,
+      "hemiI": 1.4,
+      "hemiSky": 14739178,
+      "night": false,
+      "sun": 16777215,
+      "sunI": 1.3,
+      "sunPos": [-40, 80, 30],
+      "top": 12568782
+    },
+    "morning": {
+      "bottom": 15922926,
+      "fog": 15134697,
+      "fogFar": 330,
+      "fogNear": 70,
+      "hemiGround": 9083514,
+      "hemiI": 1.35,
+      "hemiSky": 14675698,
+      "night": false,
+      "sun": 16773590,
+      "sunI": 2.1,
+      "sunPos": [50, 45, 40],
+      "top": 9423336
+    },
+    "night": {
+      "bottom": 2764636,
+      "fog": 1843528,
+      "fogFar": 340,
+      "fogNear": 60,
+      "hemiGround": 1710634,
+      "hemiI": 0.9,
+      "hemiSky": 4872858,
+      "night": true,
+      "sun": 9414399,
+      "sunI": 0.7,
+      "sunPos": [30, 60, 20],
+      "top": 725040
+    },
+    "rain": {
+      "bottom": 10727097,
+      "fog": 9805995,
+      "fogFar": 250,
+      "fogNear": 45,
+      "hemiGround": 4871520,
+      "hemiI": 1.2,
+      "hemiSky": 11187908,
+      "night": false,
+      "sun": 13227232,
+      "sunI": 1,
+      "sunPos": [-30, 70, 20],
+      "top": 5661295,
+      "weather": "rain"
+    },
+    "snow": {
+      "bottom": 15660024,
+      "fog": 14936817,
+      "fogFar": 250,
+      "fogNear": 45,
+      "ground": 15659766,
+      "hemiGround": 13160668,
+      "hemiI": 1.5,
+      "hemiSky": 15266047,
+      "night": false,
+      "sun": 16777215,
+      "sunI": 1.5,
+      "sunPos": [-40, 60, 30],
+      "top": 11451856,
+      "weather": "snow"
+    },
+    "sunset": {
+      "bottom": 16757370,
+      "fog": 15971468,
+      "fogFar": 400,
+      "fogNear": 110,
+      "hemiGround": 6969962,
+      "hemiI": 1.1,
+      "hemiSky": 16763296,
+      "night": false,
+      "sun": 16761226,
+      "sunI": 2.2,
+      "sunPos": [-70, 35, -60],
+      "top": 5925846
+    }
+  },
+  "schema_version": 1,
+  "source": "config.js SKY + stagegen STAGE_SKY @ 753549a",
+  "stageSky": {
+    "5": "rain",
+    "6": "night"
+  }
+}

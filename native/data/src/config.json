@@ -1,0 +1,843 @@
+{
+  "fonts": {
+    "display": "\"Black Han Sans\", \"Jua\", \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif",
+    "ui": "\"Jua\", \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif"
+  },
+  "npc": {
+    "_doc": "ORDER MATTERS: pickWeighted walks kinds in this order; colors are indexed by floor(rng*len)",
+    "colorsMono": [16053490, 16053490, 15330543, 2829617, 1908514, 10133929, 12830926, 7041401],
+    "colorsPop": [3108822, 14169132, 3841373, 14722342, 7162808, 9132604, 1483957],
+    "kinds": [
+      ["sedan", 30],
+      ["compact", 14],
+      ["suv", 20],
+      ["taxi", 6],
+      ["van", 6],
+      ["pickup1t", 9],
+      ["truck", 6],
+      ["bus", 4]
+    ],
+    "playerColor": 16763176
+  },
+  "rng": {
+    "algorithm": "mulberry32",
+    "mathRandom": "web Math.random (boss attack pick, taunts, fx) → native RandomNumberGenerator(--seed) (NATIVE_PORT 3-3)",
+    "source": "function mulberry32(a) {\n  return function () {\n    a |= 0; a = (a + 0x6d2b79f5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}",
+    "stagegen": "build-time only: rngFor(id) LCG a = (id*2654435761)>>>0; a = (a*1664525 + 1013904223)>>>0; a/2^32 (tools/content/stagegen.js)",
+    "traffic": "mulberry32(stage.id * 1000 + 7)  (main.js:360)",
+    "vehicleVariant": "seed = floor(rng * 1e6); variant = canon[seed % variants]  (traffic.js:88, vehicles.js buildVehicle)",
+    "world": "mulberry32(stage.id * 7919 + 13)  (world.js:132)"
+  },
+  "road": {
+    "_doc": "laneX(i) = (i - (numLanes-1)/2) * laneW; s = distance along the road, world z = -s (NATIVE_PORT 3-4)",
+    "laneW": 3.6,
+    "laneX": [-5.4, -1.8, 1.8, 5.4, 9],
+    "medianGap": 0.6,
+    "medianW": 0.9,
+    "medianX": -8.25,
+    "numLanes": 4,
+    "oppLaneX": [-11.1, -14.7, -18.299999999999997, -21.9],
+    "oppRoadLeft": -23.7,
+    "roadLeft": -7.2,
+    "roadRight": 7.2,
+    "segLen": 40,
+    "shoulderLane": 4,
+    "shoulderW": 3
+  },
+  "schema_version": 1,
+  "setup": {
+    "_doc": "main.js setupStage(stage): A = {...approach.default, ...stage.approach}; noShoulder = A.shoulder in noShoulderModes; jamLen = noShoulder ? min(stage.jamLength, A.jamLength ?? noShoulderJamLength) : stage.jamLength; startLane = noShoulder ? (A.startLane ?? noShoulderStartLane) : startLane; frontS = startS + jamLen + frontGap; traffic rng = mulberry32(stage.id*trafficSeedMul + trafficSeedAdd)",
+    "_src": {
+      "frontGap": "main.js:353",
+      "noShoulderJamLength": "main.js:351",
+      "noShoulderModes": "main.js:350",
+      "noShoulderStartLane": "main.js:352",
+      "startLane": "main.js:352",
+      "startS": "main.js:347",
+      "trafficSeedAdd": "main.js:360",
+      "trafficSeedMul": "main.js:360",
+      "worldSeedAdd": "world.js:132",
+      "worldSeedMul": "world.js:132"
+    },
+    "frontGap": 30,
+    "noShoulderJamLength": 85,
+    "noShoulderModes": ["closed", "none"],
+    "noShoulderStartLane": 1,
+    "startLane": 3,
+    "startS": 0,
+    "trafficSeedAdd": 7,
+    "trafficSeedMul": 1000,
+    "worldSeedAdd": 13,
+    "worldSeedMul": 7919
+  },
+  "source": "game/js/config.js + inline constants of traffic.js/main.js @ web-frozen 753549a",
+  "traffic": {
+    "car": {
+      "_doc": "_makeCar: RNG order mono, color, seed, personal, phase (5 draws). len/w come from vehicle_kinds.json dims.",
+      "_src": {
+        "lcDurDefault": "traffic.js:92",
+        "lenFallback": "traffic.js:94",
+        "monoP": "traffic.js:85",
+        "personalBase": "traffic.js:95",
+        "personalSpan": "traffic.js:95",
+        "seedScale": "traffic.js:88",
+        "slowKinds": "traffic.js:47",
+        "vFreeDefault": "traffic.js:98",
+        "wFallback": "traffic.js:94"
+      },
+      "lcDurDefault": 1.8,
+      "lenFallback": 4.5,
+      "monoP": 0.68,
+      "personalBase": 0.97,
+      "personalSpan": 0.06,
+      "seedScale": 1000000,
+      "slowKinds": ["truck", "bus", "pickup1t"],
+      "vFreeDefault": 30,
+      "wFallback": 1.9
+    },
+    "idm": {
+      "_doc": "acc = aMax*(1-(v/max(vFloor,v0))^delta) - aMax*(sStar/max(gapFloor,gap))^2, sStar = s0 + max(0, v*T + v*dv/(2*sqrt(aMax*b))), clamp [accMin, aMax]",
+      "_src": {
+        "accMin": "traffic.js:428",
+        "b": "traffic.js:424",
+        "brakeV0": "traffic.js:413",
+        "delta": "traffic.js:427",
+        "gapFloor": "traffic.js:427",
+        "stopGap": "traffic.js:432",
+        "vFloor": "traffic.js:426"
+      },
+      "accMin": -9,
+      "b": 3,
+      "brakeV0": 0.01,
+      "cheater": {
+        "T": 0.6,
+        "_src": {
+          "T": "traffic.js:397",
+          "aMax": "traffic.js:397",
+          "s0": "traffic.js:397",
+          "v0Fallback": "traffic.js:397"
+        },
+        "aMax": 2.5,
+        "s0": 2,
+        "v0Fallback": 5
+      },
+      "delta": 4,
+      "gapFloor": 0.3,
+      "lanes": {
+        "_doc": "unreleased normal cars by lane kind (laneKind[min(3, lane)]): v0 = jamSpeed * v0Mul [* personal]",
+        "flow": {
+          "T": 0.8,
+          "_src": {
+            "T": "traffic.js:401",
+            "aMax": "traffic.js:401",
+            "s0": "traffic.js:401",
+            "v0Mul": "traffic.js:401"
+          },
+          "aMax": 1.6,
+          "personal": true,
+          "s0": 2.2,
+          "v0Mul": 0.95
+        },
+        "packed": {
+          "T": 0.5,
+          "_doc": "stop&go: lf = lfBase + lfAmp*(0.5+0.5*sin(t*lfFreq + lane*lfLanePhase)); v0 = jamSpeed*personal*lf*v0Mul",
+          "_src": {
+            "T": "traffic.js:408",
+            "aMax": "traffic.js:408",
+            "lfAmp": "traffic.js:406",
+            "lfBase": "traffic.js:406",
+            "lfFreq": "traffic.js:406",
+            "lfLanePhase": "traffic.js:406",
+            "s0": "traffic.js:408",
+            "v0Mul": "traffic.js:407"
+          },
+          "aMax": 1.8,
+          "lfAmp": 0.65,
+          "lfBase": 0.35,
+          "lfFreq": 0.42,
+          "lfLanePhase": 1.9,
+          "personal": true,
+          "s0": 1.4,
+          "v0Mul": 1.25
+        },
+        "pass": {
+          "T": 1,
+          "_src": {
+            "T": "traffic.js:403",
+            "aMax": "traffic.js:403",
+            "s0": "traffic.js:403",
+            "v0MulFallback": "traffic.js:403"
+          },
+          "aMax": 2,
+          "personal": true,
+          "s0": 3,
+          "v0MulFallback": 2.2,
+          "v0MulKey": "jamShape.passV"
+        },
+        "spaced": {
+          "T": 1.6,
+          "_src": {
+            "T": "traffic.js:402",
+            "aMax": "traffic.js:402",
+            "s0": "traffic.js:402",
+            "v0Mul": "traffic.js:402"
+          },
+          "aMax": 1.4,
+          "personal": true,
+          "s0": 5.5,
+          "v0Mul": 1.05
+        },
+        "train": {
+          "T": 0.45,
+          "_src": {
+            "T": "traffic.js:400",
+            "aMax": "traffic.js:400",
+            "s0": "traffic.js:400",
+            "v0Mul": "traffic.js:400"
+          },
+          "aMax": 1.6,
+          "personal": false,
+          "s0": 1.2,
+          "v0Mul": 1
+        }
+      },
+      "pull": {
+        "T": 0.3,
+        "_src": {
+          "T": "traffic.js:411",
+          "aMax": "traffic.js:411",
+          "s0": "traffic.js:411",
+          "v0Mul": "traffic.js:411",
+          "v0MulLetIn": "traffic.js:411"
+        },
+        "aMax": 3.6,
+        "s0": 1,
+        "v0Mul": 2.2,
+        "v0MulLetIn": 3.6
+      },
+      "released": {
+        "T": 0.5,
+        "_src": {
+          "T": "traffic.js:391",
+          "aMax": "traffic.js:391",
+          "aMaxSlow": "traffic.js:391",
+          "s0": "traffic.js:391"
+        },
+        "aMax": 4.6,
+        "aMaxSlow": 2.6,
+        "s0": 2
+      },
+      "stopGap": 0.25,
+      "vFloor": 0.1,
+      "villainWall": {
+        "_src": {
+          "back": "traffic.js:421",
+          "zigExtra": "traffic.js:421"
+        },
+        "back": 3,
+        "zigExtra": 5
+      },
+      "wall": {
+        "T": 0.5,
+        "_src": {
+          "T": "traffic.js:395",
+          "aMax": "traffic.js:395",
+          "follow": "traffic.js:394",
+          "s0": "traffic.js:395"
+        },
+        "aMax": 3,
+        "follow": 0.9,
+        "s0": 1.5
+      }
+    },
+    "occupancy": {
+      "_doc": "occupies(e, lane): |e.x - laneX(lane)| < e.w/2 + (LANE_W/2 - halfLaneMargin)",
+      "_src": {
+        "halfLaneMargin": "traffic.js:32"
+      },
+      "halfLaneMargin": 0.6
+    },
+    "queries": {
+      "canMergeInto": {
+        "_src": {
+          "margin": "traffic.js:281",
+          "yieldOverlap": "traffic.js:287"
+        },
+        "margin": 0.35,
+        "yieldOverlap": 1.3
+      },
+      "carsBehindFront": {
+        "_src": {
+          "n": "traffic.js:752",
+          "range": "traffic.js:752"
+        },
+        "n": 6,
+        "range": 35
+      },
+      "hasGap": {
+        "_src": {
+          "extra": "traffic.js:564",
+          "lenFallback": "traffic.js:564",
+          "window": "traffic.js:575"
+        },
+        "extra": 1,
+        "lenFallback": 4.2,
+        "window": 6
+      },
+      "honk": {
+        "_src": {
+          "cheaterLcDur": "traffic.js:664",
+          "cheaterRange": "traffic.js:662",
+          "cheaterRangeSiren": "traffic.js:662",
+          "fatigueHalfP": "traffic.js:680",
+          "fatigueIgnoreAt": "traffic.js:680",
+          "fatigueRelax": "traffic.js:678",
+          "probeBack": "traffic.js:657",
+          "range": "traffic.js:656",
+          "rangeSiren": "traffic.js:656",
+          "rangeSlack": "traffic.js:675",
+          "rangeTrot": "traffic.js:656",
+          "villainRange": "traffic.js:658",
+          "yieldLcDur": "traffic.js:686",
+          "yieldMargin": "traffic.js:686"
+        },
+        "cheaterLcDur": 1.1,
+        "cheaterRange": 30,
+        "cheaterRangeSiren": 50,
+        "fatigueHalfP": 0.5,
+        "fatigueIgnoreAt": 3,
+        "fatigueRelax": 8,
+        "probeBack": 0.5,
+        "range": 18,
+        "rangeSiren": 45,
+        "rangeSlack": 2,
+        "rangeTrot": 24,
+        "villainRange": 30,
+        "yieldLcDur": 0.85,
+        "yieldMargin": 1.6
+      },
+      "letIn": {
+        "_src": {
+          "aheadMax": "traffic.js:616",
+          "aheadMin": "traffic.js:616",
+          "behindMax": "traffic.js:617",
+          "brake": "traffic.js:617",
+          "pull": "traffic.js:616",
+          "yieldFor": "traffic.js:617"
+        },
+        "aheadMax": 22,
+        "aheadMin": -3.5,
+        "behindMax": -14,
+        "brake": 2.2,
+        "pull": 2.2,
+        "yieldFor": 2.8
+      },
+      "miniHit": {
+        "_src": {
+          "brake": "traffic.js:744",
+          "hazard": "traffic.js:745",
+          "jolt": "traffic.js:740",
+          "lcDur": "traffic.js:746"
+        },
+        "brake": 2.5,
+        "hazard": 4,
+        "jolt": 0.6,
+        "lcDur": 0.9
+      },
+      "miniTarget": {
+        "_src": {
+          "ahead": "traffic.js:728",
+          "behind": "traffic.js:728",
+          "lateralLanes": "traffic.js:729"
+        },
+        "ahead": 26,
+        "behind": -3,
+        "lateralLanes": 1.2
+      },
+      "pullAhead": {
+        "_src": {
+          "hold": "traffic.js:598",
+          "range": "traffic.js:598"
+        },
+        "hold": 1.2,
+        "range": 18
+      },
+      "rageHorn": {
+        "_src": {
+          "behind": "traffic.js:696",
+          "lcDur": "traffic.js:710",
+          "startledHold": "traffic.js:714"
+        },
+        "behind": 2,
+        "lcDur": 0.7,
+        "startledHold": 0.5
+      },
+      "safeToEnter": {
+        "_src": {
+          "closingGain": "traffic.js:640",
+          "touch": "traffic.js:639"
+        },
+        "closingGain": 1.5,
+        "touch": -0.1
+      }
+    },
+    "spawn": {
+      "_doc": "spawnJam. RNG order is defined by the golden trace native/tests/golden/rng_trace_stage{1,5,6}.json",
+      "_src": {
+        "cheaterKinds": "traffic.js:196",
+        "cheaterSpawnV": "traffic.js:196",
+        "cheaterVBase": "traffic.js:197",
+        "cheaterVSpan": "traffic.js:197",
+        "crowdedCheaters": "traffic.js:177",
+        "darkSpec": "traffic.js:178",
+        "debrisSpec": "traffic.js:179",
+        "emptyFrontRearBack": "traffic.js:147",
+        "frontRowFallback": "traffic.js:134",
+        "jitterBase": "traffic.js:194",
+        "jitterSpan": "traffic.js:194",
+        "laneCarV0Mul": "traffic.js:161",
+        "obstacleXOffset": "traffic.js:201",
+        "playerHoleHalf": "traffic.js:163",
+        "playerHolePushBack": "traffic.js:165",
+        "shoulderEndBeforeFront": "traffic.js:190",
+        "shoulderFallbackSpec": "traffic.js:175",
+        "shoulderStartAhead": "traffic.js:190",
+        "tailBehindPlayer": "traffic.js:125",
+        "wallOffsetSpan": "traffic.js:142"
+      },
+      "barrier": {
+        "_src": {
+          "fromBehindPlayer": "traffic.js:182",
+          "pastFront": "traffic.js:182",
+          "spacing": "traffic.js:582",
+          "xOffset": "traffic.js:584",
+          "zScale": "traffic.js:585"
+        },
+        "fromBehindPlayer": 20,
+        "pastFront": 30,
+        "spacing": 6,
+        "xOffset": 1.2,
+        "zScale": 0.5
+      },
+      "blocked": {
+        "_src": {
+          "count": "traffic.js:186",
+          "spacing": "traffic.js:186",
+          "startFrac": "traffic.js:185"
+        },
+        "count": 5,
+        "spacing": 12,
+        "startFrac": 0.45
+      },
+      "cheaterKinds": [
+        ["sedan", 3],
+        ["suv", 2],
+        ["compact", 1]
+      ],
+      "cheaterSpawnV": 4.5,
+      "cheaterVBase": 4,
+      "cheaterVSpan": 2.5,
+      "crowdedCheaters": 3,
+      "darkSpec": [
+        ["debris", 3],
+        ["breakdown", 1],
+        ["cheater", 1]
+      ],
+      "debrisSpec": [
+        ["debris", 4],
+        ["cheater", 1]
+      ],
+      "emptyFrontRearBack": 3,
+      "frontRowFallback": [null, "truck", "truck", "truck"],
+      "gap": {
+        "_doc": "gapOf() by lane kind: base + rng*span (packed: (base + rng*span) / stage.density)",
+        "flow": {
+          "_src": {
+            "base": "traffic.js:157",
+            "span": "traffic.js:157"
+          },
+          "base": 2.6,
+          "span": 2
+        },
+        "packed": {
+          "_src": {
+            "base": "traffic.js:157",
+            "span": "traffic.js:157"
+          },
+          "base": 1.5,
+          "dividedByDensity": true,
+          "span": 1.7
+        },
+        "pass": {
+          "_src": {
+            "base": "traffic.js:157",
+            "span": "traffic.js:157"
+          },
+          "base": 9,
+          "span": 5
+        },
+        "spaced": {
+          "_src": {
+            "base": "traffic.js:157",
+            "span": "traffic.js:157"
+          },
+          "base": 7,
+          "span": 5
+        },
+        "train": {
+          "_src": {
+            "base": "traffic.js:157",
+            "span": "traffic.js:157"
+          },
+          "base": 1.2,
+          "span": 0.5
+        }
+      },
+      "jitterBase": 0.25,
+      "jitterSpan": 0.5,
+      "laneCarV0Mul": 0.7,
+      "leadGap": {
+        "_doc": "first gap behind the front row: spaced ? base+rng*span : default; minus zigExtra on villain lanes of zigzag stages",
+        "_src": {
+          "base": "traffic.js:158",
+          "spacedBase": "traffic.js:158",
+          "spacedSpan": "traffic.js:158",
+          "span": "traffic.js:158",
+          "zigExtra": "traffic.js:158"
+        },
+        "base": 2.2,
+        "spacedBase": 9,
+        "spacedSpan": 4,
+        "span": 1.6,
+        "zigExtra": 6
+      },
+      "minis": {
+        "_doc": "nMini = stage.minis ?? min(max, base + floor((difficulty ?? id ?? 1) / perDifficulty)); type = MINI_TYPES order (mini_types.json array)",
+        "_src": {
+          "base": "traffic.js:209",
+          "coolBase": "traffic.js:218",
+          "hp": "traffic.js:218",
+          "max": "traffic.js:209",
+          "perDifficulty": "traffic.js:209",
+          "window": "traffic.js:211"
+        },
+        "base": 2,
+        "coolBase": 0.6,
+        "hp": 12,
+        "max": 4,
+        "perDifficulty": 3,
+        "window": 30
+      },
+      "obstacleXOffset": 0.1,
+      "opp": {
+        "_doc": "opposite carriageway, 26 cars x 6 draws: lane, pickWeighted, mono, color, s, v",
+        "_src": {
+          "count": "traffic.js:227",
+          "lanes": "traffic.js:228",
+          "monoP": "traffic.js:230",
+          "sBehind": "traffic.js:235",
+          "sSpan": "traffic.js:235",
+          "vBase": "traffic.js:235",
+          "vPerLane": "traffic.js:235",
+          "vSpan": "traffic.js:235"
+        },
+        "count": 26,
+        "lanes": 4,
+        "monoP": 0.7,
+        "sBehind": 100,
+        "sSpan": 520,
+        "vBase": 24,
+        "vPerLane": 2,
+        "vSpan": 12
+      },
+      "playerHoleHalf": 3.4,
+      "playerHolePushBack": 2,
+      "shoulderEndBeforeFront": 22,
+      "shoulderFallbackSpec": [
+        ["breakdown", 1],
+        ["cones", 1],
+        ["cheater", 1]
+      ],
+      "shoulderStartAhead": 38,
+      "tailBehindPlayer": 45,
+      "wallOffsetSpan": 1.2
+    },
+    "update": {
+      "brakeLight": {
+        "_src": {
+          "accBelow": "traffic.js:462",
+          "flickerAbove": "traffic.js:462",
+          "flickerFreq": "traffic.js:462",
+          "vBelow": "traffic.js:462"
+        },
+        "accBelow": -0.25,
+        "flickerAbove": 0.2,
+        "flickerFreq": 1.3,
+        "vBelow": 1.6
+      },
+      "cheaterEvent": {
+        "_src": {
+          "blockMargin": "traffic.js:627",
+          "firstDelay": "traffic.js:344",
+          "lcDur": "traffic.js:630",
+          "minPlayerV": "traffic.js:345",
+          "nextBase": "traffic.js:346",
+          "nextSpan": "traffic.js:346",
+          "vBase": "traffic.js:629",
+          "vSpan": "traffic.js:629",
+          "windowMax": "traffic.js:624",
+          "windowMin": "traffic.js:624"
+        },
+        "blockMargin": 2,
+        "firstDelay": 6,
+        "lcDur": 0.9,
+        "minPlayerV": 8,
+        "nextBase": 7,
+        "nextSpan": 5,
+        "vBase": 4,
+        "vSpan": 2,
+        "windowMax": 30,
+        "windowMin": 14
+      },
+      "hazard": {
+        "_src": {
+          "cheaterFreq": "traffic.js:464",
+          "onFrac": "traffic.js:464",
+          "period": "traffic.js:464"
+        },
+        "cheaterFreq": 2.2,
+        "onFrac": 0.27,
+        "period": 0.5
+      },
+      "jamWave": {
+        "_src": {
+          "amp": "traffic.js:523",
+          "hitMargin": "traffic.js:533",
+          "hold": "traffic.js:523",
+          "holdCap": "traffic.js:535",
+          "life": "traffic.js:523",
+          "minStrength": "traffic.js:530",
+          "speed": "traffic.js:523"
+        },
+        "amp": 0.88,
+        "hitMargin": 1.2,
+        "hold": 0.6,
+        "holdCap": 2.5,
+        "life": 6,
+        "minStrength": 0.15,
+        "speed": 6
+      },
+      "laneChange": {
+        "_src": {
+          "dtFloor": "traffic.js:440",
+          "yawGain": "traffic.js:440",
+          "yawMinV": "traffic.js:440"
+        },
+        "dtFloor": 0.0001,
+        "yawGain": 0.8,
+        "yawMinV": 2
+      },
+      "minis": {
+        "_src": {
+          "dsMax": "traffic.js:357",
+          "dsMin": "traffic.js:357"
+        },
+        "cutin": {
+          "_src": {
+            "blockMargin": "traffic.js:361",
+            "cool": "traffic.js:367",
+            "dsMin": "traffic.js:361",
+            "lcDur": "traffic.js:364",
+            "v": "traffic.js:363"
+          },
+          "blockMargin": 2,
+          "cool": 3,
+          "dsMin": 10,
+          "lcDur": 0.8,
+          "v": 3.5
+        },
+        "dsMax": 30,
+        "dsMin": 4,
+        "marker": {
+          "_src": {
+            "bobAmp": "traffic.js:355",
+            "bobFreq": "traffic.js:355",
+            "lift": "traffic.js:355"
+          },
+          "bobAmp": 0.18,
+          "bobFreq": 6,
+          "lift": 1.1
+        },
+        "throw": {
+          "_src": {
+            "coolBase": "traffic.js:371",
+            "coolSpan": "traffic.js:371",
+            "maxActs": "traffic.js:368"
+          },
+          "coolBase": 2,
+          "coolSpan": 1.2,
+          "maxActs": 2
+        }
+      },
+      "opp": {
+        "_src": {
+          "recycleBehind": "traffic.js:475",
+          "respawnAhead": "traffic.js:475",
+          "respawnSpan": "traffic.js:475"
+        },
+        "recycleBehind": 130,
+        "respawnAhead": 280,
+        "respawnSpan": 160
+      },
+      "postRelease": {
+        "_src": {
+          "cheaterReturnLcDur": "traffic.js:451",
+          "cheaterReturnMargin": "traffic.js:451",
+          "lookGap": "traffic.js:490",
+          "nextBase": "traffic.js:482",
+          "nextSpan": "traffic.js:482",
+          "passLcDur": "traffic.js:492",
+          "passMargin": "traffic.js:492",
+          "slowLcDur": "traffic.js:486",
+          "slowMargin": "traffic.js:486",
+          "vMargin": "traffic.js:490"
+        },
+        "cheaterReturnLcDur": 1.2,
+        "cheaterReturnMargin": 2.5,
+        "lookGap": 22,
+        "nextBase": 0.8,
+        "nextSpan": 0.8,
+        "passLcDur": 0.95,
+        "passMargin": 3.5,
+        "slowLcDur": 1.4,
+        "slowMargin": 3,
+        "vMargin": 3
+      },
+      "randomBrake": {
+        "_src": {
+          "aheadPlayer": "traffic.js:338",
+          "behindPlayer": "traffic.js:338",
+          "holdBase": "traffic.js:339",
+          "holdSpan": "traffic.js:339",
+          "ratePerSec": "traffic.js:337"
+        },
+        "aheadPlayer": 80,
+        "behindPlayer": 10,
+        "holdBase": 0.6,
+        "holdSpan": 0.7,
+        "ratePerSec": 0.6
+      },
+      "release": {
+        "_src": {
+          "carExtra": "traffic.js:315",
+          "hazard": "traffic.js:382",
+          "laneDelayCap": "traffic.js:314",
+          "nextLcBase": "traffic.js:383",
+          "nextLcSpan": "traffic.js:383",
+          "wallExtra": "traffic.js:315"
+        },
+        "carExtra": 0.08,
+        "hazard": 1.05,
+        "laneDelayCap": 3,
+        "nextLcBase": 0.4,
+        "nextLcSpan": 0.6,
+        "wallExtra": 0.35
+      },
+      "stuck": {
+        "_doc": "runs only while phase===\"jam\" in the web (NATIVE_PORT M1b R2: native runs it while jamLike)",
+        "_src": {
+          "autoTowAfter": "traffic.js:513",
+          "decay": "traffic.js:500",
+          "pullAheadAfter": "traffic.js:508",
+          "rubberFallback": "traffic.js:501",
+          "rubberSafetyFallback": "traffic.js:506",
+          "towProbeAhead": "traffic.js:512",
+          "towProbeBehind": "traffic.js:512",
+          "vBelow": "traffic.js:499"
+        },
+        "autoTowAfter": 2,
+        "decay": 2,
+        "pullAheadAfter": 1,
+        "rubberFallback": 2.5,
+        "rubberSafetyFallback": 4,
+        "towProbeAhead": 16,
+        "towProbeBehind": 6,
+        "vBelow": 2.5
+      },
+      "yieldSource": {
+        "_src": {
+          "ahead": "traffic.js:550",
+          "behind": "traffic.js:550",
+          "holdFallback": "traffic.js:553",
+          "periodFallback": "traffic.js:560",
+          "waveAmp": "traffic.js:556",
+          "waveOffset": "traffic.js:556",
+          "waveStrength": "traffic.js:556"
+        },
+        "ahead": 5,
+        "behind": 20,
+        "holdFallback": 2.5,
+        "periodFallback": 2.5,
+        "waveAmp": 0.8,
+        "waveOffset": 1,
+        "waveStrength": 0.7
+      }
+    }
+  },
+  "tune": {
+    "_doc": "TUNE from config.js; TUNE.approach lives in approach.json (default)",
+    "baseRage": 0.005,
+    "boostTime": 2.2,
+    "bossAheadGap": 11,
+    "bumpRage": 0.06,
+    "cruiseSpeed": 30.5,
+    "cruiseTime": 4.2,
+    "cutinRage": 0.05,
+    "hitRage": 0.08,
+    "honkCool": 1,
+    "hp": {
+      "bumpDmg": 10,
+      "bumpRelV": 6,
+      "coneDmg": 5,
+      "healMini": 10,
+      "healPhase": 10,
+      "invuln": 1,
+      "jamFloor": 20,
+      "max": 100,
+      "miniDmg": 5,
+      "obstacleDmg": 20,
+      "retryPayMin": 0.6,
+      "retryPayStep": 0.2,
+      "tier": {
+        "fatal": 40,
+        "heavy": 30,
+        "light": 10,
+        "mid": 20
+      }
+    },
+    "jamDensity": 125,
+    "laneChangeTime": 0.18,
+    "miniRage": 0.04,
+    "nowayRage": 0.015,
+    "playerAccel": 9,
+    "playerBrake": 22,
+    "playerMaxV": 18,
+    "rageHornRange": 48,
+    "rageSegs": 5,
+    "releaseLaneDelay": 0.45,
+    "releaseSpeed": [25, 30],
+    "releaseWaveSpeed": 70,
+    "shoulderMaxV": 18,
+    "smashRage": 0.012,
+    "superCost": 0.2,
+    "superDmg": 28,
+    "tackDmg": 4,
+    "tackRate": 7,
+    "tauntRage": 0.015,
+    "timeRage": 0.016,
+    "truckFreeSpeed": [22, 25]
+  },
+  "units": {
+    "kmh": 0.2777777777777778
+  }
+}

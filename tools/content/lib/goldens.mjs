@@ -104,6 +104,7 @@ export function spawnGolden(M, stageId, VK) {
  * inputs (player, villains, extras, phase, time, dt). Proves the golden is a sufficient spec for the C++ port.
  * @returns {{ ok: boolean, ticks: number, firstDiff: string|null }}
  */
+const SIN = Math.sin;
 export function replayTicks(M, golden) {
   const stage = M.STAGES.find((s) => s.id === golden.stage);
   const log = [];
@@ -122,7 +123,13 @@ export function replayTicks(M, golden) {
     tk.in.villains.forEach((v, i) => Object.assign(villains[i], v));
     extras.length = 0;
     for (const e of tk.in.extras) extras.push({ ...e });
-    traffic.update(tk.in.dt, { dt: tk.in.dt, time: tk.in.time, player, villains, extras, phase: tk.in.phase, allowEvents: tk.in.allowEvents, jamLike: tk.in.jamLike, focusS: tk.in.focusS });
+    // libm independence: the only transcendental that feeds the sim state is sin(t*0.42 + lane*1.9) (traffic.js:406);
+    // take it from the recording, exactly as a C++ replay must (V8 builds differ: Node=fdlibm, Chrome=glibc port).
+    const lfArgs = tk.in.sinLf.map((_, l) => tk.in.time * 0.42 + l * 1.9);
+    Math.sin = (x) => { const k = lfArgs.indexOf(x); return k >= 0 ? tk.in.sinLf[k] : SIN(x); };
+    try {
+      traffic.update(tk.in.dt, { dt: tk.in.dt, time: tk.in.time, player, villains, extras, phase: tk.in.phase, allowEvents: tk.in.allowEvents, jamLike: tk.in.jamLike, focusS: tk.in.focusS });
+    } finally { Math.sin = SIN; }
     const drawn = log.slice(mark).map((e) => [tagOf(e.site, e.caller), e.u32]);
     mark = log.length;
     const o = tk.out;

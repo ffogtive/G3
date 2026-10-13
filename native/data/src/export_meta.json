@@ -1,0 +1,22 @@
+{
+  "exporter": "tools/export-content.mjs",
+  "inputs": {
+    "game/js/behaviors/index.js": "1a7ec8dd760ea6f1181fbdfb838fd6831a036c788c94c9ebe956d667975dd338",
+    "game/js/boss.js": "24ea774ceefd7250a1334452df5fd390adc29699c9ec34127f4901fb13c5de75",
+    "game/js/config.js": "7e17f6eaa07a2679e08b2863a08aa1cc03da549f3939df704cc87942c2da1d8c",
+    "game/js/data/villain_catalog.js": "1ede41a1684e94fe1458c786f89690aae6bf869ce29dab8c554bd48702f29324",
+    "game/js/data/villain_catalog.json": "1aee45270c273ea431f7945b63df3ead847ebef237201936563e98cfaae0a8be",
+    "game/js/main.js": "f34445cf029eca1f82ec8e5679079e71ae8ee392d06dacfe6b3359cb836d80c1",
+    "game/js/player.js": "e22a7174fa01865f46218dc7d70ad7350ba3cd23760f0f55fb3718e28a452d81",
+    "game/js/rewards.js": "6b2d141b1ffedb15bd518de298a2a8e9d85bad3375f764c375212cfad46174e4",
+    "game/js/shoulder.js": "a7bf011346d23de2ddd817cc37558f360a5d70174620d1d20ba61193751ac9f9",
+    "game/js/stagegen.js": "867f57c9479484af49a0d9297974f09fbae39291679448c3ec7db8fd5b0097b5",
+    "game/js/traffic.js": "337684fbd7836cee8b3cc0218649e5d3404ae576e4392b962f33f5421a176699",
+    "game/js/ui.js": "20a927d04a01cd6ccac349d9a84ad98a08dd2ca1a4944ac14056a6ae35333c5b",
+    "game/js/vehicles.js": "a024ba06aa7b9aa56089d1f462a585ceb0a4806542ad0583966302c6ec758656",
+    "game/js/world.js": "9091f0ad360af4e38817fbb190ebb3c212c85932d9297d2d89d723b30f48431b"
+  },
+  "schema_version": 1,
+  "web_frozen_sha": "753549a",
+  "web_frozen_tag": "web-frozen (local tag; reference the SHA)"
+}

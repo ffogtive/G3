@@ -1,0 +1,493 @@
+{
+  "events": {
+    "bossPhase": {
+      "android": [
+        {
+          "amp": 0.9,
+          "ms": 60,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.9,
+          "sharpness": 0.6,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:261 fx.shake(0.6, 0.4)"]
+    },
+    "crit": {
+      "android": [
+        {
+          "amp": 0.6,
+          "ms": 25,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.6,
+          "sharpness": 0.6,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "note": "crit hit; same pattern as shoulderSmash",
+      "web": []
+    },
+    "horn": {
+      "android": [
+        {
+          "amp": 0.35,
+          "ms": 20,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.35,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:1078 'horn'"]
+    },
+    "laneChange": {
+      "android": [
+        {
+          "amp": 0.25,
+          "ms": 10,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "type": "selection"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:1066 'laneChange'"]
+    },
+    "miniCaught": {
+      "android": [
+        {
+          "amp": 0.5,
+          "ms": 15,
+          "t": 0
+        },
+        {
+          "amp": 0.5,
+          "ms": 15,
+          "t": 0.06
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.5,
+          "sharpness": 0.7,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.5,
+          "sharpness": 0.7,
+          "t": 0.06,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:233 fx.shake(0.3, 0.2)"]
+    },
+    "playerBump": {
+      "android": [
+        {
+          "amp": 0.7,
+          "ms": 35,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.7,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:803 fx.shake(0.45, 0.25)"]
+    },
+    "playerHitBoss": {
+      "android": [
+        {
+          "amp": 0.8,
+          "ms": 50,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.8,
+          "sharpness": 0.2,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": null,
+          "dur": 0.08,
+          "intensity": 0.4,
+          "sharpness": null,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:744 fx.shake(0.6, 0.35)"]
+    },
+    "playerHitThrow": {
+      "android": [
+        {
+          "amp": 0.5,
+          "ms": 30,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.5,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:734 fx.shake(0.4, 0.25)"]
+    },
+    "rageFire": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 80,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "decayTo": null,
+          "dur": 0.08,
+          "intensity": 1,
+          "sharpness": 0.4,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:246 fx.shake(0.75, 0.5)"]
+    },
+    "rageFull": {
+      "android": [
+        {
+          "amp": null,
+          "ms": 10,
+          "t": 0
+        },
+        {
+          "amp": null,
+          "ms": 10,
+          "t": null
+        },
+        {
+          "amp": null,
+          "ms": 10,
+          "t": null
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.3,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.6,
+          "sharpness": 0.8,
+          "t": null,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.9,
+          "sharpness": 0.8,
+          "t": null,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "note": "3 rising ticks; spacing not specified (null)",
+      "web": ["main.js:178 'rageFull'"]
+    },
+    "rageHit": {
+      "android": [
+        {
+          "amp": 0.9,
+          "ms": 60,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.9,
+          "sharpness": 0.5,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:606 fx.shake(0.8, 0.35)"]
+    },
+    "releaseWave": {
+      "android": [
+        {
+          "amp": 0.6,
+          "ms": 20,
+          "t": 0
+        },
+        {
+          "amp": 0.5,
+          "ms": 20,
+          "t": null
+        },
+        {
+          "amp": 0.4,
+          "ms": 20,
+          "t": null
+        },
+        {
+          "amp": 0.3,
+          "ms": 20,
+          "t": null
+        },
+        {
+          "amp": 0.2,
+          "ms": 20,
+          "t": null
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.6,
+          "sharpness": 0.4,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.5,
+          "sharpness": 0.4,
+          "t": null,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.4,
+          "sharpness": 0.4,
+          "t": null,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.4,
+          "t": null,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.2,
+          "sharpness": 0.4,
+          "t": null,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "note": "5 transients timed to the release-wave beats (t = null: driven by the wave), intensity 0.6→0.2",
+      "web": ["main.js:523 fx.shake(0.5, 0.4)"]
+    },
+    "shoulderSmash": {
+      "android": [
+        {
+          "amp": 0.6,
+          "ms": 25,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.6,
+          "sharpness": 0.6,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:790 fx.shake(0.25, 0.2)"]
+    },
+    "tackHit": {
+      "android": [
+        {
+          "amp": 0.2,
+          "ms": 8,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.2,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "maxPerSecond": 4,
+      "minIntervalMs": 120,
+      "web": ["main.js:613 'hit'"]
+    },
+    "tirePop": {
+      "android": [
+        {
+          "amp": 0.9,
+          "ms": 40,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.9,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["boss.js:253 fx.shake(0.35, 0.25)"]
+    },
+    "uiLight": {
+      "android": [
+        {
+          "amp": 0.3,
+          "ms": 10,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "type": "impactLight"
+        }
+      ],
+      "iosAlt": [
+        {
+          "intensity": 0.3,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["result stars/stamp", "1-5 blinker click", "N3 enforce ring"]
+    },
+    "villainDownOne": {
+      "android": [
+        {
+          "amp": 0.8,
+          "ms": 50,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.8,
+          "sharpness": 0.5,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:630 fx.shake(0.7, 0.4)"]
+    },
+    "villainKill": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 120,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 1,
+          "sharpness": 0.7,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.6,
+          "intensity": 0.6,
+          "sharpness": 0.2,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:496 fx.shake(1.1, 0.6)"]
+    },
+    "wreck": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 80,
+          "t": 0
+        },
+        {
+          "amp": 0.2,
+          "ms": 300,
+          "t": 0.08
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 1,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": null,
+          "dur": 0.3,
+          "intensity": 0.2,
+          "sharpness": 0.1,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": null,
+      "web": ["main.js:481 fx.shake(1.0, 0.5)"]
+    }
+  },
+  "generated": "tools/content/build.mjs from native/data/src/haptics.json — do not edit",
+  "global": {
+    "iosEngine": {
+      "autoShutdown": false,
+      "prewarmPatterns": true,
+      "restartOn": ["appActive", "resetHandler", "stoppedHandler"]
+    },
+    "maxPerSecond": 12,
+    "realtime": true,
+    "settingKey": "haptics",
+    "silentModeTell": true
+  },
+  "schema_version": 1,
+  "source": "docs/NATIVE_PORT.md §2 햅틱 맵 (2026-10-13). Values are ❓ until tuned on device (M1a/M1b)."
+}

@@ -5,11 +5,12 @@
 #       libstdc++를 정적 링크하면, Ubuntu g++ 로 만든 .so 가 Nix Godot 4.7.2(glibc 2.42)에 그대로 로드된다.
 #
 # Usage: tools/godot/build_ext.sh [--target=template_debug|template_release|all] [--jobs=N] [--clean]
-#                                 [--verify-api] [--offline]
+#                                 [--verify-api] [--offline] [--fetch-only]
 #   default target: template_debug (editor, tests, debug exports). Release exports need --target=all.
 #   --verify-api  dump the running engine's extension_api.json (godot47 --dump-extension-api) and diff
 #                 its classes/method hashes against godot-cpp's bundled extension_api-4-7.json.
 #   --offline     never touch the network (fail if godot-cpp is missing or at the wrong SHA).
+#   --fetch-only  only fetch/verify godot-cpp at the pinned SHA (used by the Mac iOS build).
 # Env: GODOT (default godot47), GODOT_CPP_DIR (default native/ext/godot-cpp), CMAKE_GENERATOR.
 #
 # godot-cpp is fetched with plain `git clone` (works through this container's git proxy and on the Mac)
@@ -28,7 +29,7 @@ API_VERSION=4.7
 
 TARGETS=(template_debug)
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-CLEAN=0 VERIFY_API=0 OFFLINE=0
+CLEAN=0 VERIFY_API=0 OFFLINE=0 FETCH_ONLY=0
 for a in "$@"; do
   case "$a" in
     --target=all) TARGETS=(template_debug template_release) ;;
@@ -37,6 +38,7 @@ for a in "$@"; do
     --clean) CLEAN=1 ;;
     --verify-api) VERIFY_API=1 ;;
     --offline) OFFLINE=1 ;;
+    --fetch-only) FETCH_ONLY=1 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
@@ -67,6 +69,7 @@ fi
 # Keep Godot's importer out of the checkout (it is inside res://ext/).
 touch "$GODOT_CPP_DIR/.gdignore"
 log "godot-cpp $GODOT_CPP_REF @ $have"
+[ "$FETCH_ONLY" = 1 ] && exit 0
 
 # --- 2. configure + build ------------------------------------------------------------------------
 gen=()

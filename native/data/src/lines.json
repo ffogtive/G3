@@ -1,0 +1,1466 @@
+{
+  "_doc": "tables: named line pools (config.js). inline: every Korean literal of the sim/game files, grouped by array literal; id = file:line[#n] (provisional keys — rename when the call site is ported). template=true texts keep ${expr} placeholders verbatim. Stage taunts live in stages.json, mini lines in mini_types.json, UI chrome in ui.js (bake-ui).",
+  "inline": [
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:147",
+      "line": 147,
+      "prop": null,
+      "template": false,
+      "texts": ["펑크!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:152",
+      "line": 152,
+      "prop": null,
+      "template": false,
+      "texts": ["원인 제거!"]
+    },
+    {
+      "call": "bubble",
+      "file": "game/js/main.js",
+      "id": "main.js:166",
+      "line": 166,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길 얌체 끼어들기!"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:169",
+      "line": 169,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길 얌체! 경적 울리면 제자리(4차선)로 돌아갑니다"]
+    },
+    {
+      "call": "ui.popText",
+      "file": "game/js/main.js",
+      "id": "main.js:180#1",
+      "line": 180,
+      "prop": null,
+      "template": false,
+      "texts": ["분노 MAX!!"]
+    },
+    {
+      "call": "ui.popText",
+      "file": "game/js/main.js",
+      "id": "main.js:180#2",
+      "line": 180,
+      "prop": null,
+      "template": false,
+      "texts": ["분노 충전!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:210",
+      "line": 210,
+      "prop": null,
+      "template": false,
+      "texts": ["레커 출동!"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:218#1",
+      "line": 218,
+      "prop": null,
+      "template": false,
+      "texts": ["주황 표식 = 잔챙이 빌런! 가까이서 [발사] 꾹 → 참교육 (★미션)"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:218#2",
+      "line": 218,
+      "prop": null,
+      "template": false,
+      "texts": ["주황 표식 = 잔챙이 빌런! 가까이서 Space 꾹 → 압정 참교육 (★미션)"]
+    },
+    {
+      "call": "healHP",
+      "file": "game/js/main.js",
+      "id": "main.js:230",
+      "line": 230,
+      "prop": null,
+      "template": false,
+      "texts": ["정비 쿠폰 +"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:235",
+      "line": 235,
+      "prop": null,
+      "template": true,
+      "texts": ["${T.name} 참교육! +${(T.fine / 10000).toFixed(0)}만원"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:241",
+      "line": 241,
+      "prop": null,
+      "template": false,
+      "texts": ["분노 부족!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:248",
+      "line": 248,
+      "prop": null,
+      "template": false,
+      "texts": ["분노의 경적!!"]
+    },
+    {
+      "call": "bubble",
+      "file": "game/js/main.js",
+      "id": "main.js:254",
+      "line": 254,
+      "prop": null,
+      "template": false,
+      "texts": ["깜짝이야!", "헉!", "고막…", "무슨 소리야?!"]
+    },
+    {
+      "call": "healHP",
+      "file": "game/js/main.js",
+      "id": "main.js:260",
+      "line": 260,
+      "prop": null,
+      "template": false,
+      "texts": ["숨 돌리기 +"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:263",
+      "line": 263,
+      "prop": null,
+      "template": true,
+      "texts": ["${e.idx + 1}페이즈! ${e.label}"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:266",
+      "line": 266,
+      "prop": null,
+      "template": false,
+      "texts": ["이제부터 진짜다!", "어디 한번 해보자고!", "동생들 집합!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:270",
+      "line": 270,
+      "prop": null,
+      "template": false,
+      "texts": ["빵! 정신 차려요!", "비상등 켜세요!", "갓길로 빼요!", "빵빵!", "괜찮아요?!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:275",
+      "line": 275,
+      "prop": null,
+      "template": false,
+      "texts": ["분노 부족!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:304#1",
+      "line": 304,
+      "prop": null,
+      "template": false,
+      "texts": ["견인 완료!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:304#2",
+      "line": 304,
+      "prop": null,
+      "template": false,
+      "texts": ["싹~"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:447",
+      "line": 447,
+      "prop": null,
+      "template": false,
+      "texts": ["출발!"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:454#1",
+      "line": 454,
+      "prop": null,
+      "template": false,
+      "texts": ["꽉 막혔다! ▶ 갓길로 빠져서 원인을 찾아라 (긴급차량)"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:454#2",
+      "line": 454,
+      "prop": null,
+      "template": false,
+      "texts": ["꽉 막혔다! → 갓길로 빠져서 원인을 찾아라 (긴급차량)"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:455#1",
+      "line": 455,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길이 막히면 [경적] → 4차선이 끼워줍니다"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:455#2",
+      "line": 455,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길이 막히면 Space(경적) → 4차선이 끼워줍니다"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:464#1",
+      "line": 464,
+      "prop": null,
+      "template": false,
+      "texts": ["원인 발견! 구조 출동!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:464#2",
+      "line": 464,
+      "prop": null,
+      "template": false,
+      "texts": ["원인 발견!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:470#1",
+      "line": 470,
+      "prop": null,
+      "template": false,
+      "texts": ["구조 상황! 압정 금지 · [발사] = 경적으로 깨우기 → 갓길로 유도"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:470#2",
+      "line": 470,
+      "prop": null,
+      "template": false,
+      "texts": ["구조 상황! 압정 금지 · Space = 경적으로 깨우기 → 갓길로 유도"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:471#1",
+      "line": 471,
+      "prop": null,
+      "template": false,
+      "texts": ["[발사] 꾹 = 화물차 너머로 압정 선제공격 · 갓길로 앞질러 정면 참교육!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:471#2",
+      "line": 471,
+      "prop": null,
+      "template": false,
+      "texts": ["Space 꾹 = 화물차 너머로 압정 선제공격 · 갓길로 앞질러 정면 참교육!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:484",
+      "line": 484,
+      "prop": null,
+      "template": false,
+      "texts": ["견인!! 범퍼가 남아나질 않았다"]
+    },
+    {
+      "call": "world.setVMS",
+      "file": "game/js/main.js",
+      "id": "main.js:511#1",
+      "line": 511,
+      "prop": null,
+      "template": false,
+      "texts": ["소통 원활\n1차선은 추월차선!"]
+    },
+    {
+      "call": "world.setVMS",
+      "file": "game/js/main.js",
+      "id": "main.js:511#2",
+      "line": 511,
+      "prop": null,
+      "template": false,
+      "texts": ["소통 원활\n안전운전 하세요"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:512",
+      "line": 512,
+      "prop": null,
+      "template": false,
+      "texts": ["구조 완료! 차로 개방!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:513",
+      "line": 513,
+      "prop": null,
+      "template": false,
+      "texts": ["전 차로 개방!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:514",
+      "line": 514,
+      "prop": null,
+      "template": true,
+      "texts": ["${blocked.map((l) => l + 1).join('·')}차선 개방!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:519",
+      "line": 519,
+      "prop": null,
+      "template": false,
+      "texts": ["뻥 뚫렸다!!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:530",
+      "line": 530,
+      "prop": null,
+      "template": false,
+      "texts": ["질주 타임!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:544#1",
+      "line": 544,
+      "prop": "label",
+      "template": false,
+      "texts": ["원인 해결 (구조 완료 · 압정 금지)"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:544#2",
+      "line": 544,
+      "prop": null,
+      "template": false,
+      "texts": ["원인 제거 (참교육 완료)"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:545",
+      "line": 545,
+      "prop": "label",
+      "template": false,
+      "texts": ["내구도 60 이상으로 클리어"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:546#1",
+      "line": 546,
+      "prop": "label",
+      "template": true,
+      "texts": ["잔챙이 빌런 ${n}명 전원 참교육"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:546#2",
+      "line": 546,
+      "prop": null,
+      "template": false,
+      "texts": ["잔챙이 빌런 없음 (자동 달성)"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:578#1",
+      "line": 578,
+      "prop": "label",
+      "template": false,
+      "texts": ["해방된 차량"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:578#2",
+      "line": 578,
+      "prop": null,
+      "template": true,
+      "texts": ["${freed.toLocaleString('ko-KR')}대"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:579#1",
+      "line": 579,
+      "prop": "label",
+      "template": false,
+      "texts": ["근거"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:579#2",
+      "line": 579,
+      "prop": "value",
+      "template": true,
+      "texts": ["${stage.displayKm}km×${NUM_LANES}차로×${TUNE.jamDensity}대/km"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:580#1",
+      "line": 580,
+      "prop": "label",
+      "template": false,
+      "texts": ["아낀 시간 합계"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:580#2",
+      "line": 580,
+      "prop": null,
+      "template": true,
+      "texts": ["${savedHours.toLocaleString('ko-KR')}시간"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:581#1",
+      "line": 581,
+      "prop": "label",
+      "template": false,
+      "texts": ["남은 내구도"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:581#2",
+      "line": 581,
+      "prop": null,
+      "template": true,
+      "texts": ["${G.hp}/${G.maxHp}${G.fails ? ` · 견인 ${G.fails}회` : ''}"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:582",
+      "line": 582,
+      "prop": "label",
+      "template": false,
+      "texts": ["잔챙이 참교육"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:583",
+      "line": 583,
+      "prop": "label",
+      "template": false,
+      "texts": ["소요 시간"]
+    },
+    {
+      "call": "ui.showResult",
+      "file": "game/js/main.js",
+      "id": "main.js:584",
+      "line": 584,
+      "prop": "label",
+      "template": false,
+      "texts": ["속시원함 지수"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:608#1",
+      "line": 608,
+      "prop": null,
+      "template": false,
+      "texts": ["사이렌!! 정신 번쩍!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:608#2",
+      "line": 608,
+      "prop": null,
+      "template": true,
+      "texts": ["분노 폭발! -${dmg}"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:627#1",
+      "line": 627,
+      "prop": null,
+      "template": false,
+      "texts": ["1대 구조!"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:627#2",
+      "line": 627,
+      "prop": null,
+      "template": false,
+      "texts": ["1대 참교육!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:629#1",
+      "line": 629,
+      "prop": "text",
+      "template": false,
+      "texts": ["형님!!!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:629#2",
+      "line": 629,
+      "prop": null,
+      "template": false,
+      "texts": ["아우야!!!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:650",
+      "line": 650,
+      "prop": null,
+      "template": false,
+      "texts": ["에어백!! 간신히 버팀"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:653",
+      "line": 653,
+      "prop": null,
+      "template": true,
+      "texts": ["범퍼 -${lost}"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:714",
+      "line": 714,
+      "prop": null,
+      "template": true,
+      "texts": ["재도전 ${fails}회차 · 포상금 ×${G.payRetryMul.toFixed(1)}"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:720#1",
+      "line": 720,
+      "prop": "special",
+      "template": false,
+      "texts": ["구조 상황 · 압정 금지"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:720#2",
+      "line": 720,
+      "prop": null,
+      "template": false,
+      "texts": ["보스"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:720#3",
+      "line": 720,
+      "prop": null,
+      "template": false,
+      "texts": ["엘리트"]
+    },
+    {
+      "call": "applyDamage",
+      "file": "game/js/main.js",
+      "id": "main.js:729",
+      "line": 729,
+      "prop": null,
+      "template": false,
+      "texts": ["피격"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:735",
+      "line": 735,
+      "prop": null,
+      "template": false,
+      "texts": ["으악!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:747",
+      "line": 747,
+      "prop": null,
+      "template": false,
+      "texts": ["으악!"]
+    },
+    {
+      "call": "applyDamage",
+      "file": "game/js/main.js",
+      "id": "main.js:779",
+      "line": 779,
+      "prop": null,
+      "template": false,
+      "texts": ["공사 콘"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:793#1",
+      "line": 793,
+      "prop": null,
+      "template": false,
+      "texts": ["콘 날리기!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:793#2",
+      "line": 793,
+      "prop": null,
+      "template": false,
+      "texts": ["낙하물 치움!"]
+    },
+    {
+      "call": "applyDamage",
+      "file": "game/js/main.js",
+      "id": "main.js:799#1",
+      "line": 799,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길 고장차 충돌"]
+    },
+    {
+      "call": "applyDamage",
+      "file": "game/js/main.js",
+      "id": "main.js:799#2",
+      "line": 799,
+      "prop": null,
+      "template": false,
+      "texts": ["고속 추돌"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:808",
+      "line": 808,
+      "prop": null,
+      "template": false,
+      "texts": ["쿵!"]
+    },
+    {
+      "call": "ui.toast",
+      "file": "game/js/main.js",
+      "id": "main.js:1067#1",
+      "line": 1067,
+      "prop": null,
+      "template": false,
+      "texts": ["터널: 갓길 없음!"]
+    },
+    {
+      "call": "ui.toast",
+      "file": "game/js/main.js",
+      "id": "main.js:1067#2",
+      "line": 1067,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길 폐쇄! 차로 사이로 뚫어야 한다"]
+    },
+    {
+      "call": "bubble",
+      "file": "game/js/main.js",
+      "id": "main.js:1072",
+      "line": 1072,
+      "prop": null,
+      "template": false,
+      "texts": ["어딜 끼어들어!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:1079",
+      "line": 1079,
+      "prop": null,
+      "template": false,
+      "texts": ["빵!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:1083",
+      "line": 1083,
+      "prop": null,
+      "template": false,
+      "texts": ["왜 빵빵거려?", "빵빵해도 안 비켜~", "내 차선인데?"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:1093",
+      "line": 1093,
+      "prop": null,
+      "template": false,
+      "texts": ["얌체 참교육 +300"]
+    },
+    {
+      "call": "pick",
+      "file": "game/js/main.js",
+      "id": "main.js:1098#1",
+      "line": 1098,
+      "prop": null,
+      "template": false,
+      "texts": ["또 빵?", "빵빵 그만!", "귀 아파요", "들었다고요"]
+    },
+    {
+      "call": "ui.toast",
+      "file": "game/js/main.js",
+      "id": "main.js:1098#2",
+      "line": 1098,
+      "prop": null,
+      "template": false,
+      "texts": ["경적 피로: 같은 차에 계속 빵 → 안 비켜줌"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:1108",
+      "line": 1108,
+      "prop": null,
+      "template": false,
+      "texts": ["참교육 점프!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/main.js",
+      "id": "main.js:1173",
+      "line": 1173,
+      "prop": null,
+      "template": false,
+      "texts": ["분노 부족!"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:1182#1",
+      "line": 1182,
+      "prop": null,
+      "template": false,
+      "texts": ["갓길 막힘! 경적 → 4차선이 끼워줘요"]
+    },
+    {
+      "call": "ui.hint",
+      "file": "game/js/main.js",
+      "id": "main.js:1182#2",
+      "line": 1182,
+      "prop": null,
+      "template": false,
+      "texts": ["꽉 막혔다! 오른쪽 갓길로 빠지세요 →"]
+    },
+    {
+      "call": "ui.showFail",
+      "file": "game/js/main.js",
+      "id": "main.js:1194#1",
+      "line": 1194,
+      "prop": "reason",
+      "template": false,
+      "texts": ["피격"]
+    },
+    {
+      "call": "ui.showFail",
+      "file": "game/js/main.js",
+      "id": "main.js:1194#2",
+      "line": 1194,
+      "prop": "retryLabel",
+      "template": false,
+      "texts": ["원인 발견 지점부터 다시"]
+    },
+    {
+      "call": "ui.banner",
+      "file": "game/js/main.js",
+      "id": "main.js:1209",
+      "line": 1209,
+      "prop": null,
+      "template": false,
+      "texts": ["앞을 막았다! 정면 참교육!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:1212#1",
+      "line": 1212,
+      "prop": null,
+      "template": false,
+      "texts": ["[발사] = 경적으로 깨우기 · [분노] = 사이렌 대경적 · 갓길로 유도하면 구조 완료"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:1212#2",
+      "line": 1212,
+      "prop": null,
+      "template": false,
+      "texts": ["Space = 경적으로 깨우기 · R = 사이렌 대경적 · 갓길로 유도하면 구조 완료"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:1213#1",
+      "line": 1213,
+      "prop": null,
+      "template": false,
+      "texts": ["[발사] 꾹 = 뒤로 압정 (밟으면 펑크!) · [분노] = 분노 폭탄 · 공격은 차선 바꿔 피하기"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:1213#2",
+      "line": 1213,
+      "prop": null,
+      "template": false,
+      "texts": ["Space 꾹 = 뒤로 압정 (밟으면 펑크!) · R = 분노 폭탄 · 공격은 차선 바꿔 피하기"]
+    },
+    {
+      "call": null,
+      "file": "game/js/main.js",
+      "id": "main.js:1360",
+      "line": 1360,
+      "prop": null,
+      "template": false,
+      "texts": ["테스트"]
+    },
+    {
+      "call": "this.pendingEvents.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:216",
+      "line": 216,
+      "prop": "text",
+      "template": false,
+      "texts": ["안 맞아!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/boss.js",
+      "id": "boss.js:454",
+      "line": 454,
+      "prop": "label",
+      "template": false,
+      "texts": ["2페이즈!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/boss.js",
+      "id": "boss.js:465",
+      "line": 465,
+      "prop": null,
+      "template": false,
+      "texts": ["상향등!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/boss.js",
+      "id": "boss.js:474",
+      "line": 474,
+      "prop": null,
+      "template": false,
+      "texts": ["빵!!!"]
+    },
+    {
+      "call": "hud.popAt",
+      "file": "game/js/boss.js",
+      "id": "boss.js:481",
+      "line": 481,
+      "prop": null,
+      "template": false,
+      "texts": ["부릉부릉!"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:491",
+      "line": 491,
+      "prop": null,
+      "template": false,
+      "texts": ["옛다!"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:499#1",
+      "line": 499,
+      "prop": null,
+      "template": false,
+      "texts": ["수박 서비스~"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:499#2",
+      "line": 499,
+      "prop": null,
+      "template": false,
+      "texts": ["거름이여~"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:499#3",
+      "line": 499,
+      "prop": null,
+      "template": false,
+      "texts": ["굴러간다~"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:515",
+      "line": 515,
+      "prop": null,
+      "template": false,
+      "texts": ["비켜 비켜~"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:521",
+      "line": 521,
+      "prop": null,
+      "template": false,
+      "texts": ["ㅋㅋㅋㅋㅋ"]
+    },
+    {
+      "call": "this._say",
+      "file": "game/js/boss.js",
+      "id": "boss.js:526",
+      "line": 526,
+      "prop": null,
+      "template": false,
+      "texts": ["탈탈탈탈~"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:636",
+      "line": 636,
+      "prop": "text",
+      "template": false,
+      "texts": ["들이받기!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:744",
+      "line": 744,
+      "prop": "text",
+      "template": false,
+      "texts": ["눈부셔!!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:767#1",
+      "line": 767,
+      "prop": null,
+      "template": false,
+      "texts": ["콜록콜록!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:767#2",
+      "line": 767,
+      "prop": null,
+      "template": false,
+      "texts": ["고막 테러!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:791#1",
+      "line": 791,
+      "prop": null,
+      "template": false,
+      "texts": ["커피 테러!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:791#2",
+      "line": 791,
+      "prop": null,
+      "template": false,
+      "texts": ["앗 뜨거!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:791#3",
+      "line": 791,
+      "prop": null,
+      "template": false,
+      "texts": ["폰 투척?!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:791#4",
+      "line": 791,
+      "prop": null,
+      "template": false,
+      "texts": ["으악!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:810#1",
+      "line": 810,
+      "prop": null,
+      "template": false,
+      "texts": ["수박 볼링!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:810#2",
+      "line": 810,
+      "prop": null,
+      "template": false,
+      "texts": ["건초 직격!"]
+    },
+    {
+      "call": "events.push",
+      "file": "game/js/boss.js",
+      "id": "boss.js:810#3",
+      "line": 810,
+      "prop": null,
+      "template": false,
+      "texts": ["으악!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:30",
+      "line": 30,
+      "prop": "hint",
+      "template": false,
+      "texts": ["깜빡이 템포를 읽어라: 느리면 가짜(그대로 쏘기 ×1.5) · 빨라지면 진짜(↓ 브레이크로 빠지면 헛스윙 ×2) · 경적 = 0.5초 개그"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:45",
+      "line": 45,
+      "prop": "text",
+      "template": true,
+      "texts": ["깜빡 ${B.sig.blinks}회째 · 차로 변경 ${B.sig.laneChanges}회"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:72",
+      "line": 72,
+      "prop": "text",
+      "template": false,
+      "texts": ["깜빡이 진짜였어?!"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:78",
+      "line": 78,
+      "prop": "text",
+      "template": false,
+      "texts": ["헛스윙! 뒷바퀴 노출 ×2"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:92",
+      "line": 92,
+      "prop": "text",
+      "template": false,
+      "texts": ["딸깍딸깍딸깍!!"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:99",
+      "line": 99,
+      "prop": "text",
+      "template": false,
+      "texts": ["어? 오른쪽?"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:103",
+      "line": 103,
+      "prop": "text",
+      "template": false,
+      "texts": ["딸깍. …드디어 꺼졌다"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:105#1",
+      "line": 105,
+      "prop": "label",
+      "template": false,
+      "texts": ["깜빡이"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:105#2",
+      "line": 105,
+      "prop": "value",
+      "template": true,
+      "texts": ["점등 ${B.sig.blinks}회 · 차로 변경 ${B.sig.laneChanges}회"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:132",
+      "line": 132,
+      "prop": "immuneText",
+      "template": false,
+      "texts": ["너무 붙어서 안 맞아!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:133",
+      "line": 133,
+      "prop": "hint",
+      "template": false,
+      "texts": ["붙어 있으면 압정이 안 맞는다 → 차로를 바꿔 떼어낸 순간 쏘기 · 35% 이하: 앞 진회색 세단 앞에서 옆으로 비켜 주기"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:149",
+      "line": 149,
+      "prop": "text",
+      "template": false,
+      "texts": ["ㅠㅠ 초보예요"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:173",
+      "line": 173,
+      "prop": "text",
+      "template": false,
+      "texts": ["지금! 사격 창"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:191",
+      "line": 191,
+      "prop": "text",
+      "template": false,
+      "texts": ["번쩍번쩍 빵빵!"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:205",
+      "line": 205,
+      "prop": "text",
+      "template": false,
+      "texts": ["범퍼 툭!"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:213",
+      "line": 213,
+      "prop": "text",
+      "template": false,
+      "texts": ["앞에 진회색 세단이 끼어들었다… 비켜 주면?"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:220",
+      "line": 220,
+      "prop": "text",
+      "template": false,
+      "texts": ["오 저 차 맛있겠다~"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:228",
+      "line": 228,
+      "prop": "text",
+      "template": false,
+      "texts": ["암행순찰차입니다."]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:229",
+      "line": 229,
+      "prop": "text",
+      "template": false,
+      "texts": ["아…"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:239",
+      "line": 239,
+      "prop": "text",
+      "template": false,
+      "texts": ["부릉!"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:248",
+      "line": 248,
+      "prop": "text",
+      "template": false,
+      "texts": ["감사합니다ㅠㅠ"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:249",
+      "line": 249,
+      "prop": "text",
+      "template": false,
+      "texts": ["구출 교대! 이제 그 앞 1차로로 들어가세요"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:276#1",
+      "line": 276,
+      "prop": "text",
+      "template": false,
+      "texts": ["0.6m → ∞ (암행순찰차에 인계)"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:276#2",
+      "line": 276,
+      "prop": null,
+      "template": false,
+      "texts": ["찰싹… 떨어졌다"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:279#1",
+      "line": 279,
+      "prop": "label",
+      "template": false,
+      "texts": ["평균 차간"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:279#2",
+      "line": 279,
+      "prop": null,
+      "template": true,
+      "texts": ["${S.gapN ? Math.max(0.3, S.gapSum / S.gapN).toFixed(1) : '0.6'}m · 마지막 상대 ${S.handed ? '암행순찰차' : '나'}"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:289",
+      "line": 289,
+      "prop": "hint",
+      "template": false,
+      "texts": ["공격은 3초 박자(상향등→컵→경적→돌진) · 뒤차 상향등 릴레이가 꽂히면 1.5초 경직 → 그때 몰아쳐라"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:295",
+      "line": 295,
+      "prop": "text",
+      "template": false,
+      "texts": ["정속 80 딱"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:310",
+      "line": 310,
+      "prop": "text",
+      "template": false,
+      "texts": ["눈부셔! (경직)"]
+    },
+    {
+      "call": "ctx.events.push",
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:320",
+      "line": 320,
+      "prop": "text",
+      "template": false,
+      "texts": ["어…? 2차선으로 갈게요… (깜빡이 사용 ✔)"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:322#1",
+      "line": 322,
+      "prop": "label",
+      "template": false,
+      "texts": ["차로 변경"]
+    },
+    {
+      "call": null,
+      "file": "game/js/behaviors/index.js",
+      "id": "behaviors/index.js:322#2",
+      "line": 322,
+      "prop": "value",
+      "template": true,
+      "texts": ["0회 → 마지막에 1회 (깜빡이 ✔) · 상향등 릴레이 ${B.sig.relays}번"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:5",
+      "line": 5,
+      "prop": null,
+      "template": false,
+      "texts": ["사이다 ㅋㅋㅋㅋㅋ", "10년 묵은 체증이 내려갔습니다", "이분 국가유공자 지정해라", "형님 고속도로 순찰대 하세요", "{v} 보고 혈압 올랐는데 덕분에 내려감", "저 이 구간 매일 다니는데 진짜 저런 차 있음", "비상등 깜빡이는 거 보고 울컥했다", "대~한민국 경적 소리 듣고 빵 터짐", "이게 나라다", "타이어 펑크 소리 ASMR로 10시간 부탁드립니다", "{v} 본인 등판 기다립니다 ㅋㅋ", "오늘도 참교육 감사합니다", "구독 누르고 갑니다", "1차선은 추월차선입니다 여러분", "블박 화질 무엇? 4K임?", "정속주행 아저씨들 이거 보세요", "보는 내가 다 시원하네", "알고리즘이 여기로 데려왔다"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:12#1",
+      "line": 12,
+      "prop": null,
+      "template": false,
+      "texts": ["구독자 1천 돌파!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:12#2",
+      "line": 12,
+      "prop": null,
+      "template": false,
+      "texts": ["구독자 1만 돌파!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:12#3",
+      "line": 12,
+      "prop": null,
+      "template": false,
+      "texts": ["실버 참교육 버튼 획득!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:12#4",
+      "line": 12,
+      "prop": null,
+      "template": false,
+      "texts": ["골드 참교육 버튼 획득!"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:25",
+      "line": 25,
+      "prop": null,
+      "template": true,
+      "texts": ["${names[0].replace(/ [1-3]호$/, '')} ${names.length}대"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:40#1",
+      "line": 40,
+      "prop": "violation",
+      "template": false,
+      "texts": ["도로교통법 위반"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:40#2",
+      "line": 40,
+      "prop": "card",
+      "template": false,
+      "texts": ["고지서"]
+    },
+    {
+      "call": null,
+      "file": "game/js/rewards.js",
+      "id": "rewards.js:61",
+      "line": 61,
+      "prop": null,
+      "template": false,
+      "texts": ["만"]
+    }
+  ],
+  "schema_version": 1,
+  "source": "game/js/config.js *_LINES + Hangul string literals of main.js/boss.js/behaviors/index.js/rewards.js @ 753549a",
+  "tables": {
+    "BUMP_LINES": ["아 뭐야!", "조심 좀!", "빵빵!!", "거리 유지!", "어휴"],
+    "CHEATER_LINES": ["죄송합니다~", "아 들켰다", "급해서요ㅠ", "블박 찍혔나?"],
+    "CUTIN_LINES": ["깜빡이 안 켜고 칼치기!", "끼어들기 ㅡㅡ", "말도 없이?!"],
+    "FRONT_RAGE_LINES": ["1차선 좀 비켜!!", "추월 좀 하자!!", "빵빵빵빵!", "앞에 뭐야 진짜…", "추월차선인데?!", "저 차 때문에…"],
+    "LETIN_LINES": ["들어오세요~", "긴급차량 먼저!", "어서 가세요!", "저 놈 좀 혼내줘요!"],
+    "NOWAY_LINES": ["어디로 비켜!", "나도 막혔어!", "틈이 없어요!", "빵빵해도 소용없음"],
+    "THANKS_LINES": ["감사합니다!!", "형님 최고!", "사이다!!", "10년 묵은 체증이…", "속이 다 시원하네", "이제 좀 살겠다", "드디어!!", "참교육 ㅇㅈ", "비상등 깜빡깜빡", "복 받으실 거예요"],
+    "YIELD_LINES": ["네네 가세요~", "급하시네 ㅎ", "에휴 먼저 가요", "비켜드림", "형님 먼저!"]
+  }
+}

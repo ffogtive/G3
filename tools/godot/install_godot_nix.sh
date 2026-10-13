@@ -86,7 +86,7 @@ find_nix_bin() {
 if ! NIX_BIN=$(find_nix_bin); then
   log "no Nix found -> single-user install of $(basename "$NIX_TARBALL_URL")"
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL --retry 3 -o "$tmp/nix.tar.xz" "$NIX_TARBALL_URL"
+  curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$tmp/nix.tar.xz" "$NIX_TARBALL_URL"
   echo "$NIX_TARBALL_SHA256  $tmp/nix.tar.xz" | sha256sum -c --quiet || die "nix tarball sha256 mismatch"
   mkdir -p "$tmp/x" && tar -xJf "$tmp/nix.tar.xz" -C "$tmp/x"
   mkdir -p /nix
@@ -101,7 +101,7 @@ NIXOPTS=(--option substituters "$CACHE_URL" --option trusted-public-keys "$CACHE
 if [ "$VERIFY_EVAL" = 1 ]; then
   log "[1b] --verify-eval: re-derive store paths from $NIXPKGS_RELEASE"
   ev=$(mktemp -d)
-  curl -fsSL --retry 3 -o "$ev/nixexprs.tar.xz" "$NIXEXPRS_URL"
+  curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$ev/nixexprs.tar.xz" "$NIXEXPRS_URL"
   echo "$NIXEXPRS_SHA256  $ev/nixexprs.tar.xz" | sha256sum -c --quiet || die "nixexprs sha256 mismatch"
   tar -xJf "$ev/nixexprs.tar.xz" -C "$ev"
   src=$(find "$ev" -mindepth 1 -maxdepth 1 -type d | head -1)
