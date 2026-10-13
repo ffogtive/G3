@@ -19,7 +19,7 @@ import { initUI, ui } from './ui.js';
 import * as SC from './scenery.js';
 import { setHeadlights } from './vehicles.js';
 import * as VEH from './vehicles.js';
-import { computeReward, applyReward } from './rewards.js';
+import { computeReward, applyReward, villainNames } from './rewards.js';
 import CATALOG from './data/villain_catalog.js';
 import { buildStages } from './stagegen.js';
 
@@ -434,7 +434,7 @@ function enterPhase(name) {
     case 'boss': {
       G.bossStart = G.time;
       boss.attackT = 2.0;
-      const names = boss.villains.map((v) => v.name).join(' & ');
+      const names = villainNames(boss.villains);
       ui.banner(G.stage.honkOnly ? '원인 발견! 구조 출동!' : '원인 발견!', 'boss', 1300);
       G.frontLocked = false;
       ui.showBoss({ name: names, hp: 1, tires: 4 });
@@ -529,7 +529,7 @@ function showResult() {
   saveProgress();
   ui.showResult({
     stageName: `${stage.highway} · ${stage.direction}`,
-    villainName: stage.villains.map((v) => v.name).join(' & '),
+    villainName: villainNames(stage.villains),
     stars, score,
     stats: [
       { label: '해방된 차량', value: `${freed.toLocaleString('ko-KR')}대` },
@@ -1050,7 +1050,7 @@ function update(realDt) {
   }
   if (G.phase === 'boss') {
     const a = boss.alive[0] || boss.villains[0];
-    ui.showBoss({ name: boss.villains.map((v) => v.name).join(' & '), hp: boss.hpFrac(), tires: a ? a.tires : 0 });
+    ui.showBoss({ name: villainNames(boss.villains), hp: boss.hpFrac(), tires: a ? a.tires : 0 });
   }
   if (G.phase === 'release' || G.phase === 'cruise') {
     const n = Math.round(traffic.countReleased() * G.mult);

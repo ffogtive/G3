@@ -19,6 +19,13 @@ function pick(arr, n, seed) {
   return out;
 }
 
+// 빌런 이름: 'OO 1호 & OO 2호' → 'OO 2대' (카드·채널 제목이 넘치지 않게)
+export function villainNames(vs) {
+  const names = (vs || []).map((v) => v.name);
+  if (names.length > 1 && names.every((n) => / [1-3]호$/.test(n))) return `${names[0].replace(/ [1-3]호$/, '')} ${names.length}대`;
+  return names.join(' & ');
+}
+
 // r: { stars, cath, freed, bumps, cheaters }
 export function computeReward(stage, r, seed = 1) {
   const fine = stage.fine ?? 30000;              // 카드 표시: 실제 범칙금·벌금
@@ -28,7 +35,7 @@ export function computeReward(stage, r, seed = 1) {
   const payout = Math.round(((base * mult + bonus) * (r.payMult || 1)) / 100) * 100;
   const views = Math.round((r.freed * 38 + r.cath * 950) * (0.85 + ((seed * 7919) % 100) / 300));
   const subsGain = Math.max(12, Math.round(views * 0.011));
-  const vName = stage.villains.map((v) => v.name).join(' & ');
+  const vName = villainNames(stage.villains);
   const comments = pick(COMMENTS, 3, seed + stage.id * 31).map((c) => c.replace('{v}', vName));
   return { fine, payout, bonus, views, subsGain, comments, violation: stage.violation || '도로교통법 위반', villainName: vName, stars: r.stars, card: stage.card || '고지서' };
 }

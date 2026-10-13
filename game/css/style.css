@@ -1719,6 +1719,86 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .ui-shopfloat--spend { translate: -50% 0; color: #ff8a80; }
 .ui-shopfloat--equip { color: #ffe14d; font-size: 24px; }
 
+/* ───────────── 100스테이지: 등급 배지 · 처분 카드 (형사 · 구조 표창 · 계도)
+   가설: 보스·엘리트·구조형·형사 카드가 색/모양으로 구분되면 100개가 반복처럼 느껴지지 않는다. */
+.ui-kindb {
+  display: inline-flex; align-items: center; flex: none; padding: 3px 7px 2px;
+  font-family: var(--ui-fd); font-weight: 400; font-style: normal; font-size: 12px; line-height: 1; letter-spacing: .02em; white-space: nowrap; text-shadow: none;
+  color: #fff; background: linear-gradient(180deg, #ff6b61, #e2231a); border: 2px solid var(--ui-ink); border-radius: 7px; box-shadow: 0 2px 0 var(--ui-ink);
+}
+.ui-kindb--final { color: #ffd23f; background: linear-gradient(180deg, #3a3f4a, #17202b); box-shadow: 0 2px 0 var(--ui-ink), inset 0 0 0 1.5px #ffd23f; }
+.ui-kindb--elite { background: linear-gradient(180deg, #a98bff, #6d4bb8); }
+.ui-kindb--bonus { color: var(--ui-ink); background: linear-gradient(180deg, #ffe680, #ffb400); }
+.ui-kindb--xs { margin-left: 4px; padding: 2px 4px 1px; font-size: 10px; border-width: 1.5px; box-shadow: none; vertical-align: 1px; }
+.ui-kindb--sign { margin-left: 8px; font-size: 13px; }
+.ui-casechip { display: inline-flex; align-items: center; flex: none; padding: 2px 6px 1px; font-family: var(--ui-fd); font-weight: 400; font-style: normal; font-size: 11px; line-height: 1; letter-spacing: .02em; white-space: nowrap; color: #fff; border: 1.5px solid var(--ui-ink); border-radius: 6px; }
+.ui-casechip--crime { background: #b81d12; }
+.ui-casechip--rescue { color: var(--ui-ink); background: #ffd23f; }
+.ui-casechip--warn { background: #8a929d; }
+.ui-casechip--tile { margin-right: 5px; vertical-align: 2px; font-size: 10.5px; }
+/* 스테이지 타일 머리 색 = 등급 (보스 빨강 · 최종보스 검정+금 · 엘리트 보라 · 보너스 금) */
+.ui-stagecard.is-boss:not(.is-locked) .ui-stagecard__head { background: linear-gradient(180deg, #ff5a4f, #e2231a 55%, #b5170f); box-shadow: inset 0 0 0 2px #e2231a, inset 0 0 0 3.5px rgba(255, 255, 255, .9); }
+.ui-stagecard.is-final:not(.is-locked) .ui-stagecard__head { background: linear-gradient(180deg, #3a3f4a, #17202b); box-shadow: inset 0 0 0 2px #17202b, inset 0 0 0 3.5px #ffd23f; }
+.ui-stagecard.is-elite:not(.is-locked) .ui-stagecard__head { background: linear-gradient(180deg, #9a7bff, #6d4bb8 55%, #4f3291); box-shadow: inset 0 0 0 2px #6d4bb8, inset 0 0 0 3.5px rgba(255, 255, 255, .9); }
+.ui-stagecard.is-bonus:not(.is-locked) .ui-stagecard__head { background: linear-gradient(180deg, #ffe680, #ffb400 55%, #e09a00); box-shadow: inset 0 0 0 2px #ffb400, inset 0 0 0 3.5px rgba(255, 255, 255, .9); }
+.ui-stagecard.is-locked:is(.is-boss, .is-final, .is-elite, .is-bonus) .ui-stagecard__head { filter: saturate(.35) brightness(.8); }
+.ui-stagecard.is-final:not(.is-locked) { box-shadow: 0 6px 0 var(--ui-ink), 0 0 0 3px #ffd23f; }
+.ui-stagecard.is-next.is-final:not(.is-locked) { box-shadow: 0 6px 0 var(--ui-ink), 0 0 0 4px var(--ui-yellow); }
+.ui-stagecard.is-final .ui-stagecard__num em { color: #ffd23f; background: #17202b; }
+.ui-stagecard.is-elite .ui-stagecard__num em { background: #6d4bb8; }
+.ui-stagecard.is-bonus .ui-stagecard__num em { color: var(--ui-ink); background: #ffb400; }
+.ui-stagecard__no .ui-kindb, .ui-stagecard__no .ui-casechip { font-size: 11px; padding: 2px 5px 1px; box-shadow: none; }
+/* 스테이지 소개 카드: 등급 링 · 처분 태그 · 구조형 '경적으로 깨우기' */
+.ui-card__no .ui-kindb { font-size: 13px; }
+.ui-card__panel.is-boss { box-shadow: 0 8px 0 var(--ui-ink), 0 0 0 5px rgba(255, 59, 48, .9); }
+.ui-card__panel.is-final { box-shadow: 0 8px 0 var(--ui-ink), 0 0 0 5px #ffd23f, 0 0 0 9px rgba(23, 32, 43, .6); }
+.ui-card__panel.is-elite { box-shadow: 0 8px 0 var(--ui-ink), 0 0 0 5px rgba(124, 77, 255, .9); }
+.ui-card__panel.is-bonus { box-shadow: 0 8px 0 var(--ui-ink), 0 0 0 5px #ffb400; }
+.ui-card__tag--crime { background: #7a0c06; }
+.ui-card__tag--rescue { color: var(--ui-ink); background: #ffd23f; }
+.ui-card__tag--warn { background: #6d7682; }
+.ui-card__honk {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; padding: 3px 12px 3px 3px; white-space: nowrap;
+  font-family: var(--ui-fd); font-weight: 400; font-size: 14px; line-height: 1; color: var(--ui-ink);
+  background: repeating-linear-gradient(-45deg, #ffd23f 0 10px, #ffc61a 10px 20px); border: 3px solid var(--ui-ink); border-radius: 12px; box-shadow: 0 3px 0 var(--ui-ink);
+}
+.ui-card__honkico { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--ui-ink); }
+.ui-card__honkico svg { width: 17px; height: 17px; display: block; }
+.ui-card__honk b { font-weight: 400; color: #fff; background: var(--ui-red); border-radius: 7px; padding: 4px 7px 3px; }
+.ui-card__honk i { font-style: normal; opacity: .55; }
+/* 결과: 처분 카드 도장 */
+.ui-fine__amt small { margin-left: 3px; font-family: var(--ui-fb); font-size: 11px; }
+.ui-fine--crime { color: #b5170f; border-color: #b5170f; box-shadow: inset 0 0 0 2px rgba(255, 250, 238, .93), inset 0 0 0 4.5px #b5170f; }
+.ui-fine--crime .ui-fine__t { padding: 4px 4px 4px .14em; color: #fff; background: #c8241a; border-bottom: 0; border-radius: 4px; }
+.ui-fine--crime .ui-fine__amt b { font-size: 22px; }
+.ui-fine--crime .ui-fine__seal { background: #7a0c06; border-color: #4a0602; box-shadow: inset 0 0 0 2px #7a0c06, inset 0 0 0 3.5px rgba(255, 255, 255, .75); }
+.ui-fine--rescue {
+  rotate: -4deg; color: #7a4a00; background: linear-gradient(160deg, #fffbe6, #ffe89a);
+  border-color: #c98a00; box-shadow: inset 0 0 0 2px #fffbe6, inset 0 0 0 4.5px #c98a00, 0 3px 0 rgba(23, 32, 43, .35);
+}
+.ui-fine--rescue::after { display: none; }
+.ui-fine--rescue .ui-fine__t { border-bottom-color: #c98a00; }
+.ui-fine--rescue .ui-fine__t::before, .ui-fine--rescue .ui-fine__t::after { content: '★'; margin: 0 .2em; font-size: .7em; vertical-align: .15em; color: #e0a300; }
+.ui-fine--rescue .ui-fine__amt b { color: #b5170f; }
+.ui-fine--rescue .ui-fine__seal { background: #e0a300; border-color: #a86f00; box-shadow: inset 0 0 0 2px #e0a300, inset 0 0 0 3.5px rgba(255, 255, 255, .8); }
+.ui-fine--warn { color: #4a5360; border-color: #6d7682; background: rgba(240, 242, 245, .95); box-shadow: inset 0 0 0 2px rgba(240, 242, 245, .95), inset 0 0 0 4.5px #6d7682; }
+.ui-fine--warn .ui-fine__t { border-bottom-color: #6d7682; }
+.ui-fine--warn .ui-fine__seal { background: #6d7682; border-color: #4a5360; box-shadow: inset 0 0 0 2px #6d7682, inset 0 0 0 3.5px rgba(255, 255, 255, .75); }
+.ui-dash__villain.is-rescue, .ui-result__villain.is-rescue { color: #0b7a4b; }
+.ui-dash__villain.is-rescue span::after, .ui-result__villain.is-rescue span::after { display: none; }
+.ui-stamp--rescue { color: #c98a00; border-color: #c98a00; box-shadow: inset 0 0 0 3px var(--ui-cream), inset 0 0 0 6px #c98a00; }
+.ui-stamp--warn { color: #59616c; border-color: #6d7682; box-shadow: inset 0 0 0 3px var(--ui-cream), inset 0 0 0 6px #6d7682; }
+/* 결과: 실제 금액(빌런 부담) ↔ 포상금(내가 받는 돈) 구분 */
+.ui-money__box--crime { color: #8a0f07; background: #ffd9d4; }
+.ui-money__box--rescue { color: #7a4a00; background: linear-gradient(180deg, #fff3b0, #ffd23f); }
+.ui-money__box--warn { color: #59616c; background: #eceef1; }
+.ui-money__note { margin-top: -2px; font-size: 12px; line-height: 1.2; text-align: center; color: #7a8390; }
+.ui-acard.is-case-crime .ui-acard__fine { color: #8a0f07; }
+.ui-acard.is-case-rescue .ui-acard__fine { color: #a86f00; }
+.ui-acard.is-case-warn .ui-acard__fine { color: #6d7682; }
+/* 피니시 그림(매달린 차)이 가격표에 가리지 않게 살짝 위로 */
+.ui-item--finish .ui-item__svg { margin-top: -8px; }
+
 /* ───────────── v0.3 반응형: 폰 세로 */
 @media (max-width: 640px) {
   .ui-toprow { gap: 6px; }
@@ -1794,6 +1874,13 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .ui-item__rib { top: 6px; padding: 3px 7px 2px 6px; font-size: 11.5px; }
   .ui-item__stamp span { font-size: 20px; padding: 4px 9px 6px; border-width: 3.5px; }
   .ui-coinfx { top: 44px; }
+  .ui-item--finish .ui-item__svg { width: 104px; height: 73px; margin-top: -12px; }
+  .ui-card__honk { gap: 4px; padding: 3px 9px 3px 3px; font-size: 12.5px; }
+  .ui-card__honkico { width: 22px; height: 22px; }
+  .ui-card__honkico svg { width: 14px; height: 14px; }
+  .ui-card__honk b { padding: 3px 5px 2px; }
+  .ui-kindb--sign { font-size: 11.5px; margin-left: 5px; padding: 2px 5px 1px; }
+  .ui-money__note { font-size: 11px; }
 }
 /* 중간 높이 (501~680px): 미션이 붙은 스테이지 카드가 잘리지 않게 설명 줄을 접는다 */
 @media (min-height: 501px) and (max-height: 680px) {
