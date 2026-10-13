@@ -98,14 +98,14 @@ const releaseWave = (() => {
   const cv = document.createElement('canvas'); cv.width = 16; cv.height = 128;
   const g = cv.getContext('2d');
   const grd = g.createLinearGradient(0, 0, 0, 128);
-  grd.addColorStop(0, 'rgba(80,255,150,0)'); grd.addColorStop(0.45, 'rgba(120,255,170,0.9)');
-  grd.addColorStop(0.55, 'rgba(255,255,255,1)'); grd.addColorStop(1, 'rgba(80,255,150,0)');
+  grd.addColorStop(0, 'rgba(40,220,110,0)'); grd.addColorStop(0.42, 'rgba(60,235,120,0.7)');
+  grd.addColorStop(0.5, 'rgba(170,255,190,0.95)'); grd.addColorStop(0.58, 'rgba(60,235,120,0.7)'); grd.addColorStop(1, 'rgba(40,220,110,0)');
   g.fillStyle = grd; g.fillRect(0, 0, 16, 128);
   const tex = new THREE.CanvasTexture(cv);
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   const band = new THREE.Mesh(new THREE.PlaneGeometry(17, 9).rotateX(-Math.PI / 2), mat);
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(17, 3.2), mat.clone());
-  wall.material.opacity = 0.55;
+  wall.material.opacity = 0.4;
   wall.position.y = 1.6;
   const grp = new THREE.Group(); grp.add(band, wall); grp.visible = false;
   scene.add(grp);
@@ -117,7 +117,7 @@ const releaseWave = (() => {
       s -= TUNE.releaseWaveSpeed * dt;
       grp.position.z = -s;
       const pulse = 0.8 + Math.sin(G.realTime * 18) * 0.2;
-      wall.material.opacity = 0.5 * pulse;
+      wall.material.opacity = 0.38 * pulse;
       if (s < G.tailS - 20) { active = false; grp.visible = false; }
     },
     stop() { active = false; grp.visible = false; },
@@ -132,7 +132,7 @@ boss.onPop = (v, p) => {
 boss.onGone = (v) => {
   if (v.isLast) {
     ui.banner('참교육 완료!', 'big', 1500);
-    enterPhase('release');
+    G.releaseAt = G.realTime + 0.95; // 반짝★을 잠깐 감상한 뒤 드론샷으로
   }
 };
 traffic.onReleased = (c) => {
@@ -216,6 +216,7 @@ function setupStage(stage) {
   G.mult = displayCars / Math.max(1, traffic.cars.length);
   G.rage = 0; G.score = 0; G.combo = 0; G.maxCombo = 0; G.bumps = 0; G.supers = 0; G.hits = 0;
   G.releaseShown = 0;
+  G.releaseAt = 0;
 }
 
 function startStage(idx) {
@@ -554,7 +555,7 @@ function updateCamera(realDt) {
     case 'kill': {
       const vp = G.killVillain.mesh.position;
       const ang = 0.7 + G.phaseReal * 0.55;
-      const r = por ? 14 : 10.5;
+      const r = por ? 17 : 14;
       tPos.set(vp.x + Math.cos(ang) * r, Math.max(3.5, vp.y * 0.55 + 4), vp.z + Math.sin(ang) * r);
       tLook.copy(vp);
       if (G.killVillain.vel) tLook.addScaledVector(G.killVillain.vel, 0.12);
@@ -703,6 +704,7 @@ function update(realDt) {
     if (waveDone && G.phaseT > 4.2) enterPhase('cruise');
   }
   if (ph === 'cruise' && G.phaseT > TUNE.cruiseTime) enterPhase('result');
+  if (ph === 'kill' && G.releaseAt && G.realTime > G.releaseAt) { G.releaseAt = 0; enterPhase('release'); }
   if (ph === 'intro' && G.introStage === 1 && G.introT2 > 2.05) enterPhase('jam');
 
   // 원흉 도발 말풍선 (보일 때마다 분노 +)
