@@ -8,6 +8,7 @@ import { laneX, LANE_W, NUM_LANES, SHOULDER_LANE } from './config.js';
 import { buildVehicle, buildProjectile, buildWarningMarker, setBrake, setHazard, setFlash, setHeadlights } from './vehicles.js';
 import { occupies } from './traffic.js';
 import * as VEH from './vehicles.js';
+import { BEHAVIORS } from './behaviors/index.js';
 
 // 피니시 소품 (아트 모듈에 없으면 간단한 대체 모델)
 // 투척물 착지 높이(중심): 모델 반높이에 맞춤
@@ -143,6 +144,8 @@ export class BossManager {
     for (const it of this.items) { this._releaseItem(it.obj); if (it.marker) this._releaseMarker(it.marker); }
     for (const d of this.debris) this.scene.remove(d.obj);
     this.villains.length = 0; this.waves.length = 0; this.beams.length = 0; this.items.length = 0; this.debris.length = 0;
+    for (const m of this.sigMeshes || []) this.scene.remove(m);   // 시그니처 소품 차량 (피해차·암행 등)
+    this.sigMeshes = []; this.sigBodies = [];
   }
 
   spawn(stage, sFront) {
@@ -157,6 +160,11 @@ export class BossManager {
     this.phases = (stage.phases || []).slice().sort((a, b) => b.hp - a.hp);
     this.phaseIdx = 0;
     this.parked = 0;   // 구조형: 갓길에 정차시킨 대수 (겹치지 않게 앞뒤로 비켜 세움)
+    // v0.4 시그니처 행동 모듈 (판별 움직임·단서·약점·카운터)
+    this.beh = BEHAVIORS[stage.sig] || null;
+    this.pendingEvents = [];
+    if (this.beh?.attacks) this.attacks = { ...this.beh.attacks };
+    this.beh?.init?.(this, stage);
   }
 
   get alive() { return this.villains.filter((v) => v.alive); }
@@ -203,6 +211,9 @@ export class BossManager {
   // ── 피해. 반환 { popped, killed, villain }
   damage(v, amount, pos, kind = 'tack', fromRear = false) {
     if (!v || !v.alive) return { popped: false, killed: false };
+    const vmul = this.beh?.vulnerable?.(this, v) ?? 1;   // 시그니처 취약 창 (페이크 중·헛스윙 후 등)
+    amount *= vmul;
+    if (vmul < 0.3 && this.time - (this._vulnPopT || 0) > 1.4) { this._vulnPopT = this.time; this.pendingEvents.push({ type: 'sigPop', v, text: this.beh.immuneText || '안 맞아!', kind: 'warn' }); }
     v.hitFromRear = fromRear;
     const before = v.hp / v.maxHp;
     v.hp -= amount;
@@ -254,7 +265,8 @@ export class BossManager {
     v.vel = new THREE.Vector3(0, 8, -(v.v + 3));
     v.spin = new THREE.Vector3(3.5 + Math.random() * 2, 7 + Math.random() * 3, 2.5);
     v.launched = false;
-    v.finish = this.stage?.honkOnly ? 'pullover' : (this.finishStyle || 'rocket');
+    this.beh?.onDeath?.(this, v, { events: this.pendingEvents });
+    v.finish = v.forceFinish || (this.stage?.honkOnly ? 'pullover' : (this.finishStyle || 'rocket'));
     setHazard(v.mesh, true);
     for (const b of this.beams) if (b.v === v) b.life = 0;
     if (v.finish === 'pullover') {
@@ -445,6 +457,7 @@ export class BossManager {
   _say(v, text, dur = 2.0) { v.taunt = { text, until: this.time + dur }; this.audio.play('tauntBlip'); }
 
   _attack(kind, v, ctx) {
+    if (this.beh?.attack && this.beh.attack(this, kind, v, ctx)) return;   // 고유 공격
     const { player, hud } = ctx;
     const top = _v3.set(v.x, v.h + 1.6, -v.s);
     switch (kind) {
@@ -581,7 +594,8 @@ export class BossManager {
   // ctx: { dt, time, phase, player, hud, laneFree(lane, v), playerBehind }  반환 이벤트 배열
   update(dt, ctx) {
     this.time = ctx.time;
-    const events = [];
+    const events = this.pendingEvents.splice(0);
+    const bctx = { ...ctx, events };
     const player = ctx.player;
     const hud = ctx.hud;
     const fighting = ctx.phase === 'boss';
@@ -625,6 +639,9 @@ export class BossManager {
         v.nose *= Math.exp(-dt * 6);
       }
       v.s = v.baseS + v.lungeOff;
+
+      // 시그니처 행동 (판별 움직임·단서)
+      if (this.beh?.motion) this.beh.motion(this, v, dt, bctx);
 
       // 횡방향
       if (v.zig && !v.stopped) {
@@ -693,14 +710,17 @@ export class BossManager {
     if (fighting && this.anyAlive) {
       this.attackT -= dt;
       if (this.attackT <= 0) {
-        const [a, b] = this.stage.attackInterval || [2.5, 3.5];
+        const [a, b] = this.beh?.interval || this.stage.attackInterval || [2.5, 3.5];
         this.attackT = (a + Math.random() * (b - a)) * (this.intervalMul || 1);
         const alive = this.alive;
         const v = alive[Math.floor(Math.random() * alive.length)];
+        if (this.beh?.blocked?.(this, v, bctx)) { /* 경직 등: 이번 박자는 공격 없음 */ } else {
         // 플레이어가 아직 뒤(갓길)에 있으면: 뒤로 투척만 (앞으로 쏘는 공격은 안 닿음). 구조형(경적 전용)은 안 던진다
         const peaceful = this.stage.honkOnly || !Object.keys(this.attacks || {}).length;
-        const kind = ctx.playerBehind ? (peaceful ? null : 'throw') : this._chooseAttack();
-        if (kind) this._attack(kind, v, ctx);
+        const behind = this.beh && 'behindAttack' in this.beh ? this.beh.behindAttack : 'throw';
+        const kind = ctx.playerBehind ? (peaceful ? null : behind) : (this.beh?.choose?.(this, v, bctx) ?? this._chooseAttack());
+        if (kind) this._attack(kind, v, bctx);
+        }
       }
     }
 

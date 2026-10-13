@@ -354,7 +354,9 @@ function setupStage(stage) {
   G.startS = startS; G.frontS = frontS;
   world.build(stage, startS - 160, frontS + 950, { startS, frontS });
   const night = !!world.night;
+  boss.night = !!world.night;
   boss.spawn(stage, frontS);
+  G.fight = boss.beh?.fight || stage.fight || null;   // 판별 전투 위치 (없으면 정면 11m)
   const rng = mulberry32(stage.id * 1000 + 7);
   traffic.spawnJam(stage, boss.villains, { s: startS, lane: startLane }, rng, night);
   G.tailS = traffic.sTail;
@@ -504,7 +506,7 @@ function enterPhase(name) {
     case 'release': {
       // 빌런이 막던 차로부터 개방 (1차선 정속 → 1차선, 갓길 쪽 정차 → 4차선 …)
       const blocked = [...new Set(G.stage.villains.flatMap((v) => Number.isInteger(v.lane) ? [v.lane] : [Math.floor(v.lane), Math.ceil(v.lane)]))].sort();
-      const openLane = G.stage.zig ? (G.stage.zigCenter ?? 1) : (blocked[0] ?? 0);
+      const openLane = boss.beh?.release?.openLane ?? (G.stage.zig ? (G.stage.zigCenter ?? 1) : (blocked[0] ?? 0));
       traffic.release(G.time, undefined, openLane);
       world.setVMS(blocked.includes(0) && !G.stage.zig ? '소통 원활\n1차선은 추월차선!' : '소통 원활\n안전운전 하세요', '#3dff7f');
       const openText = G.stage.honkOnly ? '구조 완료! 차로 개방!'
@@ -580,6 +582,7 @@ function showResult() {
       { label: '잔챙이 참교육', value: `${G.minisDone}/${G.minisTotal}` },
       { label: '소요 시간', value: `${mm}:${String(ss).padStart(2, '0')}` },
       { label: '속시원함 지수', value: `${cath}%` },
+      ...(boss.beh?.stats?.(boss) || []),
     ],
     isLast: G.stageIdx >= STAGES.length - 1,
     missions,
@@ -1070,7 +1073,9 @@ function update(realDt) {
     audio.play('horn', { volume: 0.7 });
     hud.popAt(player.mesh.position.clone().setY(2.6), '빵!', 'warn');
     // 보스전 경적: 원흉은 절대 안 비킨다 (참교육의 명분)
-    if (ph === 'boss' && G.frontLocked && boss.alive[0] && Math.random() < 0.7) boss.alive[0].taunt = { text: ['왜 빵빵거려?', '빵빵해도 안 비켜~', '내 차선인데?'][Math.floor(Math.random() * 3)], until: G.time + 1.6 };
+    // 시그니처 경적 반응 (예: 좀비 깜빡이 = 0.5초 오른쪽 깜빡이 개그)
+    if (ph === 'boss' && boss.beh?.onHonk) { const bv = boss.alive.find((v) => Math.abs(v.s - player.s) < 30); if (bv) boss.beh.onHonk(boss, bv, { events: boss.pendingEvents, player }); }
+    if (ph === 'boss' && G.frontLocked && !boss.beh?.onHonk && boss.alive[0] && Math.random() < 0.7) boss.alive[0].taunt = { text: ['왜 빵빵거려?', '빵빵해도 안 비켜~', '내 차선인데?'][Math.floor(Math.random() * 3)], until: G.time + 1.6 };
     // 경적 → 앞 차가 비켜준다 (원흉은 절대 안 비킴)
     if (jamLike) {
       const r = traffic.honk(player, { siren: !!player.stats?.siren, trot: owns('pas_trot') });
@@ -1114,7 +1119,7 @@ function update(realDt) {
   else if (ph === 'intro') { pmode = 'idle'; cruiseV = 0; }
   const pev = player.update(dt, {
     mode: pmode, traffic, brake: wantBrake, cruiseV, boostT: player.boostT,
-    bossRefS: boss.refS(), bossRefV: boss.refV(),
+    bossRefS: boss.refS(), bossRefV: boss.refV(), fightGap: G.fight?.gap,
   });
   for (const e of pev) {
     if (e.type === 'bump') onBump(e.other, e.relV || 0);
@@ -1126,15 +1131,28 @@ function update(realDt) {
 
   // 교통
   traffic.update(dt, {
-    dt, time: G.time, player, villains: boss.villains, phase: ph,
+    dt, time: G.time, player, villains: boss.villains, extras: boss.sigBodies, phase: ph,
     allowEvents: ph === 'jam', jamLike, focusS: ph === 'release' ? G.killS : player.s,
   });
 
   // 원흉
-  const bev = boss.update(dt, { time: G.time, phase: ph, player, hud, night: world.night, playerBehind: ph === 'boss' && !G.frontLocked, laneFree: (lane) => !traffic.cars.some((c) => c.isWall && c.lane === lane) });
+  const bev = boss.update(dt, {
+    time: G.time, phase: ph, player, hud, night: world.night, playerBehind: ph === 'boss' && !G.frontLocked, traffic,
+    laneFree: (lane) => !traffic.cars.some((c) => c.isWall && c.lane === lane),
+    sound: (name, v, o = {}) => audio.play(name, { ...o, pan: Math.max(-1, Math.min(1, (v.x - player.x) / 10)), volume: (o.volume ?? 0.6) * Math.max(0.2, 1 - Math.abs(v.s - player.s) / 90) }),
+  });
   for (const e of bev) {
     if (e.type === 'playerHit' || e.type === 'miniHit') onPlayerHit(e);
     else if (e.type === 'phase') onBossPhase(e);
+    else if (e.type === 'sigPop' && e.v) hud.popAt(new THREE.Vector3(e.v.x, (e.v.h || 1.6) + 2.2, -e.v.s), e.text, e.kind || 'warn');
+    else if (e.type === 'sigToast') ui.toast?.(e.text, 'info');
+    else if (e.type === 'sigKill' && e.v && e.v.alive) {
+      // 시그니처 확정 마무리 (예: 범퍼키스 → 암행순찰차에 인계)
+      if (e.text) hud.popAt(new THREE.Vector3(e.v.x, (e.v.h || 1.6) + 2.2, -e.v.s), e.text, 'crit');
+      e.v.hp = 0; e.v.alive = false;
+      G.killVillain = e.v; boss.startDeath(e.v, true); enterPhase('kill');
+    }
+    else if (e.type === 'sigFinal') { ui.banner(e.text, 'big', 1800); audio.duck?.(0.85, 2.0); if (e.v) hud.popAt(new THREE.Vector3(e.v.x, (e.v.h || 1.6) + 2.8, -e.v.s), e.text, 'crit'); }
   }
 
   // 무기
@@ -1179,8 +1197,10 @@ function update(realDt) {
   // 페이즈 진행
   // 발견: 원흉 뒤 35m 안으로 들어오면 / 정면 참교육: 앞줄을 앞질러 원흉 앞으로 끼어들면
   if (ph === 'jam' && player.s > boss.refS() - 35) enterPhase('boss');
-  if (ph === 'boss' && !G.frontLocked && player.s > boss.refS() + 2.5) {
+  const lockLane = G.fight?.sameLane ? boss.alive.some((v) => v.lanes().includes(player.lane)) : boss.alive.every((v) => !v.lanes().includes(player.lane));
+  if (ph === 'boss' && !G.frontLocked && player.s > boss.refS() + (G.fight?.lockAt ?? 2.5) && lockLane && !(boss.beh?.canLock && !boss.beh.canLock(boss, player))) {
     G.frontLocked = true;
+    boss.beh?.onLock?.(boss);
     ui.banner('앞을 막았다! 정면 참교육!', 'go', 1100);
     audio.play('warn');
     const fh = G.stage.honkOnly

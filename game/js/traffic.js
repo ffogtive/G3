@@ -154,7 +154,7 @@ export class Traffic {
     this.jamSrcT = 0;
     for (let l = 0; l < NUM_LANES; l++) {
       const lk = this.laneKind[l];
-      const gapOf = () => lk === 'spaced' ? 7 + rng() * 5 : lk === 'pass' ? 6 + rng() * 4 : lk === 'train' ? 1.2 + rng() * 0.5 : lk === 'flow' ? 2.6 + rng() * 2 : (1.5 + rng() * 1.7) / density;
+      const gapOf = () => lk === 'spaced' ? 7 + rng() * 5 : lk === 'pass' ? 9 + rng() * 5 : lk === 'train' ? 1.2 + rng() * 0.5 : lk === 'flow' ? 2.6 + rng() * 2 : (1.5 + rng() * 1.7) / density;
       let cursor = frontRear[l] - (lk === 'spaced' ? 9 + rng() * 4 : 2.2 + rng() * 1.6) - (villainLanes.has(l) && zig ? 6 : 0);
       while (cursor > tail) {
         const kind = pickWeighted(rng, NPC_KINDS);
@@ -327,7 +327,7 @@ export class Traffic {
       this.frontLine = Math.max(...alive.map((v) => v.baseS ?? v.s));
       this.frontV = alive[0].vNominal ?? alive[0].v;
     }
-    this._buildBuckets([player, ...alive]);
+    this._buildBuckets([player, ...alive, ...(ctx.extras || []).filter((b) => b.alive !== false)]);   // 시그니처 차량(피해차·암행)도 장애물
 
     const t = ctx.time;
     const jamV = this.jamSpeed;
@@ -335,7 +335,7 @@ export class Traffic {
 
     // 랜덤 급정거 (브레이크 물결)
     if (!this.released && rng() < dt * 0.6) {
-      const cand = this.cars.filter((c) => !c.isWall && !c.isCheater && c.s > player.s - 10 && c.s < player.s + 80);
+      const cand = this.cars.filter((c) => !c.isWall && !c.isCheater && this.laneKind?.[Math.min(NUM_LANES - 1, c.lane)] !== 'pass' && c.s > player.s - 10 && c.s < player.s + 80);
       if (cand.length) cand[Math.floor(rng() * cand.length)].brakeT = 0.6 + rng() * 0.7;
     }
     // 갇힘 보조 (갓길 장애물 앞 등): 옆 차선이 끼워준다

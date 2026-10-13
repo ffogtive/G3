@@ -122,7 +122,7 @@ export class Player {
       this.brakeOn = braking || auto;
     } else if (ctx.mode === 'boss') {
       // 보스전: 빌런 '앞'에서 (뒤는 정체라 못 감) 같은 속도로 달리며 뒤로 압정 투척
-      const target = ctx.bossRefS + TUNE.bossAheadGap;
+      const target = ctx.bossRefS + (ctx.fightGap ?? TUNE.bossAheadGap);   // 판별 전투 위치 (정면 +11 / 측면 +1.5 / 들러붙기 +0.6 …)
       const vCmd = ctx.bossRefV + Math.max(-7, Math.min(9, (target - this.s) * 1.6));
       const dv = vCmd - this.v;
       this.v += Math.max(-14 * dt, Math.min(12 * dt, dv));
