@@ -41,16 +41,30 @@ function scalar(v, path) {
 
 /**
  * @param {unknown} value
- * @param {{ indent?: number, inlineScalarArrays?: number }} [opts]
+ * @param {{ indent?: number, inlineScalarArrays?: number, oneLineDepth?: number }} [opts]
  *   inlineScalarArrays: arrays of <= N scalars are printed on one line (0 = never). Default 24.
+ *   oneLineDepth: containers at this nesting depth or deeper are written compactly on one line (e.g. 2 = one line
+ *   per element of a top-level array field — one line per tick in the tick goldens).
  */
 export function stableStringify(value, opts = {}) {
   const indent = opts.indent ?? 2;
   const inlineN = opts.inlineScalarArrays ?? 24;
+  const oneLineDepth = opts.oneLineDepth ?? Infinity;   // values at this depth or deeper are written on one line
   const pad = (d) => ' '.repeat(indent * d);
+  const compact = (v, path) => {
+    const s = scalar(v, path);
+    if (s !== undefined) return s;
+    if (v === undefined || typeof v !== 'object') throw new Error(`stable-json: unsupported value (${typeof v}) at ${path}`);
+    if (Array.isArray(v)) return `[${v.map((x, i) => compact(x, `${path}[${i}]`)).join(',')}]`;
+    return `{${Object.keys(v).sort().map((k) => {
+      if (v[k] === undefined) throw new Error(`stable-json: undefined at ${path}.${k} (normalize to null first)`);
+      return `${JSON.stringify(k)}:${compact(v[k], `${path}.${k}`)}`;
+    }).join(',')}}`;
+  };
   const walk = (v, d, path) => {
     const s = scalar(v, path);
     if (s !== undefined) return s;
+    if (d >= oneLineDepth) return compact(v, path);
     if (v === undefined || typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint') {
       throw new Error(`stable-json: unsupported value (${typeof v}) at ${path}`);
     }

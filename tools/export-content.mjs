@@ -27,7 +27,7 @@ import { scanStrings, hasHangul, extractConst, evalLiteral } from './content/lib
 import { K, TRAFFIC, SETUP, HAPTICS } from './content/lib/tables.mjs';
 import { normalizeStages, denormalizeHandmade, validateStages, STAGE_SCHEMA_VERSION } from './content/lib/stages.mjs';
 import { vehicleKindsTable } from './content/lib/vehicle-kinds.mjs';
-import { spawnGolden, replayTicks } from './content/lib/goldens.mjs';
+import { spawnGolden, replayTicks, stateHash } from './content/lib/goldens.mjs';
 import { tagOf, parseChromeStack, siteStr } from './content/lib/rng-trace.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -318,42 +318,64 @@ async function main() {
   if (!flag('no-web')) {
     const { webSpawn, webTicks, MATH_RANDOM_SEED } = await import('./content/lib/web-oracle.mjs');
     const base = opt('web-url', 'http://localhost:8090');
-    const ws = await webSpawn(base, 1, { log });
-    const dd = [];
-    for (const key of Object.keys(ws.view)) {
-      const nodeSide = key === 'traffic' || key === 'player' ? pick(s1[key], Object.keys(ws.view[key])) : s1[key].map((x, i) => pick(x, Object.keys(ws.view[key][i] || {})));
-      deepEqual(ws.view[key], nodeSide, `web.${key}`, dd);
+    for (const id of GOLDEN_STAGES) {
+      const sg = id === 1 ? s1 : JSON.parse(outGolden[`spawn_stage${id}.json`]);
+      const ws = await webSpawn(base, id, { log });
+      const dd = [];
+      for (const key of Object.keys(ws.view)) {
+        const nodeSide = key === 'traffic' || key === 'player' ? pick(sg[key], Object.keys(ws.view[key])) : sg[key].map((x, i) => pick(x, Object.keys(ws.view[key][i] || {})));
+        deepEqual(ws.view[key], nodeSide, `web.${key}`, dd);
+      }
+      if (Math.round(ws.next * 4294967296) !== sg.rng.next.u32) dd.push(`web next rng ${ws.next} != node ${sg.rng.next.f}`);
+      if (ws.errors.length) log(`web page errors (stage ${id}):`, ws.errors.join(' | '));
+      if (dd.length) throw new Error(`stage ${id}: web spawn != node spawn:\n  ${dd.join('\n  ')}`);
+      log(`ok: stage ${id}: live web spawn (before frame 1) == Node spawn_stage${id} on all ${Object.keys(ws.view).length} groups (${sg.cars.length} cars, ${sg.obstacles.length} obstacles), next draw identical`);
     }
-    if (Math.round(ws.next * 4294967296) !== s1.rng.next.u32) dd.push(`web next rng ${ws.next} != node ${s1.rng.next.f}`);
-    if (ws.errors.length) log('web page errors:', ws.errors.join(' | '));
-    if (dd.length) throw new Error(`web spawn != node spawn:\n  ${dd.join('\n  ')}`);
-    log(`ok: live web spawn (${ws.url}, before frame 1) == Node spawn_stage1 on all ${Object.keys(ws.view).length} groups, next draw identical`);
 
-    const nTicks = +opt('ticks', 600);
-    const query = opt('web-query', 'skip=jam');
-    const wt = await webTicks(base, 1, nTicks, { query, log });
-    if (wt.outside.length) throw new Error(`traffic rng was drawn outside Traffic.update ${wt.outside.length}x (replay would need those calls)`);
-    const ticks = wt.ticks.map((t) => ({
-      i: t.i, in: t.in,
-      out: { s: t.out.s, v: t.out.v, lane: t.out.lane, x: t.out.x, opp_s: t.out.opp_s, obstacles: t.out.obstacles,
-        rng: t.out.rngRaw.map(([stack, u]) => { const fr = parseChromeStack(stack); return [tagOf(fr[0], fr[1] || null), u]; }) },
-    }));
-    const dts = [...new Set(ticks.map((t) => t.in.dt))];
-    const golden = goldenHeader({
-      kind: 'traffic_ticks', stage: 1, url: wt.url.replace(base, ''), ticks_recorded: ticks.length,
-      dt_model: 'WEB USES VARIABLE dt: main.js frame(now) → step(min(0.05, (now-last)/1000)) per requestAnimationFrame (or fixed 1/30 x N with ?ff=N). This recording drove rAF from virtual time at 120 Hz (frame step 1000/120 ms), so dt ≈ 1/120 but NOT bit-constant: use in.dt of each tick (exact).',
-      dt_distinct: dts, phases: [...new Set(ticks.map((t) => t.in.phase))],
-      math_random_seed: MATH_RANDOM_SEED, spawn_rng_draws: s1.rng.draws, car_ids: wt.carIds,
-      replay: 'For each tick: set player/villains/extras fields from in.*, call Traffic.update(in.dt, {time: in.time, phase, allowEvents, focusS, player, villains, extras}); then cars (in car_ids order) must have exactly out.s / out.v / out.lane, x = out.x[id] ?? laneX(lane), opp[k].s = out.opp_s[k], obstacle count = out.obstacles, and the update must have drawn exactly out.rng ([tag, u32] in order). Player/villain objects must keep identity across ticks. The Node replay of this file passes (tools/export-content.mjs).',
-      fields: { 'in.player': 's x w len lane v mode', 'in.villains': 's baseS x w len v vNominal alive', 'in.extras': 'boss.sigBodies (empty for 1-1)', 'in.sinLf': 'Math.sin(in.time*0.42 + lane*1.9) for lane 0..4 as computed by the web (traffic.js:406)' },
-      math: 'Only one transcendental feeds the sim state: the packed-lane factor sin(t*0.42 + lane*1.9) (traffic.js:406). libm sin is NOT bit-identical across JS engines/libms: in a sample of 13175 distinct sin args from this run (ticks 500-586), Chromium 141 Math.sin and Node 22 Math.sin differed in the last ulp on 96, while glibc 2.39 sin() matched Chromium on 13174 (so C++ std::sin is close but not guaranteed; iOS/Android libms are untested). A bit-exact replay must use in.sinLf for those calls (the Node replay does). Math.pow(x, 2) in the IDM equals x*x; sqrt is exact; atan2 only feeds the visual yaw.',
-      ticks,
-    }, `per-tick Traffic.update inputs/outputs of the live web game, stage 1 (${query || 'normal start'}), first ${ticks.length} ticks`);
-    const text = stableStringify(golden, { inlineScalarArrays: Infinity });
-    const rp = runWorker(['replay'], text);
-    if (!rp.ok) throw new Error(`tick golden does not replay in Node: ${rp.firstDiff}`);
-    log(`ok: ${ticks.length} web ticks recorded (phases ${golden.phases.join(',')}; dt values ${dts.length} distinct) and replayed bit-exactly in Node`);
-    outGolden['traffic_ticks_stage1.json'] = text;
+    const tagRaw = (raw) => raw.map(([stack, u]) => { const fr = parseChromeStack(stack); return [tagOf(fr[0], fr[1] || null), u]; });
+    const MATH_NOTE = 'Only one transcendental feeds the sim state: the packed-lane factor sin(t*0.42 + lane*1.9) (traffic.js:406). libm sin is NOT bit-identical across JS engines/libms: in a sample of 13175 distinct sin args (ticks 500-586 of traffic_ticks_stage1), Chromium 141 Math.sin and Node 22 Math.sin differed in the last ulp on 96, while glibc 2.39 sin() matched Chromium on 13174 (so C++ std::sin is close but not guaranteed; iOS/Android libms are untested). A bit-exact replay must use in.sinLf for those calls (the Node replay does). Math.pow(x, 2) in the IDM equals x*x; sqrt is exact; atan2 only feeds the visual yaw.';
+    const HASH_DOC = 'out.h = first 16 hex chars of SHA-256 over f64le(s[0..N-1]) | f64le(v[0..N-1]) | f64le(x[0..N-1]) | f64le(opp_s[0..M-1]) | u8(lane[0..N-1]) | u32le(obstacles), cars in car_ids order, x = actual lateral position';
+    /** one recorded web run → golden text (validated by a Node replay in a fresh process) */
+    const tickGolden = async ({ file, query, n, keyEvery, noDraw, what }) => {
+      const wt = await webTicks(base, 1, n, { query, noDraw, log });
+      if (wt.outside.length) throw new Error(`${file}: traffic rng drawn outside any recorded call ${wt.outside.length}x`);
+      const ticks = wt.ticks.map((t) => {
+        const key = keyEvery === 1 || t.i % keyEvery === 0 || t.i === wt.ticks.length - 1;
+        const o = t.out;
+        const out = { h: stateHash(o), obstacles: o.obstacles, rng: tagRaw(o.rngRaw) };
+        if (key) Object.assign(out, { s: o.s, v: o.v, lane: o.lane, x: o.x, opp_s: o.opp_s });
+        return { i: t.i, in: t.in, out };
+      });
+      const events = wt.events.map((e) => ({ tick: e.tick, m: e.m, args: e.args, player: e.player, ret: e.ret ?? null, rng: tagRaw(e.rngRaw) }));
+      const dts = [...new Set(ticks.map((t) => t.in.dt))];
+      const phases = [];
+      for (const t of wt.ticks) if (phases[phases.length - 1]?.phase !== t.in.phase) phases.push({ phase: t.in.phase, fromTick: t.i });
+      const evCount = {};
+      for (const e of events) evCount[e.m] = (evCount[e.m] || 0) + 1;
+      const golden = goldenHeader({
+        kind: 'traffic_ticks', stage: 1, url: wt.url.replace(base, ''), ticks_recorded: ticks.length, keyframe_every: keyEvery,
+        render: noDraw ? 'renderer.render replaced by the scene/camera matrix updates it performs (no drawing; same logic inputs)' : 'real WebGL rendering (SwiftShader)',
+        dt_model: 'WEB USES VARIABLE dt: main.js frame(now) → step(min(0.05, (now-last)/1000)) per requestAnimationFrame (or fixed 1/30 x N with ?ff=N). This recording drove rAF from virtual time at 120 Hz (frame step 1000/120 ms), so dt ≈ 1/120 but NOT bit-constant: use in.dt of each tick (exact).',
+        dt_distinct: dts, phases, event_counts: evCount,
+        math_random_seed: MATH_RANDOM_SEED, spawn_rng_draws: s1.rng.draws, car_ids: wt.carIds,
+        replay: 'Spawn stage 1 (spawn_stage1.json). Then for each tick i: (1) apply events with tick == i in order: set the player fields from event.player, call Traffic[m](...args) with "$player" = the player object, {$car:id} / {$obs:id} / {$villain:k} = those objects, {$undef:true} = undefined; it must draw exactly event.rng and return event.ret; (2) if in.obstacleIds is present, drop obstacles not in it (removed directly by main.js); (3) set player/villains/extras fields from in.*, call Traffic.update(in.dt, {time: in.time, phase, allowEvents, focusS, player, villains, extras}) with sin(t*0.42+lane*1.9) taken from in.sinLf; it must draw exactly out.rng ([tag, u32]), leave out.obstacles obstacles, and hash to out.h; on keyframes cars (car_ids order) must equal out.s / out.v / out.lane, x = out.x[id] ?? laneX(lane), opp[k].s = out.opp_s[k]. Player/villain objects keep identity across ticks. The Node replay of this file passes (tools/export-content.mjs).',
+        hash: HASH_DOC,
+        fields: { 'in.player': 's x w len lane v mode', 'in.villains': 's baseS x w len v vNominal alive', 'in.extras': 'boss.sigBodies (empty for 1-1)', 'in.sinLf': 'Math.sin(in.time*0.42 + lane*1.9) for lane 0..4 as computed by the web (traffic.js:406)', 'events[].player': 'player state at call time (honk/rageHorn read it)' },
+        math: MATH_NOTE,
+        events, ticks,
+      }, what(ticks.length));
+      const text = stableStringify(golden, { inlineScalarArrays: Infinity, oneLineDepth: 2 });   // one line per tick / event
+      const rp = runWorker(['replay'], text);
+      if (!rp.ok) throw new Error(`${file} does not replay in Node: ${rp.firstDiff}`);
+      log(`ok: ${file}: ${ticks.length} web ticks + ${rp.events} events (phases ${phases.map((p) => `${p.phase}@${p.fromTick}`).join(',')}; ${dts.length} distinct dt; events ${JSON.stringify(evCount)}) replayed bit-exactly in Node`);
+      outGolden[file] = text;
+    };
+    await tickGolden({ file: 'traffic_ticks_stage1.json', query: 'skip=jam', n: +opt('ticks', 600), keyEvery: 1, noDraw: false,
+      what: (n) => `per-tick Traffic.update inputs/outputs of the live web game, stage 1 (?skip=jam, player gives no input), first ${n} ticks, full state every tick` });
+    if (!flag('no-auto')) {
+      await tickGolden({ file: 'traffic_auto_stage1.json', query: 'skip=jam&auto=1', n: +opt('auto-ticks', 4800), keyEvery: 60, noDraw: true,
+        what: (n) => `web autopilot run of stage 1 (?skip=jam&auto=1): ${n} ticks of Traffic.update + every outside-update Traffic call (honk, rageHorn, miniHit, smash, release, …); per-tick state hash, full state every 60 ticks` });
+    }
   } else log('skip: --no-web (web spawn cross-check and tick golden not produced)');
 
   // 5) write or check

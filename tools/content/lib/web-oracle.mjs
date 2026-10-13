@@ -101,24 +101,68 @@ export async function webSpawn(baseUrl, stageId, opts = {}) {
 /**
  * Records `nTicks` calls of Traffic.update in the live web game: the exact inputs it got (dt, time, phase,
  * player, villains, extras) and the resulting car/opp state + the RNG draws made inside (raw stacks → tagged in Node).
+ * Mutating Traffic calls made from OUTSIDE update (main.js: honk, rageHorn, miniHit, smash, release, dropWalls, jolt,
+ * emitBrakeWave) are recorded as events between ticks with the player state at call time, their RNG draws and a
+ * summary of their return value; obstacles removed directly by main.js (tow splice) show up as in.obstacleIds.
+ * noDraw: replace renderer.render with the scene/camera matrix updates it performs (game logic sees the same matrices).
  */
-export async function webTicks(baseUrl, stageId, nTicks, { query = 'skip=jam', frameMs = 1000 / 120, log = () => {} } = {}) {
+export async function webTicks(baseUrl, stageId, nTicks, { query = 'skip=jam', frameMs = 1000 / 120, noDraw = false, log = () => {} } = {}) {
   const url = `${baseUrl}/game/index.html?stage=${stageId}&mute=1${query ? '&' + query : ''}`;
   const { browser, page, errors } = await openGame(url, { log });
   try {
-    await page.evaluate(async () => {
+    await page.evaluate(async ({ noDraw }) => {
       const C = await import('/game/js/config.js');
       const G = window.__game, T = G.objs.traffic, proto = Object.getPrototypeOf(T);
-      const R = { ticks: [], outside: [], carIds: T.cars.map((c) => c.id), phase0: G.phase, spawnDraws: null };
+      if (noDraw) {
+        G.objs.renderer.render = (scene, camera) => {
+          if (scene.matrixWorldAutoUpdate === true) scene.updateMatrixWorld();
+          if (camera.parent === null && camera.matrixWorldAutoUpdate === true) camera.updateMatrixWorld();
+        };
+      }
+      const R = { ticks: [], events: [], outside: [], carIds: T.cars.map((c) => c.id), phase0: G.phase };
       window.__REC = R;
-      let draws = null;
+      let cur = null;      // draw sink of the call being recorded (update or event)
+      let depth = 0;
       const baseRng = T.rng;
       T.rng = function rng() {
         const v = baseRng();
         const e = [new Error().stack, Math.round(v * 4294967296)];
-        if (draws) draws.push(e); else R.outside.push([R.ticks.length, ...e]);
+        if (cur) cur.push(e); else R.outside.push([R.ticks.length, ...e]);
         return v;
       };
+      const P = G.objs.player;
+      const snapPlayer = (p) => ({ s: p.s, x: p.x, w: p.w, len: p.len, lane: p.lane, v: p.v, mode: p.mode, lcT: p.lcT, stats: { tow: !!p.stats?.tow, siren: !!p.stats?.siren } });
+      const ser = (a) => {
+        if (a === undefined) return { $undef: true };
+        if (a === P) return '$player';
+        if (a && typeof a === 'object') {
+          if (T.cars.includes(a)) return { $car: a.id };
+          if (T.obstacles.includes(a)) return { $obs: a.id };
+          if (a.isVillain) return { $villain: a.index };
+          if (Array.isArray(a)) return a.map(ser);
+          return Object.fromEntries(Object.entries(a).filter(([, v]) => v === null || typeof v !== 'object' || Array.isArray(v)).map(([k, v]) => [k, ser(v)]));
+        }
+        return a;
+      };
+      const ids = (arr) => (arr || []).map((x) => x && (x.id ?? (x === P ? '$player' : x.isVillain ? `$villain${x.index}` : null)));
+      const summarize = (name, r) => {
+        if (r == null) return r ?? null;
+        if (name === 'rageHorn') return { smashed: ids(r.smashed), towed: ids(r.towed), cheaters: ids(r.cheaters), startled: ids(r.startled) };
+        if (name === 'smash') return { pieces: r.pieces.length };
+        if (name === 'honk' || name === 'letIn') return r.car ? { kind: r.kind, car: ids([r.car])[0] } : { car: ids([r])[0] };
+        return typeof r === 'object' ? null : r;
+      };
+      let obsIds = T.obstacles.map((o) => o.id);
+      for (const name of ['honk', 'rageHorn', 'miniHit', 'smash', 'release', 'dropWalls', 'jolt', 'emitBrakeWave', 'letIn']) {
+        T[name] = function (...args) {
+          if (depth > 0) return proto[name].apply(this, args);
+          const ev = { tick: R.ticks.length, m: name, args: args.map(ser), player: snapPlayer(P), rngRaw: [] };
+          const prev = cur; cur = ev.rngRaw; depth++;
+          try { const r = proto[name].apply(this, args); ev.ret = summarize(name, r); return r; } finally {
+            depth--; cur = prev; R.events.push(ev); obsIds = T.obstacles.map((o) => o.id);
+          }
+        };
+      }
       T.update = function update(dt, ctx) {
         const p = ctx.player;
         const inp = {
@@ -130,26 +174,30 @@ export async function webTicks(baseUrl, stageId, nTicks, { query = 'skip=jam', f
           // Recorded because libm sin differs between engines in the last ulp (see golden.math).
           sinLf: [0, 1, 2, 3, 4].map((l) => Math.sin(ctx.time * 0.42 + l * 1.9)),
         };
-        draws = [];
+        const nowIds = this.obstacles.map((o) => o.id);
+        if (nowIds.join() !== obsIds.join()) inp.obstacleIds = nowIds;   // removed directly by main.js (e.g. tow splice)
+        const draws = [];
+        const prev = cur; cur = draws; depth++;
         try { return proto.update.call(this, dt, ctx); } finally {
+          depth--; cur = prev;
           const out = {
-            s: this.cars.map((c) => c.s), v: this.cars.map((c) => c.v), lane: this.cars.map((c) => c.lane), x: {},
+            s: this.cars.map((c) => c.s), v: this.cars.map((c) => c.v), lane: this.cars.map((c) => c.lane), xs: this.cars.map((c) => c.x), x: {},
             opp_s: this.opp.map((c) => c.s), obstacles: this.obstacles.length, rngRaw: draws,
           };
           for (const c of this.cars) if (c.x !== C.laneX(c.lane)) out.x[c.id] = c.x;
-          draws = null;
-          R.ticks.push({ i: R.ticks.length, in: inp, out });
+          obsIds = this.obstacles.map((o) => o.id);
+          R.ticks.push({ i: R.ticks.length, in: inp, out, phaseAfter: G.phase });
         }
       };
-    });
+    }, { noDraw });
     const t0 = Date.now();
     for (let f = 0; ; f++) {
       const n = await page.evaluate(async (ms) => { await window.__V.frame(ms); return window.__REC.ticks.length; }, frameMs);
       if (n >= nTicks) break;
       if (f > nTicks * 3) throw new Error('web oracle: frames are not producing traffic ticks');
-      if (f % 100 === 0) log(`web: frame ${f}, ticks ${n}, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+      if (f % 200 === 0) log(`web: frame ${f}, ticks ${n}, phase ${await page.evaluate(() => window.__game.phase)}, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
     }
-    const rec = await page.evaluate((n) => { const R = window.__REC; return { ...R, ticks: R.ticks.slice(0, n), phaseEnd: window.__game.phase }; }, nTicks);
+    const rec = await page.evaluate((n) => { const R = window.__REC; return { ...R, ticks: R.ticks.slice(0, n), events: R.events.filter((e) => e.tick < n), phaseEnd: window.__game.phase }; }, nTicks);
     return { ...rec, errors, url };
   } finally { await browser.close(); }
 }

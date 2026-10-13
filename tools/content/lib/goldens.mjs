@@ -1,6 +1,7 @@
 // Node side of the goldens (NATIVE_PORT 3-3 / 4-2 T0): spawn layouts, tagged RNG traces, tick-golden replay.
 // Runs the frozen web modules unmodified (real vehicles.js through vehicles-spy.mjs, which only records specs).
-import { f17 } from './stable-json.mjs';
+import { createHash } from 'node:crypto';
+import { f17, deepEqual } from './stable-json.mjs';
 import { tracingRng, tagOf, siteStr } from './rng-trace.mjs';
 import { resolveVariant } from './vehicle-kinds.mjs';
 
@@ -100,9 +101,25 @@ export function spawnGolden(M, stageId, VK) {
 }
 
 /**
+ * Per-tick state digest (documented in the golden): first 16 hex chars of SHA-256 over
+ *   f64le(s[0..N-1]) ‖ f64le(v[0..N-1]) ‖ f64le(x[0..N-1]) ‖ f64le(opp_s[0..M-1]) ‖ u8(lane[0..N-1]) ‖ u32le(obstacles)
+ * with cars in car_ids order. Exact doubles in, so any 1-ulp difference changes it.
+ */
+export function stateHash(st) {
+  const n = st.s.length, m = st.opp_s.length;
+  const buf = Buffer.alloc(8 * (3 * n + m) + n + 4);
+  let o = 0;
+  for (const arr of [st.s, st.v, st.xs, st.opp_s]) for (const x of arr) { buf.writeDoubleLE(x, o); o += 8; }
+  for (const l of st.lane) buf.writeUInt8(l, o++);
+  buf.writeUInt32LE(st.obstacles, o);
+  return createHash('sha256').update(buf).digest('hex').slice(0, 16);
+}
+
+/**
  * Replays a recorded tick golden through the Node traffic core: same spawn, then for every tick the recorded
- * inputs (player, villains, extras, phase, time, dt). Proves the golden is a sufficient spec for the C++ port.
- * @returns {{ ok: boolean, ticks: number, firstDiff: string|null }}
+ * events (outside-update calls, with the player state at call time) and inputs (player, villains, extras, phase,
+ * time, dt). Proves the golden is a sufficient spec for the C++ port.
+ * @returns {{ ok: boolean, ticks: number, events: number, firstDiff: string|null }}
  */
 const SIN = Math.sin;
 export function replayTicks(M, golden) {
@@ -111,35 +128,69 @@ export function replayTicks(M, golden) {
   const base = M.mulberry32(stage.id * 1000 + 7);
   const rng = tracingRng(base, log);
   const { traffic } = setupLikeWeb(M, stage, rng);
-  if (JSON.stringify(traffic.cars.map((c) => c.id)) !== JSON.stringify(golden.car_ids)) return { ok: false, ticks: 0, firstDiff: 'car ids differ after spawn' };
-  const spawnDraws = log.length;
-  if (spawnDraws !== golden.spawn_rng_draws) return { ok: false, ticks: 0, firstDiff: `spawn rng draws ${spawnDraws} != ${golden.spawn_rng_draws}` };
-  const player = { isPlayer: true };
-  const villains = golden.ticks[0].in.villains.map(() => ({ isVillain: true }));
+  const fail = (ticks, firstDiff) => ({ ok: false, ticks, events: 0, firstDiff });
+  if (JSON.stringify(traffic.cars.map((c) => c.id)) !== JSON.stringify(golden.car_ids)) return fail(0, 'car ids differ after spawn');
+  if (log.length !== golden.spawn_rng_draws) return fail(0, `spawn rng draws ${log.length} != ${golden.spawn_rng_draws}`);
+  const player = { isPlayer: true, stats: {} };
+  const villains = golden.ticks[0].in.villains.map((_, i) => ({ isVillain: true, index: i }));
   const extras = [];
-  let mark = log.length;
+  const byTick = new Map();
+  for (const e of golden.events || []) { if (!byTick.has(e.tick)) byTick.set(e.tick, []); byTick.get(e.tick).push(e); }
+  const de = (a) => {
+    if (a === '$player') return player;
+    if (a && typeof a === 'object') {
+      if (a.$undef) return undefined;
+      if ('$car' in a) return traffic.cars.find((c) => c.id === a.$car);
+      if ('$obs' in a) return traffic.obstacles.find((o) => o.id === a.$obs);
+      if ('$villain' in a) return villains[a.$villain];
+      if (Array.isArray(a)) return a.map(de);
+      return Object.fromEntries(Object.entries(a).map(([k, v]) => [k, de(v)]));
+    }
+    return a;
+  };
+  const ids = (arr) => (arr || []).map((x) => x && (x.id ?? (x === player ? '$player' : x.isVillain ? `$villain${x.index}` : null)));
+  const summarize = (name, r) => {
+    if (r == null) return r ?? null;
+    if (name === 'rageHorn') return { smashed: ids(r.smashed), towed: ids(r.towed), cheaters: ids(r.cheaters), startled: ids(r.startled) };
+    if (name === 'smash') return { pieces: r.pieces.length };
+    if (name === 'honk' || name === 'letIn') return r.car ? { kind: r.kind, car: ids([r.car])[0] } : { car: ids([r])[0] };
+    return typeof r === 'object' ? null : r;
+  };
+  let mark = log.length, nEv = 0;
+  const drawn = () => { const d = log.slice(mark).map((e) => [tagOf(e.site, e.caller), e.u32]); mark = log.length; return d; };
   for (const tk of golden.ticks) {
+    for (const ev of byTick.get(tk.i) || []) {
+      Object.assign(player, ev.player);
+      const r = traffic[ev.m](...ev.args.map(de));
+      const d = drawn();
+      nEv++;
+      if (JSON.stringify(d) !== JSON.stringify(ev.rng)) return fail(tk.i, `event ${ev.m} before tick ${tk.i}: rng ${JSON.stringify(d)} != ${JSON.stringify(ev.rng)}`);
+      if (deepEqual(summarize(ev.m, r), ev.ret ?? null).length) return fail(tk.i, `event ${ev.m} before tick ${tk.i}: returned ${JSON.stringify(summarize(ev.m, r))} != ${JSON.stringify(ev.ret)}`);
+    }
+    if (tk.in.obstacleIds) traffic.obstacles = traffic.obstacles.filter((o) => tk.in.obstacleIds.includes(o.id));
     Object.assign(player, tk.in.player);
     tk.in.villains.forEach((v, i) => Object.assign(villains[i], v));
     extras.length = 0;
     for (const e of tk.in.extras) extras.push({ ...e });
     // libm independence: the only transcendental that feeds the sim state is sin(t*0.42 + lane*1.9) (traffic.js:406);
-    // take it from the recording, exactly as a C++ replay must (V8 builds differ: Node=fdlibm, Chrome=glibc port).
+    // take it from the recording, exactly as a C++ replay must (JS engines differ in the last ulp).
     const lfArgs = tk.in.sinLf.map((_, l) => tk.in.time * 0.42 + l * 1.9);
     Math.sin = (x) => { const k = lfArgs.indexOf(x); return k >= 0 ? tk.in.sinLf[k] : SIN(x); };
     try {
       traffic.update(tk.in.dt, { dt: tk.in.dt, time: tk.in.time, player, villains, extras, phase: tk.in.phase, allowEvents: tk.in.allowEvents, jamLike: tk.in.jamLike, focusS: tk.in.focusS });
     } finally { Math.sin = SIN; }
-    const drawn = log.slice(mark).map((e) => [tagOf(e.site, e.caller), e.u32]);
-    mark = log.length;
+    const d = drawn();
     const o = tk.out;
-    const cmp = (name, a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) return `tick ${tk.i} ${name}[${i}]: replay ${a[i]} != web ${b[i]}`; return null; };
-    const d = cmp('s', traffic.cars.map((c) => c.s), o.s) || cmp('v', traffic.cars.map((c) => c.v), o.v)
-      || cmp('lane', traffic.cars.map((c) => c.lane), o.lane) || cmp('opp_s', traffic.opp.map((c) => c.s), o.opp_s)
-      || cmp('x', traffic.cars.map((c) => c.x), traffic.cars.map((c, i) => (o.x[c.id] !== undefined ? o.x[c.id] : M.CFG.laneX(o.lane[i]))))
-      || (traffic.obstacles.length !== o.obstacles ? `tick ${tk.i} obstacles ${traffic.obstacles.length} != ${o.obstacles}` : null)
-      || (JSON.stringify(drawn) !== JSON.stringify(o.rng) ? `tick ${tk.i} rng draws ${JSON.stringify(drawn)} != ${JSON.stringify(o.rng)}` : null);
-    if (d) return { ok: false, ticks: tk.i, firstDiff: d };
+    const st = { s: traffic.cars.map((c) => c.s), v: traffic.cars.map((c) => c.v), xs: traffic.cars.map((c) => c.x), lane: traffic.cars.map((c) => c.lane), opp_s: traffic.opp.map((c) => c.s), obstacles: traffic.obstacles.length };
+    if (JSON.stringify(d) !== JSON.stringify(o.rng)) return fail(tk.i, `tick ${tk.i} rng draws ${JSON.stringify(d)} != ${JSON.stringify(o.rng)}`);
+    if (st.obstacles !== o.obstacles) return fail(tk.i, `tick ${tk.i} obstacles ${st.obstacles} != ${o.obstacles}`);
+    if (o.s) {   // keyframe: full comparison (also localizes the first differing car)
+      const cmp = (name, a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) return `tick ${tk.i} ${name}[${i}]: replay ${a[i]} != web ${b[i]}`; return null; };
+      const xw = traffic.cars.map((c, i) => (o.x[c.id] !== undefined ? o.x[c.id] : M.CFG.laneX(o.lane[i])));
+      const diff = cmp('s', st.s, o.s) || cmp('v', st.v, o.v) || cmp('lane', st.lane, o.lane) || cmp('x', st.xs, xw) || cmp('opp_s', st.opp_s, o.opp_s);
+      if (diff) return fail(tk.i, diff);
+    }
+    if (stateHash(st) !== o.h) return fail(tk.i, `tick ${tk.i} state hash ${stateHash(st)} != ${o.h}`);
   }
-  return { ok: true, ticks: golden.ticks.length, firstDiff: null };
+  return { ok: true, ticks: golden.ticks.length, events: nEv, firstDiff: null };
 }
