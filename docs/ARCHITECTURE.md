@@ -327,3 +327,30 @@ export const ui = {
 | `wrongWay` | #83 역주행. **현재 미구현**: 일반 정속형 + 경적 전용으로 대체 |
 
 - 엔진 미지원(카탈로그에만 있음): 페이즈별 차 대수 변경, summon(벽 소환 → 굴리기로 대체), 게이트·데칼·터널 소품(`new_assets`).
+
+## v0.4 코어 계약 (판 차별화)
+가설: 판 차별화 = 보이는 시그니처 행동 × 그 행동이 만드는 정체 모양 × 판별 접근·요령. 공통 엔진은 두고 판별 차이를 데이터와 모듈로 끼운다.
+
+- **내구도(HP)**: `TUNE.hp`.
+  - `main.applyDamage(raw, reason)`: 판 배율(`stageDamageMul`)을 곱하고, 정체 구간 하한은 20이다.
+  - 0이 되면 `wreck` 단계 → `ui.showFail` → `retryFromDiscovery()`.
+  - 재도전 시 빌런 HP·펑크·페이즈는 유지되고, 분노는 원인 발견 시점 값, 포상금은 ×0.8씩 줄어 최저 ×0.6.
+  - 차량 손상 단계는 `VEH.setDamage`로 표시한다.
+- **접근 규칙**: `stage.approach` = `{ shoulder, honk, gapCheck, fatigue, rubber, rubberSafety, rageHorn, hint }`. 기본값은 `TUNE.approach`, 1챕터 값은 `stagegen.APPROACH_BY_ID`.
+  - 갓길 모드 `open | crowded | blocked | closed | dark | debris | none`. `closed`와 `none`은 플레이어가 갓길로 진입할 수 없고, 정체 85m에서 2차로로 시작한다.
+  - 끼워주기는 실제 틈(내 차 길이 + 1m)이 있을 때만 된다.
+  - 경적 쿨은 1.0초. 같은 차에 2회째는 50%, 3회째는 무시한다.
+  - 고무줄은 판별 시간이고, 4초가 넘으면 강제로 연다.
+  - 분노의 경적 반경은 24m이고, 고장차는 견인하지 않는다(레커 장착 또는 occupied 판만).
+- **JamShaper** (`traffic.js`): `stage.jamShape` = `{ lanes: [packed|train|flow|spaced|pass ×4], passV, sources: [{ type: 'yield', lane, hold, period }] }`.
+  - `pass` 차로에는 앞줄 벽이 없고 빌런을 지나간다. 유일한 추월 차로다.
+  - `emitBrakeWave(lane, s, strength, { amp, speed, hold })`: amp < 1이면 감쇠, amp > 1이면 유령정체처럼 증폭된다.
+- **시그니처 모듈** (`game/js/behaviors/index.js`, `stage.sig`): 인터페이스는 파일 머리 주석에 있다.
+  - 구현된 모듈:
+    - `blinker_liar`(1-5)
+    - `tailgater`(1-6)
+    - `occupy`(1-1)
+  - `fight.gap`과 `lockAt`은 전투 위치다(정면 +11 / 측면 +1.5 / 들러붙기 +0.6). `sameLane`이면 빌런 차로에 들어가야 고정된다.
+  - 이벤트: `sigPop`, `sigToast`, `sigFinal`, `sigKill`.
+  - 모듈 소품 차량(`sigBodies`: 피해차, 암행)은 traffic 버킷에 들어가 충돌한다.
+  - `auto()`는 오토파일럿용 정석 루트다.
