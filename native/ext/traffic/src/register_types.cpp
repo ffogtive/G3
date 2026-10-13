@@ -12,6 +12,7 @@ void initialize_traffic_module(godot::ModuleInitializationLevel p_level) {
 	if (p_level != godot::MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
+	GDREGISTER_CLASS(lane1::Rng32);
 	GDREGISTER_CLASS(lane1::Traffic);
 }
 

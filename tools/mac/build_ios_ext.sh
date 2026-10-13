@@ -126,7 +126,7 @@ build_haptics_host_macos() {
   xcrun clang++ -std=c++17 -O2 -dynamiclib -fvisibility=hidden $HAPTICS_WARN_FLAGS \
     -arch arm64 -arch x86_64 -mmacosx-version-min=11.0 \
     -install_name "@rpath/liblane1_haptics.macos.dylib" \
-    -I"$HAPTICS_BUILD/gen" -I"$HAPTICS_SRC" "${srcs[@]}" -o "$out"
+    -I"$HAPTICS_BUILD/gen" -I"$HAPTICS_SRC" "${srcs[@]}" -o "$out" || return 1
   codesign --force --sign - "$out" >/dev/null 2>&1 || warn "ad-hoc codesign of $(rel "$out") failed (editor may refuse to load it)"
 }
 
@@ -142,15 +142,17 @@ build_haptics_ios() {
   local flags=(-arch arm64 -isysroot "$sdk" "-miphoneos-version-min=$IOS_MIN" -std=c++17 -O2 -DNDEBUG
     -fvisibility=hidden -I"$HAPTICS_BUILD/gen" -I"$HAPTICS_SRC" -Wall -Wextra)
   log "ios arm64 (SDK $(basename "$sdk")): compile"
+  # Explicit `|| return 1`: this runs as `if build_haptics_ios`, where errexit is suspended.
   for f in $HAPTICS_SOURCES_CPP; do
-    "$cxx" "${flags[@]}" -c "$HAPTICS_SRC/$f" -o "$obj/${f%.cpp}.o"
+    "$cxx" "${flags[@]}" -c "$HAPTICS_SRC/$f" -o "$obj/${f%.cpp}.o" || return 1
   done
   # CoreHaptics/UIKit/Foundation need no explicit -framework: libgodot.a autolinks all three (LC_LINKER_OPTION,
   # checked in the 4.7.2 template).
-  "$cxx" "${flags[@]}" -x objective-c++ -fobjc-arc -c "$HAPTICS_SRC/haptics_backend_ios.mm" -o "$obj/haptics_backend_ios.o"
-  xcrun libtool -static -o "$obj/liblane1_haptics.a" "$obj"/*.o
+  "$cxx" "${flags[@]}" -x objective-c++ -fobjc-arc -c "$HAPTICS_SRC/haptics_backend_ios.mm" \
+    -o "$obj/haptics_backend_ios.o" || return 1
+  xcrun libtool -static -o "$obj/liblane1_haptics.a" "$obj"/*.o || return 1
   rm -rf "$xcf"
-  xcodebuild -create-xcframework -library "$obj/liblane1_haptics.a" -output "$xcf" >/dev/null
+  xcodebuild -create-xcframework -library "$obj/liblane1_haptics.a" -output "$xcf" >/dev/null || return 1
   log "ios: $(rel "$xcf")"
 }
 
@@ -180,10 +182,10 @@ build_traffic_ios() {
   }
   lib=$(find "$EXT_DIR/bin" "$bdir" -name "libtraffic.ios.$t.arm64.a" 2>/dev/null | head -n 1)
   cpp=$(find "$bdir" -name "libgodot-cpp.ios.$t.arm64.a" 2>/dev/null | head -n 1)
-  [ -n "$lib" ] && [ -n "$cpp" ] || {
+  if [ -z "$lib" ] || [ -z "$cpp" ]; then
     warn "traffic build finished but libtraffic/libgodot-cpp .a not found under $(rel "$bdir")"
     return 1
-  }
+  fi
   rm -rf "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework"
   xcodebuild -create-xcframework -library "$lib" -output "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" >/dev/null
   xcodebuild -create-xcframework -library "$cpp" -output "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework" >/dev/null

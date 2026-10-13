@@ -100,9 +100,41 @@ for T in template_debug template_release; do
 done   # -> bin/libtraffic.android.<T>.arm64.so
 ```
 
-## Current API (M1-0 placeholder)
+## Traffic core (M1a) — `traffic/src/`
 
-`Traffic` (RefCounted): `tick(dt: float)`, `count() -> int`, `get_tick_count() -> int`, `get_sim_time() -> float`,
-static `build_info() -> String`. M1a replaces the body with Rng32, spawnJam, buckets, IDM, lane changes and the
-NPC MultiMesh buffer writes (NATIVE_PORT 3-2, 3-7). GDScript should go through `sim/traffic_bridge.gd` and use
-`ClassDB.class_exists(&"Traffic")` guards wherever a missing library must not break parsing (see `tests/test_ext.gd`).
+가설: ✅ 줄 단위 포트(같은 추첨 순서·같은 부동소수 연산 순서·안정 버킷 정렬·`-ffp-contract=off`)가 웹 골든을
+비트 단위로 재현한다 — spawn 1·5·6판(트레이스 1051/610/977회 태그+u32), 틱 골든 600 + 4800틱 + 이벤트 18개
+(debug·release `.so` 모두). 90판(161대 + 반대편 26대) `update` p95 0.03~0.07 ms/tick (예산 0.5 ms).
+
+| File | What |
+|---|---|
+| `rng32.h` | `Mulberry32` (uint32 mulberry32, = JS `mulberry32`) |
+| `traffic_core.{h,cpp}` | engine-free port of `game/js/traffic.js` @ 753549a: spawnJam (+ shoulder.js obstacle RNG), buckets, leaderOf, IDM, lane changes, JamShaper waves/sources, stuck assist, cheater event, minis, honk/letIn (+ fatigue, real-gap check), rageHorn, miniHit, release, post-release lane changes, opposite carriageway |
+| `traffic.{h,cpp}` | GDScript classes `Traffic` and `Rng32`; `configure()` reads every tunable from `config.json` (`traffic.*`, `tune.*`, `road.*`; 233 keys, defaults = the JS literals) |
+| `json_exact.{h,cpp}` | `Traffic.parse_json(text)`: correctly rounded JSON. Godot 4.7.2's `JSON.parse`/`to_float` is 1 ulp off on 16-17 digit numbers (`stages.json` has 113), so `core/db.gd` uses this when the ext is loaded |
+
+Rules that keep the replay bit-exact (each one was golden-visible in the JS):
+- one `Mulberry32` per stage, draws in JS order; `set_trace(true)` records `(tag, u32)` per draw with the tag names of `tools/content/lib/rng-trace.mjs`;
+- expressions keep JS evaluation order; `Math.max/min` go through `jmax/jmin` (signed zero, NaN); `pow(x,2)` is `x*x`;
+- buckets are rebuilt at the top of `update()` from [cars, obstacles, player, alive villains, extras] and sorted by (s, insertion index) = JS stable sort; queries between updates use the previous tick's buckets; removed obstacles stay in buckets until the next rebuild (like the JS splice);
+- `sin(t*0.42 + lane*1.9)` is the only libm call that feeds state; `set_sin_override()` injects the recorded value (glibc `sin` also matched all 5400 recorded ticks, phones untested);
+- **compile flags:** `-ffp-contract=off -fno-fast-math` (arm64 clang would otherwise fuse `a*b+c` into FMA). Keep them in the iOS/Android builds.
+- R2 fix (NATIVE_PORT M1b): stuck assist runs while `jamLike`; `set_web_parity(true)` restores the web's `phase=='jam'` gate (golden replays use it).
+
+### API (`Traffic`, RefCounted; reach it through `sim/traffic_bridge.gd` / `ClassDB`, never by name)
+- M1-0 (kept): `tick(dt)`, `count()` (NPC cars, 0 before spawn), `get_tick_count()`, `get_sim_time()`, static `build_info()`, static `parse_json(text)`.
+- setup: `configure({config, vehicle_kinds, mini_types, approach})`, `get_missing_params()`, `spawn_jam(stage, villains[{s,x,w,len,baseS,v,vNominal}], {s,lane,len,w}, seed, night)`, `kind_names()`.
+- per tick: `set_player(s, x, v, lane, mode_jam)`, `set_player_dims(len, w)`, `set_player_stats(tow)`, `set_villain_count(n)` + `set_villain(i, s, base_s, x, w, len, v, v_nominal, alive)`, `set_extra_count/ set_extra(...)`, `set_context(phase, allow_events, jam_like, focus_s|NAN)`, `set_sin_override(PackedFloat64Array[5])` (one-shot), `update(dt, time)`.
+- between ticks (main.js call sites): `honk(siren, trot) -> {kind, id}`, `rage_horn(range)`, `mini_hit(id, dmg)`, `smash(id)`, `remove_obstacle(id)`, `set_obstacle_ids(ids)`, `jolt(id)`, `release(time, wave_speed|-1, open_lane)`, `drop_walls(lanes, m)`, `emit_brake_wave(lane, s, strength)`, `let_in_player(lane, force)`.
+- queries: `leader_of_player()`, `can_merge_into(lane, margin)`, `lane_blocked(lane, s_min, s_max, exclude_id)`, `gap_ahead(lane, s)`, `mini_target()`, `cars_behind_front(n, range)`.
+- output: `get_buffer(alpha, include_opp)` (stride 8 `[id, kind, lane, x, s, yaw, v, lamp_bits]`, interpolated prev→current), `get_transforms_for(ids, alpha)` (MultiMesh buffer layout, 12 floats each; verified by a `MultiMesh.buffer` round trip under Xvfb Mobile), `get_car_specs()`, `get_obstacles()`, `get_opp()`, `get_barrier()`, `get_info()`, `get_state()`, `hash_bytes()` (golden `h` preimage), `take_events()`, `set_trace/take_trace`, `get_rng_draws()`, `peek_rng()`.
+- `Rng32` (RefCounted): `set_seed`, `next_u32`, `next_float`, `get_draws` (GDScript twin: `core/mulberry32.gd`, class `Mulberry32`).
+
+### Tests / bench
+```bash
+godot47 --headless --path native -s res://tests/run_tests.gd -- --filter=test_    # test_rng, test_spawn, test_traffic_golden
+godot47 --headless --path native -s res://tests/bench/run_bench.gd                # 90-stage p50/p95 -> native/build/perf.json
+```
+The editor/headless binary loads the **template_debug** library (feature `debug`). For the release-`.so` number,
+copy the project and map `linux.debug.x86_64` to `libtraffic.linux.template_release.x86_64.so` in the copy's
+manifest (that is how the M1a numbers were taken), or export a Linux release build.

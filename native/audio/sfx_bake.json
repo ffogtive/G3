@@ -1,0 +1,25 @@
+{
+ "generator": "tools/bake-audio.mjs",
+ "source": "game/js/audio.js (web-frozen 753549a) hornTone, tapped pre-compressor",
+ "rate": 48000,
+ "sfx": {
+  "horn": {
+   "file": "horn.wav",
+   "samples": 24714,
+   "seconds": 0.5149,
+   "peak": 0.853,
+   "rms": 0.1875,
+   "sha256_16": "90358406433559f9",
+   "g": 0.36
+  },
+  "hornShort": {
+   "file": "hornShort.wav",
+   "samples": 13682,
+   "seconds": 0.285,
+   "peak": 0.9478,
+   "rms": 0.1779,
+   "sha256_16": "74237c1d7737a7db",
+   "g": 0.4
+  }
+ }
+}

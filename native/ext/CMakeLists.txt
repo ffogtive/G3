@@ -46,6 +46,8 @@ target_sources(
     PRIVATE
         traffic/src/register_types.cpp
         traffic/src/traffic.cpp
+        traffic/src/traffic_core.cpp
+        traffic/src/json_exact.cpp
 )
 target_include_directories(traffic PRIVATE traffic/src)
 target_compile_definitions(
@@ -88,6 +90,9 @@ endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(traffic PRIVATE -Wall -Wextra -Wpedantic)
+    # Bit-exact parity with the JS goldens (traffic_core.cpp): no FMA contraction (arm64 clang contracts
+    # a*b+c by default), no fast-math reassociation. x86-64 without -mfma never fuses, the phones would.
+    target_compile_options(traffic PRIVATE -ffp-contract=off -fno-fast-math)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

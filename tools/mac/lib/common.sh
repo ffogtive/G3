@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034  # library: the variables are used by the scripts that source it
 # tools/mac/lib/common.sh — shared helpers for ios_run.sh and build_ios_ext.sh.
 #
 # Written for the bash that ships with macOS (3.2): no associative arrays, no mapfile, no ${x,,}, and every
@@ -8,7 +8,7 @@
 # Pins (docs/NATIVE_PORT.md 1-2: container, Mac and CI run exactly this engine).
 LANE1_GODOT_VERSION="4.7.2"
 LANE1_GODOT_VERSION_CONFIG="4.7.2.stable"
-LANE1_GODOT_RELEASE_URL="https://github.com/godotengine/godot/releases/download/4.7.2-stable"
+LANE1_GODOT_RELEASE_URL=${LANE1_GODOT_RELEASE_URL:-"https://github.com/godotengine/godot/releases/download/4.7.2-stable"} # mirror override OK: SHA-512 below is still enforced
 LANE1_GODOT_MAC_ZIP="Godot_v4.7.2-stable_macos.universal.zip"
 LANE1_GODOT_TPZ="Godot_v4.7.2-stable_export_templates.tpz"
 # From ${LANE1_GODOT_RELEASE_URL}/SHA512-SUMS.txt (fetched 2026-10-13).
@@ -32,11 +32,16 @@ fi
 log() { printf '%s[%s]%s %s\n' "$_C_BLD" "${LANE1_LOG_TAG:-lane1}" "$_C_OFF" "$*"; }
 ok() { printf '%s[%s] ✅%s %s\n' "$_C_GRN" "${LANE1_LOG_TAG:-lane1}" "$_C_OFF" "$*"; }
 warn() { printf '%s[%s] ⚠️  %s%s\n' "$_C_YEL" "${LANE1_LOG_TAG:-lane1}" "$*" "$_C_OFF" >&2; }
-# die <exit-code> <message...>: one actionable message, then exit. Codes: 2 usage, 3 environment, 4 build, 5 device.
+# die <exit-code> <message> [follow-up lines...]: one actionable message (extra args become indented hint lines),
+# then exit. Codes: 2 usage, 3 environment, 4 build, 5 device (ios_run.sh adds 6 install, 7 launch, 9 locked).
 die() {
   local code=$1
   shift
-  printf '%s[%s] ❌ %s%s\n' "$_C_RED" "${LANE1_LOG_TAG:-lane1}" "$*" "$_C_OFF" >&2
+  printf '%s[%s] ❌ %s%s\n' "$_C_RED" "${LANE1_LOG_TAG:-lane1}" "${1:-}" "$_C_OFF" >&2
+  [ $# -le 1 ] || {
+    shift
+    hint "$@"
+  }
   exit "$code"
 }
 # hint <line...>: indented follow-up lines for warn/die (printed to stderr).

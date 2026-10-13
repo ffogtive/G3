@@ -1,4 +1,228 @@
-# MOBILE_BUILD — 내 아이폰에 설치하기 → TestFlight/App Store · Google Play 출시
+# MOBILE_BUILD — Godot 4.7.2 네이티브 빌드: 내 iPhone 설치 → (나중에) TestFlight/App Store · Android
+
+가설:
+- ❓ (M1) iPhone을 Mac에 꽂고 Xcode에 Apple ID로 한 번 로그인해 두면(무료 Personal Team 가능, 7일 프로비저닝)
+  `tools/mac/ios_run.sh` **명령 하나로 10분 안에** 게임이 iPhone에서 뜬다. — 컨테이너에서 export·스크립트 흐름은 ✅,
+  Mac·실기기는 미검증.
+- ❓ (M2) Core Haptics(transient+continuous+sharpness)와 thermalState 로그는 작은 ObjC++ GDExtension
+  (`native/platform/ios`, C 인터페이스)으로 Godot에 붙는다. — 바인딩은 컨테이너 null 백엔드로 ✅(53 PASS),
+  Core Haptics 호출부는 Mac 빌드 전 ❓.
+- ❓ Godot 4.7.2 iOS 템플릿은 Xcode 27.x에서도 빌드된다: Xcode 27이 ld64·`-ld_classic`을 없앴지만 템플릿은
+  `-ld_classic`을 Xcode 15.0–15.1에서만 붙인다(생성된 project.pbxproj 확인 ✅). 실제 링크는 Mac 첫 빌드에서 판정.
+
+> 기준일 2026-10-13. 엔진은 **Godot 4.7.2-stable**(컨테이너 `godot47`와 동일, docs/NATIVE_PORT.md 1-2).
+> 웹판(`game/`)은 동결(SHA `753549a`), Flutter 셸(`app/`)은 부록 A에 그대로 남긴다.
+> 표기: ✅ 확인(공식 문서·컨테이너 실행) · ❓ Mac/실기기 미검증 또는 2차 출처 · ❌ 기각
+
+## 아침에 할 일 (5단계)
+
+1. **Mac 준비 확인** — Xcode 27.x가 열리고, `Xcode > Settings… > Apple Accounts`에 Apple ID가 로그인돼 있는지
+   본다. 처음이면 `tools/mac/SIGNING.md` 1~2단계(10분).
+2. **iPhone 연결** — 케이블로 꽂고 잠금 해제 → "이 컴퓨터 신뢰" → 개발자 모드 켜기(SIGNING.md 3~4단계).
+3. **받기** — `cd <G3> && git pull`
+4. **실행** — `tools/mac/ios_run.sh` (점검만: `--check`). 첫 실행은 Godot 4.7.2 + 템플릿 1.3 GB를 받아
+   SHA-512를 확인한다. 끝에 `build / install / launch` 결과와 소요 시간이 따로 찍힌다.
+5. **결과 보내기** — 실패하면 마지막 화면 + `.local/deploy-runs/<최신>/receipt.txt`를 보내 준다
+   (Team ID·UDID는 출력에서 `AB******YZ`로 가려져 있다). 실행이 "신뢰하지 않는 개발자"로 막히면
+   iPhone `설정 > 일반 > VPN 및 기기 관리 > 개발자 앱 > 신뢰` 후 `tools/mac/ios_run.sh --launch-only`.
+
+---
+
+## 0) 요약 (가설 대비)
+
+| 질문 | 결론 | 근거 |
+|---|---|---|
+| Mac에서 명령 1개로 설치·실행? | `tools/mac/ios_run.sh` — 확장 빌드 → Godot export(Xcode 프로젝트) → xcodebuild(자동 서명) → codesign·Bundle ID 검증 → devicectl 설치 → 실행 ❓ | 사용자 검증 가이드 §5 메커니즘 그대로 (docs/IPHONE_DEPLOY.md) |
+| 무료 Apple ID로 되나? | ✅ Personal Team: 7일 만료, 기기당 앱 3개, 7일에 App ID 10개 | [Choosing a Membership](https://developer.apple.com/support/compare-memberships/) |
+| Xcode / macOS | **Xcode 27.x**, macOS Tahoe 26.6+. 배포 대상 iOS 15–27, 기기 개발 실행은 **iOS 17+** ✅ | [Xcode Support](https://developer.apple.com/support/xcode/), [Xcode 27 RN](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes) |
+| Godot 4.7.2 ↔ Xcode 27 | ❓ 공식 호환표 없음. 알려진 위험 1개(ld64 제거)는 템플릿이 피해 감 ✅, 나머지는 첫 빌드로 판정 | 아래 7절 |
+| 최소 iOS / 기기 | `min_ios_version = 15.0`(Godot 4.7.2 기본값) + `capabilities/performance_a12 = true` → A12(iPhone XS)+ | Godot 4.7.2 소스 `platform/ios/export/export_plugin.h` (`get_minimum_deployment_target() == "15.0"`) ✅ |
+| 120Hz ProMotion | 템플릿 Info.plist에 `CADisableMinimumFrameDurationOnPhone = true`가 이미 있다 ✅, 엔진은 `display/window/ios/allow_high_refresh_rate` 기본 true | 생성된 `lane1/lane1-Info.plist` ✅, docs/NATIVE_PORT.md 1-2 |
+| 출시(TestFlight/App Store) | 유료 Apple Developer Program 필요(Personal Team은 App Store 서명 불가). 업로드는 Xcode 26+ / iOS 26 SDK | [QA1915](https://developer.apple.com/library/archive/qa/qa1915/_index.html), [Upcoming requirements](https://developer.apple.com/news/upcoming-requirements/) |
+
+## 1) 준비물
+
+| 항목 | 값 |
+|---|---|
+| Mac | Apple silicon 권장, macOS Tahoe 26.6 이상 (Xcode 27 요건 ✅) |
+| Xcode | 27.x (App Store). iOS 플랫폼 구성요소 설치. `cmake`는 traffic 확장 빌드에만(없으면 경고 후 계속) |
+| iPhone | iOS 17 이상(Xcode 27 개발 실행 하한 ✅), A12 이상, 개발자 모드 |
+| Apple ID | 무료 가능. Xcode에 로그인만 하면 된다 — 비밀번호·2FA는 사용자가 직접 입력 |
+| 디스크 | Godot 앱 ~0.2 GB + 템플릿 ~1.3 GB(`~/Library/Application Support/Godot/export_templates/4.7.2.stable`) + DerivedData |
+
+## 2) Godot 4.7.2 + export 템플릿 (ios_run.sh가 자동 설치)
+
+`ios_run.sh`는 `GODOT` → `~/.lane1/godot/4.7.2/Godot.app` → `/Applications/Godot.app` → PATH 순으로 찾고,
+`--version`이 `4.7.2.stable`로 시작하는 것만 쓴다. 없으면 아래를 그대로 한다(수동으로 해도 같다):
+
+```bash
+REL=https://github.com/godotengine/godot/releases/download/4.7.2-stable
+mkdir -p ~/.lane1/downloads ~/.lane1/godot/4.7.2 && cd ~/.lane1/downloads
+curl -fLO "$REL/Godot_v4.7.2-stable_macos.universal.zip"
+curl -fLO "$REL/Godot_v4.7.2-stable_export_templates.tpz"
+curl -fLO "$REL/SHA512-SUMS.txt"
+grep -E 'macos.universal.zip|_export_templates.tpz' SHA512-SUMS.txt | grep -v mono | shasum -a 512 -c -
+ditto -x -k Godot_v4.7.2-stable_macos.universal.zip ~/.lane1/godot/4.7.2/
+# .tpz = zip, 최상위 폴더 templates/  (에디터의 Editor > Manage Export Templates > Install from File과 같은 결과)
+T="$HOME/Library/Application Support/Godot/export_templates/4.7.2.stable"
+mkdir -p "$T" && unzip -q Godot_v4.7.2-stable_export_templates.tpz -d /tmp/tpz && cp -R /tmp/tpz/templates/. "$T/"
+cat "$T/version.txt"   # 4.7.2.stable
+```
+
+- SHA-512(2026-10-13, 공식 `SHA512-SUMS.txt`에서 확인 ✅, `tools/mac/lib/common.sh`에 고정):
+  - `Godot_v4.7.2-stable_macos.universal.zip` `38aa16e5…bac69ca`
+  - `Godot_v4.7.2-stable_export_templates.tpz` `ca4d71c4…ccb84079`
+- 에디터 데이터 경로(macOS) `~/Library/Application Support/Godot/` ✅ ([Godot docs: data paths](https://github.com/godotengine/godot-docs/blob/master/tutorials/io/data_paths.rst)),
+  .tpz는 zip ✅ ([exporting projects](https://github.com/godotengine/godot-docs/blob/master/tutorials/export/exporting_projects.rst)).
+  에디터를 self-contained 모드(`._sc_`)로 쓰면 템플릿은 `editor_data/` 아래로 간다 — 그 경우 `GODOT`를 지정하고 템플릿도 그쪽에 둔다.
+- 릴리스: [4.7.2-stable on GitHub](https://github.com/godotengine/godot/releases/tag/4.7.2-stable) · [godotengine.org archive](https://godotengine.org/download/archive/4.7.2-stable/)
+
+## 3) Export preset (`native/export_presets.cfg`)
+
+옵션 이름은 4.7.2 소스(`platform/ios/export/export_plugin.cpp`, `editor/export/editor_export_platform_apple_embedded.cpp`)와
+컨테이너 export로 확인했다 ✅.
+
+| 옵션 | 값 | 이유 |
+|---|---|---|
+| `application/bundle_identifier` | `com.ffogtive.lane1Chamgyoyuk` | 고정(무료 팀 App ID 한도) |
+| `application/app_store_team_id` | `LANE1TEAM0` (placeholder) | Godot는 빈 Team ID면 export를 거부한다. **공개 저장소라 실제 값 금지** → ios_run.sh가 생성된 pbxproj에만 실제 팀을 넣고 `DEVELOPMENT_TEAM=`으로도 넘긴다 |
+| `application/code_sign_identity_*`, `provisioning_profile_*` | 빈 값 | 빈 값이면 Godot가 `CODE_SIGN_STYLE = Automatic`을 쓴다(소스 `CodeSigningDetails`) ✅ |
+| `application/export_project_only` | `true` | Godot는 Xcode 프로젝트만 만들고 빌드·설치는 스크립트가(가이드 §5) |
+| `application/min_ios_version` | `15.0` | 4.7.2 기본값, Metal은 14+ 필요 |
+| `application/targeted_device_family` | `0` (iPhone) | 세로 폰 게임. 0→`TARGETED_DEVICE_FAMILY "1"` ✅ |
+| `capabilities/performance_a12` | `true` | A12 하한 (UIRequiredDeviceCapabilities에 `iphone-ipad-minimum-performance-a12`) ✅ |
+| `shader_baker/enabled` | `true` | NATIVE_PORT 3-1 "모바일 preset은 셰이더 베이커 켬". Metal 셰이더 bake는 Mac export에서만 ❓ |
+| `icons/icon_1024x1024` | `res://platform/ios/icon_1024.png` | placeholder |
+| include / exclude | `data/*.json` / `tests/*, tools/*, data/src/*, platform/ios/tests/*, *.md` | pck에 `data/*.json` 포함, 테스트·도구 제외 확인 ✅ |
+
+Android(M2 placeholder, 키스토어는 저장소 밖), Linux(컨테이너 스모크)도 같은 파일에 있다.
+
+## 4) 한 줄 실행: `tools/mac/ios_run.sh`
+
+```
+tools/mac/ios_run.sh [--release] [--clean] [--device <UDID|이름>] [--no-ext] [--launch-only] [--check] [--yes]
+```
+
+| 단계 | 하는 일 | 실패하면 |
+|---|---|---|
+| preflight | `xcode-select -p`(CommandLineTools면 중단), `xcodebuild -version ≥ 16`(27 기대), `-checkFirstLaunchStatus`, iOS SDK, devicectl, python3 | 고칠 명령을 그대로 출력, exit 3 |
+| device | `xcrun devicectl list devices --json-output` → 페어링된 iPhone 1대(여러 대면 1회 질문, `--device`로 지정). `developerModeStatus`가 `disabled`면 켜는 법 출력 | exit 5 |
+| team | `LANE1_TEAM_ID` → `~/.lane1/deploy.env` → 키체인 `Apple Development` 인증서의 **OU**(+ Xcode 계정 defaults) | 여러 개면 1회 질문 후 deploy.env(600)에 저장 |
+| godot | 4.7.2 앱·템플릿 확인/설치(SHA-512 검증) | exit 3 |
+| extensions | `tools/mac/build_ios_ext.sh`: haptics(xcrun clang++ → xcframework) + traffic(cmake -G Xcode) | **경고만 하고 계속**(빈 stub xcframework → 게임은 그 클래스 없이 뜬다) |
+| export | `Godot --headless --path native --import` → `--export-debug iOS .local/ios-export/debug/lane1.xcodeproj` → pbxproj의 `LANE1TEAM0`를 실제 팀으로 치환 | exit 4 |
+| build | `xcodebuild -project … -scheme lane1 -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath .local/iphone-deploy -allowProvisioningUpdates -allowProvisioningDeviceRegistration DEVELOPMENT_TEAM=… CODE_SIGN_STYLE=Automatic CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES build` (프로파일에 기기가 없다는 오류면 `-destination id=<UDID>`로 1회 재시도) → `test -d` → `codesign --verify --deep --strict` → `PlistBuddy CFBundleIdentifier == com.ffogtive.lane1Chamgyoyuk` | errSecInternalComponent → 로그인된 Terminal에서 실행 안내, exit 4 |
+| install | `xcrun devicectl device install app --device … lane1.app --json-output install.json` (기존 앱 삭제 없음) | exit 6 |
+| launch | `xcrun devicectl device process launch --device … --terminate-existing com.ffogtive.lane1Chamgyoyuk --json-output launch.json` | "신뢰하지 않는 개발자" 안내, exit 7 (설치 성공은 따로 표시) |
+
+- 실행마다 `.local/deploy-runs/<YYYYmmdd-HHMMSS>-<pid>/`: `build.log export.log ext.log install.json launch.json
+  devices.json receipt.txt exit-code`(EXIT trap). 동시 실행은 `.local/iphone-deploy.lock`(mkdir)으로 막고, **남은
+  잠금을 자동으로 지우지 않는다**(owner 파일의 pid 확인 후 사람이 지움).
+- `--release`: `--export-release` + Xcode Release + `CODE_SIGN_IDENTITY="Apple Development"`(여전히 개발 서명).
+- 무인 실행(`--yes`/러너): 질문 없이, 모호하면 목록과 함께 실패한다.
+
+## 5) 손으로 하는 경로 (스크립트가 막힐 때)
+
+```bash
+G=~/.lane1/godot/4.7.2/Godot.app/Contents/MacOS/Godot
+bash tools/mac/build_ios_ext.sh                      # 실패해도 stub이 남는다
+"$G" --headless --path native --import
+"$G" --headless --path native --export-debug iOS "$PWD/.local/ios-export/debug/lane1.xcodeproj"
+open .local/ios-export/debug/lane1.xcodeproj         # Signing & Capabilities > Team 선택 > iPhone 선택 > ⌘R
+```
+
+Xcode에서 한 번 Run하면 기기 등록·프로파일 생성이 확실히 되므로, 그다음부터 `ios_run.sh`가 그대로 쓴다.
+
+## 6) iOS 확장 (GDExtension)
+
+| 확장 | 경로 | 빌드 | 실패 시 |
+|---|---|---|---|
+| IOSHaptics (Core Haptics + thermalState) | `native/platform/ios` (C 인터페이스, godot-cpp 없음) | `xcrun clang++ -arch arm64` → `libtool -static` → `xcodebuild -create-xcframework` | stub → `Haptics`가 `Input.vibrate_handheld`로 폴백 |
+| traffic (C++ 교통 코어) | `native/ext` (godot-cpp, gate 소유) | `cmake -G Xcode -DCMAKE_SYSTEM_NAME=iOS` (native/ext/README.md) | stub → 경고. 그 클래스를 쓰는 씬은 동작 안 함 |
+
+- 생성된 Xcode 프로젝트는 두 진입 심볼을 `-Wl,-U,_traffic_library_init -Wl,-U,_lane1_haptics_init`로 약하게 참조한다
+  (컨테이너 export로 확인 ✅) — stub이어도 링크된다.
+- `Haptics` autoload(`native/autoload/haptics.gd`): `haptic("horn")`이 `data/haptics.json`을 읽어 IOSHaptics →
+  `Input.vibrate_handheld(ms, amp)` → no-op 순으로 고른다. `thermal_state()`는 모듈이 없으면 `"unknown"`.
+  autoload 등록(`project.godot`)은 gate 소유자 몫: 순서 DB SaveGame InputBuffer Audio **Haptics** Fx UI.
+
+## 7) Godot 4.7.2 × Xcode 27.x 호환성 ❓
+
+| 점검 | 결과 |
+|---|---|
+| 공식 호환표 | ❓ Godot 문서는 Xcode 최소 버전을 적지 않는다 ([exporting_for_ios.rst](https://github.com/godotengine/godot-docs/blob/master/tutorials/export/exporting_for_ios.rst)). 4.7.2 릴리스 소식에도 iOS 항목 없음(2차 출처 검색) |
+| ld64 제거 (Xcode 27: "The ld64 linker has been removed and the `-ld_classic` option is no longer supported") | ✅ 템플릿은 `LD_CLASSIC_1500/1501/1510`만 정의 → Xcode 27에서는 빈 값. 새 링커의 `-U` 지원은 ❓ |
+| 배포 대상 | ✅ Xcode 27 iOS 배포 대상 15–27, 우리 15.0 |
+| 기기 | ✅ Xcode 27 개발 실행 iOS 17+ — 그 이하 iPhone이면 ios_run.sh가 경고 |
+| libc++ 변경(Xcode 27: `bitset::operator[]`, map/set 알고리즘) | ❓ traffic·haptics는 해당 API 미사용(소스 검색), libgodot.a는 템플릿 빌드 시점 툴체인 |
+| devicectl JSON v5 (`hardwareProperties` 등 deprecated → `properties`) | ✅ 대응: ios_run.sh가 두 형식 모두 읽는다(모의 JSON 2종 테스트) |
+| 4.6.2 + Xcode 26.4 "failed to launch" 포럼 보고 | ❓ 답 미확인 ([forum](https://forum.godotengine.org/t/godot-4-6-2-xcode-26-4-physical-ios-device-launch-fails/138380)) — 실패하면 launch.log를 보고 판단 |
+
+## 8) 자주 나는 오류
+
+| 증상 | 처리 |
+|---|---|
+| `xcode-select … CommandLineTools` | `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` ✅ ([Godot iOS docs](https://github.com/godotengine/godot-docs/blob/master/tutorials/export/exporting_for_ios.rst)) |
+| `errSecInternalComponent` | SSH가 아니라 **로그인된 Mac의 Terminal**에서 실행, 키체인 창에서 "항상 허용" (docs/IPHONE_DEPLOY.md §6) |
+| `No Account for Team` / `requires a development team` | Xcode > Settings > Apple Accounts 로그인 (SIGNING.md 2단계) |
+| 프로파일에 기기 없음 | 스크립트가 `-destination id=<UDID>`로 1회 재시도. 그래도 안 되면 5)처럼 Xcode에서 한 번 Run |
+| 설치는 됐는데 실행 실패 | 개발자 신뢰(설정 > 일반 > VPN 및 기기 관리) 또는 잠금 해제 → `--launch-only`. **설치 성공은 유지해서 보고** |
+| 7일 뒤 앱이 안 열림 | 무료 프로파일 만료 → `ios_run.sh` 다시 (앱 삭제 금지, 데이터 유지) |
+| `maximum App ID limit` | 7일에 App ID 10개 한도. Bundle ID를 바꾸지 않는다 |
+| 화면이 비어 있음 | `native/project.godot`에 `run/main_scene`이 아직 없다(ios_run.sh가 경고) — gate 산출물 대기 |
+
+## 9) 컨테이너에서 확인한 것 ✅ / 못 한 것 ❓
+
+✅ (Linux, Godot 4.7.2 + 공식 템플릿)
+- `bash tools/mac/build_ios_ext.sh --container-stubs && godot47 --headless --path native --export-debug iOS <dir>/lane1.xcodeproj`
+  → 17 s, exit 0. scheme `lane1`, `PRODUCT_NAME lane1`, `PRODUCT_BUNDLE_IDENTIFIER com.ffogtive.lane1Chamgyoyuk`,
+  `CODE_SIGN_STYLE Automatic`, `IPHONEOS_DEPLOYMENT_TARGET 15.0`, `TARGETED_DEVICE_FAMILY "1"`, A12 capability,
+  `CADisableMinimumFrameDurationOnPhone`, 확장 xcframework 3개 참조 + `-Wl,-U` 약한 참조.
+- `ios_run.sh`를 가짜 macOS 도구(uname/xcodebuild/xcrun/security/codesign/PlistBuddy 모의)로 끝까지 실행: 정상 경로
+  exit 0, 개발자 모드 꺼짐 exit 5, 신뢰 실패 exit 7(설치 ok 표시), errSecInternalComponent exit 4, 기기 없는 프로파일 →
+  `id=` 재시도 성공, Bundle ID 불일치 exit 4(설치 안 함), 잠금 존재 exit 9(잠금 유지), `--check`, `--launch-only`.
+  xcodebuild·devicectl 인자는 가이드 §5와 글자 그대로 일치. `shellcheck` 0건.
+- IOSHaptics 호스트 빌드 + 53개 테스트 PASS.
+
+❓ (Mac·실기기에서만)
+- 실제 xcodebuild 서명·링크(Xcode 27 새 링커), Core Haptics 체감, Metal shader baker, 120Hz, 발열 로그, 10분 목표.
+- devicectl JSON v5의 `properties` 실제 키 이름(재귀 탐색으로 대응), Xcode 계정 defaults 키 이름.
+
+## 10) 출시 로드맵 · Android
+
+- **TestFlight/App Store**: 유료 Apple Developer Program(연 99 USD) 가입 → 같은 Bundle ID로 App Store Connect 앱 생성 →
+  `--release` export를 Xcode Organizer에서 Archive·업로드(Xcode 26+ / iOS 26 SDK 요건 ✅
+  [Upcoming requirements](https://developer.apple.com/news/upcoming-requirements/)). 4.2(최소 기능) 체크리스트는 부록 A의
+  "App Store 4.2 대응 체크리스트"가 그대로 유효하다(네이티브라 웹뷰 리스크는 사라짐).
+- **Android (M2)**: `export_presets.cfg`의 Android preset은 placeholder. OpenJDK 17 + Android SDK, 키스토어는 저장소
+  밖. 컨테이너는 dl.google.com 차단으로 Gradle 불가(NATIVE_PORT 6).
+
+## 출처 (본문)
+
+- Xcode 27 Release Notes — https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes
+- Xcode 27.2 beta 2 Release Notes — https://developer.apple.com/documentation/xcode-release-notes/xcode-27_2-release-notes
+- Xcode Support (배포 대상·기기 범위) — https://developer.apple.com/support/xcode/
+- Running your app on simulated or physical devices — https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices
+- Device Hub — https://developer.apple.com/documentation/xcode/managing-your-simulated-and-physical-devices-in-device-hub
+- Enabling Developer Mode — https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device
+- Team ID는 인증서 OU (Apple DTS) — https://developer.apple.com/forums/thread/802517
+- 신뢰 설정 경로 — https://support.apple.com/118254 , https://developer.apple.com/forums/thread/685271
+- devicectl `--terminate-existing` / `--console` (포럼·2차) — https://developer.apple.com/forums/thread/756393 , https://github.com/appium/node-devicectl
+- xcodebuild `-allowProvisioningUpdates` + `DEVELOPMENT_TEAM` (2차) — https://docs.fastlane.tools/codesigning/xcode-project/
+- Godot iOS export — https://github.com/godotengine/godot-docs/blob/master/tutorials/export/exporting_for_ios.rst
+- Godot exporting projects (CLI, .tpz) — https://github.com/godotengine/godot-docs/blob/master/tutorials/export/exporting_projects.rst
+- Godot data paths — https://github.com/godotengine/godot-docs/blob/master/tutorials/io/data_paths.rst
+- Godot 4.7.2 release — https://github.com/godotengine/godot/releases/tag/4.7.2-stable , https://godotengine.org/article/maintenance-release-godot-4-7-2/
+- Godot 4.7.2 소스(iOS export) — https://github.com/godotengine/godot/blob/4.7.2-stable/platform/ios/export/export_plugin.cpp , https://github.com/godotengine/godot/blob/4.7.2-stable/editor/export/editor_export_platform_apple_embedded.cpp
+- GitHub self-hosted runner 보안 — https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners
+- 사용자 배포 가이드(익명화 적용본) — docs/IPHONE_DEPLOY.md
+
+---
+
+## 부록 A. (구) Flutter + WebView 셸 경로 (`app/`) — 원문 보존
+
+> 2026-10-13 이전 문서를 그대로 옮겼다. 웹판 동결(`753549a`) 이후 기본 경로는 위의 Godot 네이티브다.
+> 아래 절 번호·"가설"은 그 당시 것이다. 출처 목록은 이 부록 끝에 있다.
 
 가설:
 - ❓ 무료 Apple ID(Personal Team)와 Mac + Xcode만 있으면 `app/`(Flutter + flutter_inappwebview 셸)을 내 아이폰에 설치할 수 있다. 단, **7일마다 Xcode에서 다시 설치**해야 한다. (근거 문서는 ✅ 확인했고, 실기기 설치는 아직 미검증)
@@ -9,7 +233,7 @@
 
 ---
 
-## 0) 핵심 요약 (가설 대비)
+### 0) 핵심 요약 (가설 대비)
 
 | 질문 | 결론 | 근거 |
 |---|---|---|
@@ -23,7 +247,7 @@
 
 ---
 
-## 1) 준비물
+### 1) 준비물
 
 | 항목 | 요구사항 | 비고 |
 |---|---|---|
@@ -38,9 +262,9 @@
 
 ---
 
-## 2) 최초 1회 셋업 (Mac)
+### 2) 최초 1회 셋업 (Mac)
 
-### 2-1. Xcode
+#### 2-1. Xcode
 1. App Store에서 Xcode를 설치한다(최신 버전).
 2. 터미널에서 다음을 실행한다. ✅ [Flutter: Set up iOS development](https://docs.flutter.dev/platform-integration/ios/setup)
 ```bash
@@ -52,7 +276,7 @@ sudo xcodebuild -license
 xcodebuild -downloadPlatform iOS
 ```
 
-### 2-2. Flutter SDK
+#### 2-2. Flutter SDK
 ```bash
 # Apple silicon용 zip을 받아 ~/develop 에 풀기 (버전은 releases 페이지에서 최신 stable 확인)
 mkdir -p ~/develop
@@ -66,7 +290,7 @@ flutter doctor -v     # Xcode 항목이 [✓] 인지 확인 (CocoaPods 미설치
 ```
 - zip 파일명과 경로는 [Flutter 수동 설치 문서](https://docs.flutter.dev/install/manual)와 [releases_macos.json](https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json)을 기준으로 했다. VS Code의 Flutter 확장으로 설치해도 된다.
 
-### 2-3. CocoaPods (선택 — 지금 `app/`에는 불필요)
+#### 2-3. CocoaPods (선택 — 지금 `app/`에는 불필요)
 - Flutter 3.44부터 **Swift Package Manager(SwiftPM)가 기본**이고, SwiftPM 미지원 플러그인만 CocoaPods로 폴백한다. CocoaPods 레지스트리(trunk)는 **2026-12-02부터 읽기 전용**이다. 기존 pod은 계속 쓸 수 있다. ✅ [Flutter SwiftPM](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers), [CocoaPods blog](https://blog.cocoapods.org/CocoaPods-Specs-Repo/)
 - `app/`이 쓰는 `flutter_inappwebview_ios 1.2.0-beta.3`은 SwiftPM을 지원한다(`ios/flutter_inappwebview_ios/Package.swift`, changelog "Add Swift Package Manager support"). flutter_tools 3.47.7 소스상 이 경우 Podfile 생성과 `pod install`을 건너뛴다. 그래서 **CocoaPods 없이 빌드된다**(소스 ✅ / Mac 실빌드 ❓). `flutter doctor`의 CocoaPods 경고(`[!]`)는 무시해도 된다.
 - 대신 **첫 Xcode 빌드 때 SwiftPM이 github.com에서 `swift-collections`를 받는다**(플러그인 의존성). 인터넷이 연결된 상태에서 빌드한다.
@@ -81,7 +305,7 @@ pod --version   # Flutter 도구 기준 최소 1.10.0, 권장 1.16.2 이상
 ```
 - 출처: [CocoaPods Getting Started](https://guides.cocoapods.org/using/getting-started.html), [flutter_tools cocoapods.dart](https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/macos/cocoapods.dart) (최소/권장 버전 상수)
 
-### 2-4. 레포 받기
+#### 2-4. 레포 받기
 ```bash
 git clone <이 레포 URL> ~/G3 && cd ~/G3
 git checkout claude/lane1-mockup
@@ -90,7 +314,7 @@ npm install
 
 ---
 
-## 3) 게임 빌드 → 앱에 동기화
+### 3) 게임 빌드 → 앱에 동기화
 
 앱 폴더: `app/` (Flutter 프로젝트). 게임은 `dist/index.html`(약 1.3MB, 단일 파일)이다. 앱은 이 파일을 **앱 번들 에셋에 포함**하고, 앱 안의 로컬 HTTP 서버로 `http://localhost:28080/assets/web/index.html`을 띄운다.
 
@@ -106,9 +330,9 @@ npm run build:app     # = npm run build && node tools/sync-app.mjs
 
 ---
 
-## 4) 아이폰에 설치하기
+### 4) 아이폰에 설치하기
 
-### 4-A. Xcode로 설치 (처음엔 이 방법 권장)
+#### 4-A. Xcode로 설치 (처음엔 이 방법 권장)
 
 1. **Flutter 쪽 준비** (Xcode가 참조할 설정 파일을 생성한다)
    ```bash
@@ -142,7 +366,7 @@ npm run build:app     # = npm run build && node tools/sync-app.mjs
 9. 아이폰 홈 화면에서 앱을 실행하고 플레이해 본다. 첫 터치 때 사운드 잠금이 풀리는지(`audio.init()`) 확인한다.
 10. **7일 뒤 앱이 안 열리면**: 무료 프로필이 만료된 것이다. Mac에 연결하고 다시 Run하면 된다. ✅ [Apple Developer Forums (DTS)](https://developer.apple.com/forums/thread/724896)
 
-### 4-B. 터미널로 설치 (`flutter run --release`)
+#### 4-B. 터미널로 설치 (`flutter run --release`)
 4-A의 3~5단계(Team과 번들 ID 지정, 개발자 모드)를 한 번 마친 뒤부터는 터미널만으로 설치할 수 있다.
 ```bash
 cd ~/G3 && npm run build:app
@@ -151,7 +375,7 @@ flutter devices                    # 내 아이폰 ID 확인
 flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈 화면에서 재실행 가능)
 ```
 
-### 4-C. 디버깅 팁 (웹뷰 안 들여다보기)
+#### 4-C. 디버깅 팁 (웹뷰 안 들여다보기)
 - iOS 16.4 이상에서는 `isInspectable`이 켜진 웹뷰만 Mac Safari로 검사할 수 있다. ✅ [WebKit: isInspectable](https://webkit.org/blog/13936)
   - `app/lib/src/game_page.dart`는 `isInspectable: kDebugMode`다. 따라서 **Debug 빌드에서만 검사**할 수 있다(Xcode Scheme을 Debug로 하거나 `flutter run`을 `--release` 없이 실행).
   - 4-A 6단계의 Release 설치본은 검사할 수 없는 게 정상이다.
@@ -160,7 +384,7 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 
 ---
 
-## 5) 자주 나는 오류와 해결
+### 5) 자주 나는 오류와 해결
 
 | 증상 / 메시지 | 원인 | 해결 |
 |---|---|---|
@@ -186,9 +410,9 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 
 ---
 
-## 6) 출시 로드맵
+### 6) 출시 로드맵
 
-### 6-1. Apple (TestFlight → App Store)
+#### 6-1. Apple (TestFlight → App Store)
 1. **Apple Developer Program 가입**: 연 **99 USD**(현지 통화로 표시되며, 한국은 약 ₩129,000 ❓ [2차 출처](https://support.cafe24.com/hc/ko/articles/25401873784089)). 개인으로 가입하면 D-U-N-S가 필요 없다. 법적 실명과 2단계 인증이 필요하다. 법인으로 가입하면 D-U-N-S, 공식 웹사이트, 도메인 이메일이 필요하다. ✅ [Apple Enroll](https://developer.apple.com/programs/enroll/)
 2. Xcode에서 Team을 Personal Team에서 **유료 팀**으로 바꾼다. 번들 ID를 최종 확정하고 등록한다(Automatic signing을 쓰면 Xcode가 등록해 준다).
 3. **App Store Connect > 앱 > + > 신규 앱**을 만들고 번들 ID를 연결한다. ✅ [Flutter: Build and release an iOS app](https://docs.flutter.dev/deployment/ios)
@@ -206,14 +430,14 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
    - 한국 게임물 등급: 애플·구글은 게임물관리위원회가 지정한 **자체등급분류사업자**라서 스토어의 등급 설문으로 처리된다 ❓ [inews24](https://www.inews24.com/view/1737742)
 8. **Submit for Review**.
 
-### 6-2. Google Play
+#### 6-2. Google Play
 1. **Play Console 개발자 등록**: **1회 25 USD**, 만 18세 이상, 신분증과 카드 인증(실명). ✅ [Play Console Help](https://support.google.com/googleplay/android-developer/answer/6112435?hl=en)
 2. **신규 개인 계정 규칙**: 프로덕션에 출시하기 전에 **테스터 12명 이상을 14일 연속** 옵트인 상태로 유지하는 비공개 테스트가 필요하다. 이탈에 대비해 15~20명을 모으길 권장한다 ❓. ✅ [Play Console Help 14151465](https://support.google.com/googleplay/android-developer/answer/14151465)
 3. **타깃 API**: 2026-08-31부터 신규 앱과 업데이트는 **Android 16 (API 36)** 이상을 타깃으로 해야 한다(연장 신청 시 2026-11-01까지). ✅ [Android target SDK](https://developer.android.com/google/play/requirements/target-sdk)
 4. 업로드 키스토어를 만들고 `flutter build appbundle`로 `.aab`를 만든 뒤 Play Console에 업로드한다(Play App Signing). 절차는 [Flutter: Build and release an Android app](https://docs.flutter.dev/deployment/android)을 따른다.
 5. Android 실기기 테스트: 휴대폰에서 개발자 옵션 → USB 디버깅을 켜고 `flutter run --release`.
 
-### 6-3. App Store 4.2(Minimum Functionality) 대응 체크리스트
+#### 6-3. App Store 4.2(Minimum Functionality) 대응 체크리스트
 
 가이드라인 원문의 핵심(✅ [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)):
 - **4.2**: "repackaged website" 이상의 기능, 콘텐츠, UI가 있어야 한다. 지속적인 오락 가치나 유용성이 없으면 거절될 수 있다.
@@ -242,7 +466,7 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 
 ---
 
-## 7) 확인 못 한 것 (❓)
+### 7) 확인 못 한 것 (❓)
 
 - **실기기 설치 전 과정 미검증**: 이 문서는 Linux 컨테이너(Xcode, iOS 시뮬레이터, Android SDK 없음)에서 공식 문서만 보고 작성했다. Mac에서 처음 따라 할 때 막히는 단계가 나오면 이 문서를 고쳐야 한다.
 - ~~`npm run build:app`과 `app/` 세부 사항~~ → 리뷰에서 실제 파일과 맞췄다 ✅ (에셋 `app/assets/web/index.html`, 포트 28080, `NSAllowsLocalNetworking`, Android cleartext는 localhost만 허용).
@@ -259,7 +483,7 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 
 ---
 
-## 출처
+### 출처
 
 **Flutter**
 - Flutter stable 릴리스 목록 — https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json
