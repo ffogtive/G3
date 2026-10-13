@@ -20,6 +20,7 @@ const LOOKAHEAD = 0.14;      // 초. 스케줄러 선행 예약 구간
 const TICK_MS = 25;
 const MAX_LIVE = 40;         // 전역 동시 SFX 보이스 상한 (우선순위 낮은 것부터 버림)
 const RELEASE_BPM = 130;     // 해방 BGM 템포 = 경적 합주 그리드
+const COMP_MAKEUP_COMP = Math.pow(10, -3.8 / 20); // 컴프레서 자동 메이크업(+3.8 dB) 상쇄
 
 const noop = () => {};
 const perfNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -163,15 +164,16 @@ function bind(ctx, opts) {
   const n = {};
   n.mute = G(S.muted ? 0 : 1, ctx.destination);
   n.clip = C.createWaveShaper(); n.clip.curve = clipCurve(); n.clip.connect(n.mute);
-  n.master = G(0.9, S.noClip ? n.mute : n.clip);
+  // DynamicsCompressorNode 는 자동 메이크업 게인(이 설정에서 +3.8 dB, 실측)을 넣는다 → master 에서 상쇄해 소신호 이득 = 1
+  n.master = G(COMP_MAKEUP_COMP, S.noClip ? n.mute : n.clip);
   n.comp = C.createDynamicsCompressor();
-  n.comp.threshold.value = -12; n.comp.knee.value = 8; n.comp.ratio.value = 6;
+  n.comp.threshold.value = -10; n.comp.knee.value = 6; n.comp.ratio.value = 6;
   n.comp.attack.value = 0.003; n.comp.release.value = 0.22;
   n.comp.connect(n.master);
   n.sfx = G(0.9, n.comp);
   n.amb = G(0.6, n.comp);
   n.duck = G(1, n.comp);
-  n.music = G(0.7, n.duck);
+  n.music = G(0.8, n.duck);
   S.n = n;
   S.waves = { p25: pulseWave(0.25), p12: pulseWave(0.125) };
   S.bufs = makeBuffers();
@@ -260,7 +262,7 @@ function sfxHornAngry(t, p, d) {
 // ───────────────────────────── 전투
 function sfxTack(t, p, d) {
   // 압정 발사 '틱-퓻': 짧은 고역 클릭 + 하강 처프. 7/s 연사에도 귀가 안 피곤하게 짧고 둥글게.
-  const g = G(0, d); noise(t, t + 0.03, F('bandpass', 3800 * p, 1.2, g)); perc(g.gain, t, 0.9, 0.001, 0.02);
+  const g = G(0, d); noise(t, t + 0.03, F('bandpass', 3800 * p, 1.2, g)); perc(g.gain, t, 0.45, 0.0015, 0.02);
   const g2 = G(0, d); const o = osc('triangle', 1900 * p, t, t + 0.07, F('lowpass', 4500, 0.7, g2));
   o.frequency.exponentialRampToValueAtTime(780 * p, t + 0.045); perc(g2.gain, t, 0.5, 0.002, 0.045);
   return t + 0.07;
@@ -271,7 +273,7 @@ function sfxHit(t, p, d) {
   for (const [f, a, dd] of [[2480, 0.32, 0.09], [3710, 0.2, 0.06], [1330, 0.16, 0.05]]) {
     const g = G(0, d); osc('sine', f * j, t, t + dd * 1.6 + 0.01, g); perc(g.gain, t, a, 0.001, dd);
   }
-  const gn = G(0, d); noise(t, t + 0.025, F('highpass', 2500, 0.7, gn)); perc(gn.gain, t, 0.35, 0.001, 0.015);
+  const gn = G(0, d); noise(t, t + 0.025, F('highpass', 2500, 0.7, gn)); perc(gn.gain, t, 0.22, 0.0015, 0.015);
   const gt = G(0, d); const o = osc('sine', 210 * p, t, t + 0.08, gt); o.frequency.exponentialRampToValueAtTime(90, t + 0.05); perc(gt.gain, t, 0.35, 0.002, 0.05);
   return t + 0.16;
 }
@@ -326,7 +328,7 @@ function sfxSuper(t, p, d) {
   // 분노 미사일 발사: 점화 '퍽' + 상승 분사 노이즈 + 휘슬
   const gi = G(0, d); noise(t, t + 0.1, F('lowpass', 2200, 0.6, gi)); perc(gi.gain, t, 0.7, 0.002, 0.08);
   const gt = G(0, d); const ot = osc('sine', 150 * p, t, t + 0.25, gt); ot.frequency.exponentialRampToValueAtTime(50, t + 0.14); perc(gt.gain, t, 0.6, 0.003, 0.15);
-  const gr = G(0, d); const bp = F('bandpass', 300 * p, 1.0, gr); noise(t, t + 1.3, bp);
+  const gr = G(0, d); const bp = F('bandpass', 300 * p, 1.0, gr); noise(t, t + 1.6, bp);
   bp.frequency.setValueAtTime(300 * p, t); bp.frequency.exponentialRampToValueAtTime(2600 * p, t + 0.9);
   gr.gain.setValueAtTime(0, t); gr.gain.linearRampToValueAtTime(1.6, t + 0.12); gr.gain.setValueAtTime(1.6, t + 0.55); gr.gain.setTargetAtTime(0, t + 0.55, 0.18);
   const gw = G(0, d); const ow = osc('sine', 520 * p, t + 0.03, t + 1.2, gw); ow.frequency.exponentialRampToValueAtTime(2300 * p, t + 1.0);
@@ -336,10 +338,10 @@ function sfxSuper(t, p, d) {
 function sfxLaunch(t, p, d) {
   // 하늘로 '피유우우웅~' 슬라이드 휘슬 (코믹)
   const dur = 1.15;
-  const g = G(0, d); const o = osc('sine', 330 * p, t, t + dur + 0.05, g);
+  const g = G(0, d); const o = osc('sine', 330 * p, t, t + dur + 0.25, g);
   o.frequency.exponentialRampToValueAtTime(560 * p, t + 0.25); o.frequency.exponentialRampToValueAtTime(1750 * p, t + dur);
-  const l = G(28); osc('sine', 7, t, t + dur + 0.05, l); l.connect(o.detune);
-  const gb = G(0, d); const bp = F('bandpass', 330 * p, 6, gb); noise(t, t + dur, bp); // 숨결
+  const l = G(28); osc('sine', 7, t, t + dur + 0.25, l); l.connect(o.detune);
+  const gb = G(0, d); const bp = F('bandpass', 330 * p, 6, gb); noise(t, t + dur + 0.25, bp); // 숨결
   bp.frequency.setValueAtTime(330 * p, t); bp.frequency.exponentialRampToValueAtTime(560 * p, t + 0.25); bp.frequency.exponentialRampToValueAtTime(1750 * p, t + dur);
   for (const [gg, a] of [[g, 0.5], [gb, 0.35]]) {
     gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(a, t + 0.04); gg.gain.linearRampToValueAtTime(a * 0.6, t + 0.8);
@@ -366,19 +368,20 @@ function sfxTwinkle(t, p, d) {
 function brakeTone(t, p, d, dur, lvl) {
   // 타이어 비명: 좁은 대역 톱니 2개 + 빠른 FM 떨림 + 노이즈 거칠기
   const g = G(0, d); const bp = F('bandpass', 1500 * p, 6, g);
-  const fm = G(60 * p); osc('sine', 31, t, t + dur + 0.1, fm);
-  const fm2 = G(30 * p); osc('triangle', 8.5, t, t + dur + 0.1, fm2);
+  const tail = t + dur + 0.3;
+  const fm = G(60 * p); osc('sine', 31, t, tail, fm);
+  const fm2 = G(30 * p); osc('triangle', 8.5, t, tail, fm2);
   for (const [f, ty, a] of [[1400, 'sawtooth', 1], [1412, 'sawtooth', 0.8], [2810, 'square', 0.25]]) {
-    const o = osc(ty, f * p * 1.03, t, t + dur + 0.1, G(a * 0.5, bp));
+    const o = osc(ty, f * p * 1.03, t, tail, G(a * 0.5, bp));
     o.frequency.linearRampToValueAtTime(f * p * 0.86, t + dur);
     fm.connect(o.frequency); fm2.connect(o.frequency);
   }
-  const gn = G(0, d); noise(t, t + dur + 0.1, F('bandpass', 2900 * p, 2.5, gn));
+  const gn = G(0, d); noise(t, tail, F('bandpass', 2900 * p, 2.5, gn));
   for (const [gg, a] of [[g, 1.6 * lvl], [gn, 0.6 * lvl]]) {
     gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(a, t + 0.03); gg.gain.linearRampToValueAtTime(a * 0.75, t + dur * 0.7);
     gg.gain.setTargetAtTime(0, t + dur - 0.08, 0.05);
   }
-  return t + dur + 0.1;
+  return tail;
 }
 function sfxBump(t, p, d) {
   // 추돌 '쿵' + 플라스틱 덜컹
@@ -539,11 +542,11 @@ const SFX = {
   hornShort:    { g: 0.4,  dur: 0.27, max: 3, gap: 0.05, fn: (t, p, d) => hornTone(t, 0.12, [420 * p, 520 * p], d) },
   hornTruck:    { g: 0.4,  dur: 1.0,  max: 2, gap: 0.1,  fn: sfxHornTruck },
   hornAngry:    { g: 0.36, dur: 0.6,  max: 2, gap: 0.12, fn: sfxHornAngry },
-  tack:         { g: 0.45, dur: 0.07, max: 2, gap: 0.045, pri: 0, fn: sfxTack },
-  hit:          { g: 0.6,  dur: 0.14, max: 3, gap: 0.06, pri: 0, fn: sfxHit },
+  tack:         { g: 0.42, dur: 0.07, max: 2, gap: 0.045, pri: 0, fn: sfxTack },
+  hit:          { g: 0.5,  dur: 0.14, max: 3, gap: 0.06, pri: 0, fn: sfxHit },
   crit:         { g: 0.7,  dur: 0.4,  max: 2, gap: 0.08, fn: sfxCrit },
   pop:          { g: 1.2,  dur: 0.9,  max: 4, gap: 0.06, stagger: 0.085, pri: 2, fn: sfxPop },
-  explosion:    { g: 0.8,  dur: 1.6,  max: 2, gap: 0.12, pri: 2, fn: (t, p, d) => boom(t, p, d, 1) },
+  explosion:    { g: 0.95, dur: 1.6,  max: 2, gap: 0.12, pri: 2, fn: (t, p, d) => boom(t, p, d, 1) },
   whoosh:       { g: 0.45, dur: 0.5,  max: 3, gap: 0.06, fn: sfxWhoosh },
   bump:         { g: 0.55, dur: 0.25, max: 2, gap: 0.08, fn: sfxBump },
   laneChange:   { g: 0.35, dur: 0.2,  max: 2, gap: 0.05, pri: 0, fn: sfxLane },
@@ -551,20 +554,20 @@ const SFX = {
   uiConfirm:    { g: 0.6,  dur: 0.25, max: 2, gap: 0.05, pri: 2, fn: sfxUiConfirm },
   rageFull:     { g: 0.7,  dur: 0.8,  max: 1, gap: 0.2,  pri: 2, fn: sfxRage },
   super:        { g: 0.6,  dur: 1.2,  max: 2, gap: 0.15, pri: 2, fn: sfxSuper },
-  superHit:     { g: 0.85, dur: 2.4,  max: 2, gap: 0.15, pri: 2, fn: sfxSuperHit },
+  superHit:     { g: 1.0,  dur: 2.4,  max: 2, gap: 0.15, pri: 2, fn: sfxSuperHit },
   brakeScreech: { g: 0.32, dur: 0.8,  max: 2, gap: 0.15, fn: (t, p, d) => brakeTone(t, p, d, 0.78, 1) },
-  warn:         { g: 0.42, dur: 0.5,  max: 1, gap: 0.3,  pri: 2, fn: sfxWarn },
+  warn:         { g: 0.65, dur: 0.5,  max: 1, gap: 0.3,  pri: 2, fn: sfxWarn },
   throw:        { g: 0.45, dur: 0.25, max: 2, gap: 0.08, fn: sfxThrow },
   splat:        { g: 0.85, dur: 0.4,  max: 3, gap: 0.05, fn: sfxSplat },
   launch:       { g: 0.4,  dur: 1.15, max: 2, gap: 0.2,  pri: 2, fn: sfxLaunch },
-  twinkle:      { g: 0.9,  dur: 1.1,  max: 2, gap: 0.15, pri: 2, fn: sfxTwinkle },
+  twinkle:      { g: 1.25, dur: 1.1,  max: 2, gap: 0.15, pri: 2, fn: sfxTwinkle },
   stageClear:   { g: 0.6,  dur: 1.6,  max: 1, gap: 0.5,  pri: 2, fn: sfxClear },
-  star:         { g: 0.8,  dur: 0.6,  max: 3, gap: 0.05, pri: 2, fn: sfxStar },
+  star:         { g: 1.0,  dur: 0.6,  max: 3, gap: 0.05, pri: 2, fn: sfxStar },
   cutin:        { g: 0.36, dur: 0.7,  max: 2, gap: 0.2,  fn: sfxCutin },
   blink:        { g: 0.7,  dur: 0.35, max: 3, gap: 0.04, pri: 0, fn: sfxBlink },
   tauntBlip:    { g: 0.22, dur: 0.4,  max: 2, gap: 0.1,  fn: sfxTaunt },
-  chicken:      { g: 0.3,  dur: 0.35, max: 2, gap: 0.1,  fn: sfxChicken },
-  go:           { g: 0.55, dur: 0.9,  max: 1, gap: 0.3,  pri: 2, fn: sfxGo },
+  chicken:      { g: 0.2,  dur: 0.35, max: 2, gap: 0.1,  fn: sfxChicken },
+  go:           { g: 0.7,  dur: 0.9,  max: 1, gap: 0.3,  pri: 2, fn: sfxGo },
 };
 
 // ───────────────────────────── "대~한민국! 짝짝 짝짝짝" 경적 합주
@@ -589,7 +592,7 @@ function cheerCar(car, hits, end) {
     const o = C.createOscillator(); o.type = car.types[i % car.types.length]; o.detune.value = rand(-6, 6);
     o.frequency.setValueAtTime(f, t0); o.connect(mix); o.start(t0); o.stop(end); return o;
   });
-  const g = mix.gain; const lvl = (car.v * 0.72) / car.f.length;
+  const g = mix.gain; const lvl = (car.v * 0.85) / car.f.length;
   g.setValueAtTime(0, t0);
   let prevEnd = -1;
   for (const [h0, len, a] of hits) {
@@ -610,9 +613,9 @@ function clap(t, dest, a, pan, f) {
   gg.setValueAtTime(a * 0.85, t + 0.029); gg.setTargetAtTime(0, t + 0.03, 0.03);
 }
 function crowdClap(t, a) {
-  clap(t, S.n.sfx, 6.5 * a, rand(-0.6, -0.2), rand(1050, 1250));
-  clap(t + rand(0.003, 0.011), S.n.sfx, 5.5 * a, rand(-0.15, 0.15), rand(1250, 1500));
-  clap(t + rand(0.008, 0.02), S.n.sfx, 5.0 * a, rand(0.2, 0.6), rand(1500, 1850));
+  clap(t, S.n.sfx, 7.2 * a, rand(-0.6, -0.2), rand(1050, 1250));
+  clap(t + rand(0.003, 0.011), S.n.sfx, 6.2 * a, rand(-0.15, 0.15), rand(1250, 1500));
+  clap(t + rand(0.008, 0.02), S.n.sfx, 5.6 * a, rand(0.2, 0.6), rand(1500, 1850));
 }
 
 // ───────────────────────────── 음악: 악기
@@ -728,7 +731,7 @@ class SB {
 const SONGS = {
   // 메뉴: 통통 튀는 칩튠 (G장조 132bpm, 8마디)
   menu() {
-    const b = new SB(132, 8, { gain: 0.42 });
+    const b = new SB(132, 8, { gain: 0.52 });
     const ch = ['G', 'Em', 'C', 'D', 'G', 'Em', 'C|D', 'G'];
     b.lines(0, [
       'G5 . D5 . G5 A5 B5 .',

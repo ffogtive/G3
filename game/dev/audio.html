@@ -201,20 +201,22 @@ requestAnimationFrame(frame);
 
 // ───────── 오프라인 측정 (모듈 인스턴스를 쿼리스트링으로 분리 → 라이브 하네스와 독립)
 let modN = 0;
+// pre 초 무음 뒤에 job 실행 (ctx.suspend) → 컴프레서가 '데워진' 실제 게임 상태로 측정. 분석은 pre 이후 구간만.
 async function renderOffline(job, seconds, o = {}) {
-  const sr = 44100;
-  const ctx = new OfflineAudioContext(2, Math.ceil(sr * seconds), sr);
+  const sr = 44100, pre = o.pre != null ? o.pre : 0.6;
+  const ctx = new OfflineAudioContext(2, Math.ceil(sr * (pre + seconds)), sr);
   const mod = await import(`../js/audio.js?offline=${++modN}`);
   const errors = [];
   mod.audio.init({ context: ctx, noLimiter: !!o.noLimiter });
-  try { job(mod.audio); } catch (e) { errors.push(String(e)); }
+  const run = () => { try { job(mod.audio); } catch (e) { errors.push(String(e)); } };
+  if (pre > 0) ctx.suspend(pre).then(() => { run(); ctx.resume(); }); else run();
   const b = await ctx.startRendering();
-  return { ...analyze(b), buffer: b, errors };
+  return { ...analyze(b, pre), buffer: b, errors, debug: mod.__audioDebug() };
 }
-function analyze(b) {
-  const L = b.getChannelData(0), R = b.getChannelData(1), n = L.length, sr = b.sampleRate;
+function analyze(b, pre = 0) {
+  const L = b.getChannelData(0), R = b.getChannelData(1), n = L.length, sr = b.sampleRate, i0 = Math.floor(pre * sr);
   let peak = 0, sum = 0, first = -1, lastI = -1;
-  for (let i = 0; i < n; i++) {
+  for (let i = i0; i < n; i++) {
     const a = Math.max(Math.abs(L[i]), Math.abs(R[i]));
     if (a > peak) peak = a;
     sum += L[i] * L[i] + R[i] * R[i];
@@ -222,17 +224,17 @@ function analyze(b) {
   }
   let act = 0; for (let i = Math.max(0, first); i <= lastI; i++) act += L[i] * L[i] + R[i] * R[i];
   const W = Math.floor(sr * 0.05); let maxWin = 0;
-  for (let s0 = 0; s0 + W <= n; s0 += W) { let w = 0; for (let i = s0; i < s0 + W; i++) w += L[i] * L[i] + R[i] * R[i]; maxWin = Math.max(maxWin, Math.sqrt(w / (2 * W))); }
+  for (let s0 = i0; s0 + W <= n; s0 += W) { let w = 0; for (let i = s0; i < s0 + W; i++) w += L[i] * L[i] + R[i] * R[i]; maxWin = Math.max(maxWin, Math.sqrt(w / (2 * W))); }
   const len = first < 0 ? 0 : lastI - first + 1;
   const rmsAct = len ? Math.sqrt(act / (2 * len)) : 0;
-  return { peak, rms: Math.sqrt(sum / (2 * n)), rmsActive: rmsAct, maxWinRms: maxWin, onset: first / sr, dur: len / sr, nan: !isFinite(sum) };
+  return { peak, rms: Math.sqrt(sum / (2 * (n - i0))), rmsActive: rmsAct, maxWinRms: maxWin, onset: first < 0 ? -1 : first / sr - pre, dur: len / sr, nan: !isFinite(sum) };
 }
 const db = (v) => (v > 0 ? 20 * Math.log10(v) : -Infinity);
-function drawWave(b) {
+function drawWave(b, pre = 0.6) {
   const c = document.createElement('canvas'); c.width = 220; c.height = 34; const g = c.getContext('2d');
   g.fillStyle = '#0d0f13'; g.fillRect(0, 0, 220, 34); g.strokeStyle = '#ffb400'; g.beginPath();
-  const L = b.getChannelData(0), per = Math.max(1, Math.floor(L.length / 220));
-  for (let x = 0; x < 220; x++) { let mn = 1, mx = -1; for (let i = x * per; i < (x + 1) * per && i < L.length; i++) { if (L[i] < mn) mn = L[i]; if (L[i] > mx) mx = L[i]; } g.moveTo(x + 0.5, 17 - mx * 16); g.lineTo(x + 0.5, 17 - mn * 16); }
+  const L = b.getChannelData(0), i0 = Math.floor(pre * b.sampleRate), per = Math.max(1, Math.floor((L.length - i0) / 220));
+  for (let x = 0; x < 220; x++) { let mn = 1, mx = -1; for (let i = i0 + x * per; i < i0 + (x + 1) * per && i < L.length; i++) { if (L[i] < mn) mn = L[i]; if (L[i] > mx) mx = L[i]; } g.moveTo(x + 0.5, 17 - mx * 16); g.lineTo(x + 0.5, 17 - mn * 16); }
   g.stroke(); return c;
 }
 function addRow(name, r) {
