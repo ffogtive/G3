@@ -818,6 +818,11 @@ let autoNext = 0;
 function autopilot(phase) {
   const out = { left: false, right: false, fire: false, super: false, brake: false, horn: false };
   if (G.realTime < autoNext) { out.fire = phase === 'boss'; return out; }
+  // 판별 정석 루트 (시그니처 모듈이 알려 줌)
+  if ((phase === 'jam' || phase === 'boss') && boss.beh?.auto) {
+    const a = boss.beh.auto(boss, player, G);
+    if (a) { Object.assign(out, a); out.fire = out.fire || phase === 'boss'; if (a.wait) autoNext = G.realTime + a.wait; return out; }
+  }
   if (phase === 'jam' || (phase === 'boss' && !G.frontLocked)) {
     if (traffic.miniTarget(player) || (phase === 'boss' && boss.targetFor(player))) out.fire = true;
     if (G.rage >= TUNE.superCost * 2 && traffic.gapAhead(SHOULDER_LANE, player.s, player).gap < 20 && Math.random() < 0.05) out.super = true;
@@ -1203,7 +1208,7 @@ function update(realDt) {
     boss.beh?.onLock?.(boss);
     ui.banner('앞을 막았다! 정면 참교육!', 'go', 1100);
     audio.play('warn');
-    const fh = G.stage.honkOnly
+    const fh = boss.beh?.hint ? boss.beh.hint : G.stage.honkOnly
       ? (IS_TOUCH ? '[발사] = 경적으로 깨우기 · [분노] = 사이렌 대경적 · 갓길로 유도하면 구조 완료' : 'Space = 경적으로 깨우기 · R = 사이렌 대경적 · 갓길로 유도하면 구조 완료')
       : (IS_TOUCH ? '[발사] 꾹 = 뒤로 압정 (밟으면 펑크!) · [분노] = 분노 폭탄 · 공격은 차선 바꿔 피하기' : 'Space 꾹 = 뒤로 압정 (밟으면 펑크!) · R = 분노 폭탄 · 공격은 차선 바꿔 피하기');
     setTimeout(() => G.phase === 'boss' && ui.hint?.(fh, 3400), 900);

@@ -27,6 +27,7 @@ const blinker_liar = {
   release: { openLane: 0 },                  // 피해 차로(1차로)부터 연다
   attacks: { cutin: 3, horn: 1 },
   behindAttack: null,                        // 접근 중엔 공격 안 함 (깜빡이만 깜빡깜빡)
+  hint: '깜빡이 템포를 읽어라: 느리면 가짜(그대로 쏘기 ×1.5) · 빨라지면 진짜(↓ 브레이크로 빠지면 헛스윙 ×2) · 경적 = 0.5초 개그',
   init(B) {
     B.sig = { blinks: 0, laneChanges: 0, prevOn: false, nextNote: 30 };
     for (const v of B.villains) Object.assign(v, { fakeT: 3 + Math.random() * 2, fake: 0, hyper: 0, flip: 0, exposed: 0, cut: null });
@@ -129,6 +130,7 @@ const tailgater = {
   interval: [2.2, 3.2],
   behindAttack: null,
   immuneText: '너무 붙어서 안 맞아!',
+  hint: '붙어 있으면 압정이 안 맞는다 → 차로를 바꿔 떼어낸 순간 쏘기 · 35% 이하: 앞 진회색 세단 앞에서 옆으로 비켜 주기',
   init(B, stage) {
     const v = B.villains[0];
     const J = stage.jamSpeed || 2.4;
@@ -206,7 +208,7 @@ const tailgater = {
     }
     // 35% 이하: 암행순찰차가 앞 1차로에 합류 → 내가 비켜 주면 습관대로 그 뒤에 붙음 → 확정 마무리
     if (S.target === 'player' && !S.unmarked && B.hpFrac() <= 0.35) {
-      S.unmarked = body(B, 'unmarked', v.homeLane, p.s + 25, J * 0.85);
+      S.unmarked = body(B, 'unmarked', v.homeLane, p.s + 18, J * 0.5);
       S.unmarked.isVictim = false;
       ctx.events.push({ type: 'sigToast', text: '앞에 진회색 세단이 끼어들었다… 비켜 주면?' });
     }
@@ -216,7 +218,7 @@ const tailgater = {
       if (S.target === 'player') {
         const ahead = U.s - p.s;
         if (p.lane !== U.lane && ahead > 2 && ahead < 14 && Math.abs(U.s - v.s) < 16) { S.target = 'unmarked'; v.targetLanePos = U.lane; S.handT = 1.4; ctx.events.push({ type: 'sigPop', v, text: '오 저 차 맛있겠다~', kind: 'warn' }); }
-        else U.v = J * (ahead > 10 ? 0.7 : 1.0);
+        else U.v = J * (ahead > 10 ? 0.45 : 1.0);   // 천천히 다가와 내 앞 4~10m에서 속도를 맞춘다
       } else if (S.target === 'unmarked' && !S.handed) {
         U.v = J;
         S.handT -= dt;
@@ -241,13 +243,36 @@ const tailgater = {
   onHonk(B, v, ctx) {
     const S = B.sig, p = ctx.player, vic = S.victim;
     // 구출 교대: 2차로에서 피해차 옆에 붙어 경적 → 피해차가 2차로 내 뒤로 빠지고, 나는 그 앞 1차로로
-    if (!S.rescued && vic && p.lane === vic.lane + 1 && Math.abs(p.s - vic.s) < 5) {
+    if (!S.rescued && vic && p.lane === vic.lane + 1 && p.s - vic.s > -4 && p.s - vic.s < 9) {
       S.rescued = true; S.target = 'none';
       ctx.events.push({ type: 'sigPop', v: vic, text: '감사합니다ㅠㅠ', kind: 'score' });
       ctx.events.push({ type: 'sigToast', text: '구출 교대! 이제 그 앞 1차로로 들어가세요' });
     }
   },
   onLock(B) { B.sig.target = 'player'; },
+  // 오토파일럿(회귀 테스트·데모)용 정석 루트: 피해차 옆 2차로 → 경적 → 그 앞 1차로 → 35%에서 비켜 주기
+  auto(B, p, G) {
+    const S = B.sig, v = B.villains[0], vic = S.victim, out = {};
+    if (!v || !v.alive) return null;
+    if (!S.rescued && vic) {
+      const want = vic.lane + 1, ds = p.s - vic.s;
+      if (ds < -4) return null;                       // 아직 멀다: 기본 접근(갓길)
+      if (p.lane > want) out.left = true;
+      else if (p.lane === want && ds < 9) out.horn = true;
+      out.wait = 0.4;
+      return out;
+    }
+    if (!G.frontLocked) {
+      if (p.lane > v.homeLane && p.s > v.s + v.len / 2 + p.len / 2 + 0.8) { out.left = true; out.wait = 0.35; return out; }
+      return null;
+    }
+    const U = S.unmarked;
+    if (U && S.target === 'player') { const a = U.s - p.s; if (a > 2 && a < 12 && p.lane === U.lane) { out.right = true; out.wait = 0.5; return out; } }
+    // 사격 창 만들기: 가끔 차로를 바꿨다 돌아오기
+    if (S.target === 'player' && Math.random() < 0.02) { out[p.lane === 0 ? 'right' : 'left'] = true; out.wait = 0.6; return out; }
+    out.fire = true;
+    return out;
+  },
   onDeath(B, v, ctx) { ctx.events.push({ type: 'sigFinal', v, text: B.sig.handed ? '0.6m → ∞ (암행순찰차에 인계)' : '찰싹… 떨어졌다' }); },
   stats(B) {
     const S = B.sig;
@@ -261,6 +286,7 @@ const SEQ = ['highbeam', 'throw', 'horn', 'lunge'];
 const occupy = {
   release: { openLane: 0 },
   interval: [3.0, 3.0],
+  hint: '공격은 3초 박자(상향등→컵→경적→돌진) · 뒤차 상향등 릴레이가 꽂히면 1.5초 경직 → 그때 몰아쳐라',
   init(B) { B.sig = { seq: 0, relayT: 4, relay: null, stun: 0, cruiseT: 4, relays: 0 }; },
   motion(B, v, dt, ctx) {
     const S = B.sig;
