@@ -707,11 +707,11 @@ function setReleaseCounter(n) {
   }
   n = Math.max(0, Math.round(+n));
   if (C.rel == null) {
-    C.relShown = Math.min(n, C.relShown || 0);
-    if (!isShown(E.rel)) { C.relShown = 0; E.relNum.textContent = '0'; }
+    // 숨김 → 표시: 0 부터 째깍째깍 올라가게 (퇴장 애니 중에 다시 켜진 경우도 0 부터)
+    C.relShown = 0;
+    E.relNum.textContent = '0';
     setShown(E.rel, true);
-  }
-  if (n > (C.rel ?? -1)) bump(E.relNum, 'rel', 90, KF.bigBump, 180);
+  } else if (n > C.rel) bump(E.relNum, 'rel', 90, KF.bigBump, 180);
   C.rel = n;
   if (!relRaf) relRaf = requestAnimationFrame(tickRel);
 }

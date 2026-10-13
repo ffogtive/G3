@@ -15,7 +15,10 @@
 //  · Sprite    : 글로우(가산) 28 / 반짝별(일반) 28 — 폭발 코어 섬광, hitFlash, twinkle★
 //  · 링(충격파) 10, 코어 섬광(icosa) 6, smokeTrail 이미터 16, 스피드라인 72 (카메라 자식)
 //  · 셰이크: trauma 누적(상한 1.2) → 사인합 노이즈. 오프셋 ≈ 0.8m × trauma^1.5.
-//    셰이크만 max(게임 dt, 실제 경과시간) 으로 진행 → 히트스톱/슬로모션 중에도 "쾅" 하고 흔들린다.
+//  · 시간: 큐브 파티클/링/트레일/스피드라인 = 게임 dt (슬로모션 불덩이).
+//          섬광·스프라이트·셰이크 = max(게임 dt, 실제 경과) → 히트스톱 중에도 "쾅", 슬로모에서도 섬광이 금방 걷힘.
+//  · 카메라 코앞(1.5~8m) 큐브/스프라이트는 줄어들거나 투명해짐 → 킬캠이 불덩이·연기꼬리를 관통해도 화면이 안 막힘.
+//  · twinkle: 화면 안에서 터지면 카메라 자식으로 고정 → 같은 프레임에 드론샷으로 홱 돌아가도 1초간 보임.
 import * as THREE from 'three';
 
 // ───────────────────────────── 결정적 RNG (하네스 스크린샷 재현용)
@@ -35,6 +38,9 @@ const _P = new THREE.Vector3(), _D = new THREE.Vector3(), _R = new THREE.Vector3
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _cq = new THREE.Quaternion();
 const _e = new THREE.Euler(), _m = new THREE.Matrix4(), _c = new THREE.Color();
 const AX_Z = new THREE.Vector3(0, 0, 1);
+// 프레임 공유 값. double 을 함수 인자로 넘기면 V8 이 매번 HeapNumber 로 박싱하므로 typed array 로 공유
+const CAM = new Float64Array(3);   // 카메라 월드 위치
+const FRAME = new Float64Array(2); // [0] = 게임 dt (클램프), [1] = 연출 dt = max(게임 dt, 실제 경과)
 
 // 인스턴스 버퍼 부분 업로드 [0, count). addUpdateRange() 는 매번 {start,count} 객체를 만들므로
 // 속성마다 범위 객체 1개를 재사용한다 (three 는 업로드 후 updateRanges 를 비움).
@@ -96,22 +102,10 @@ function rampColor(r, t, tr, tg, tb, out, o) {
   out[o + 2] = (r[a + 3] + (r[b + 3] - r[a + 3]) * u) * tb;
 }
 
-// ───────────────────────────── 크기 커브 (t = life/max)
+// ───────────────────────────── 크기 커브 (t = life/max) — CubePool.update 안에 인라인 (함수 호출 시 double 박싱 회피)
+//  SHRINK: 1→0 (살짝 볼록)   POP: 0→1.22 팍 커졌다가 줄어듦   GROW: 0.35→1 부풀고 끝에서 줄어듦
+//  HOLD: 바로 1, 끝 20% 에서 줄어듦   FLASH: 0.5→1.2 후 제곱으로 줄어듦
 const C_SHRINK = 0, C_POP = 1, C_GROW = 2, C_HOLD = 3, C_FLASH = 4;
-function curve(c, t) {
-  switch (c) {
-    case C_SHRINK: return 1 - t * t * 0.35 - t * 0.65;
-    case C_POP: { if (t < 0.1) { const k = t / 0.1; return 1.22 * k * (2 - k); } return 1.22 * Math.pow(1 - (t - 0.1) / 0.9, 0.85); }
-    case C_GROW: {
-      let s = t < 0.16 ? 0.35 + 0.65 * (t / 0.16) * (2 - t / 0.16) : 1;
-      if (t > 0.62) { const k = (t - 0.62) / 0.38; s *= 1 - k * k; }
-      return s;
-    }
-    case C_HOLD: { if (t < 0.035) return t / 0.035; if (t > 0.8) return (1 - t) / 0.2; return 1; }
-    case C_FLASH: { if (t < 0.08) return 0.5 + 0.7 * (t / 0.08); const k = 1 - (t - 0.08) / 0.92; return 1.2 * k * k; }
-    default: return 1 - t;
-  }
-}
 
 // ───────────────────────────── CubePool
 const S = 32; // stride
@@ -157,13 +151,15 @@ class CubePool {
     this.n = 0; this.rr = 0; this.dirty = false;
     this.mesh.count = 0; this.mesh.visible = false;
   }
-  // cx,cy,cz = 카메라 월드 위치: 카메라 코앞(1.5~8m)의 큐브는 작아져서 화면을 가리지 않는다 (킬캠이 불덩이/연기꼬리를 관통)
-  update(dt, cx, cy, cz, camMoved) {
+  // CAM = 카메라 월드 위치: 카메라 코앞(1.5~8m)의 큐브는 작아져서 화면을 가리지 않는다 (킬캠이 불덩이/연기꼬리를 관통)
+  update(camMoved) {
+    const dt = FRAME[0];
     let n = this.n;
     if (n === 0) { if (this.mesh.visible) { this.mesh.visible = false; this.mesh.count = 0; } return; }
     if (dt <= 0 && !this.dirty && !camMoved) return; // 정지(히트스톱/일시정지) 중엔 다시 쓸 필요 없음
     this.dirty = false;
     const d = this.d, mat = this.mesh.instanceMatrix.array, col = this.mesh.instanceColor.array;
+    const cx = CAM[0], cy = CAM[1], cz = CAM[2];
     let i = 0;
     while (i < n) {
       const o = i * S;
@@ -181,7 +177,17 @@ class CubePool {
       }
       const t = d[o + LIFE] / d[o + MAX], fl = d[o + FLAGS];
       let px = d[o + PX], py = d[o + PY], pz = d[o + PZ], vx = d[o + VX], vy = d[o + VY], vz = d[o + VZ];
-      let k = curve(d[o + CURVE], t) * (1 + (d[o + ENDMUL] - 1) * t);
+      let k;
+      const cv = d[o + CURVE];
+      if (cv === C_SHRINK) k = 1 - t * t * 0.35 - t * 0.65;
+      else if (cv === C_POP) { if (t < 0.1) { const q = t / 0.1; k = 1.22 * q * (2 - q); } else k = 1.22 * Math.pow(1 - (t - 0.1) / 0.9, 0.85); }
+      else if (cv === C_GROW) {
+        if (t < 0.16) { const q = t / 0.16; k = 0.35 + 0.65 * q * (2 - q); } else k = 1;
+        if (t > 0.62) { const q = (t - 0.62) / 0.38; k *= 1 - q * q; }
+      } else if (cv === C_HOLD) k = t < 0.035 ? t / 0.035 : t > 0.8 ? (1 - t) / 0.2 : 1;
+      else if (cv === C_FLASH) { if (t < 0.08) k = 0.5 + 0.7 * (t / 0.08); else { const q = 1 - (t - 0.08) / 0.92; k = 1.2 * q * q; } }
+      else k = 1 - t;
+      k *= 1 + (d[o + ENDMUL] - 1) * t;
       {
         const ex = px - cx, ey = py - cy, ez = pz - cz, dd = ex * ex + ey * ey + ez * ez;
         if (dd < 64) { const u = (Math.sqrt(dd) - 1.5) / 6.5; k *= u <= 0 ? 0 : u * u * (3 - 2 * u); }
@@ -217,19 +223,27 @@ class CubePool {
         }
         d[o + PX] = px; d[o + PY] = py; d[o + PZ] = pz; d[o + VX] = vx; d[o + VY] = vy; d[o + VZ] = vz;
       }
-      _p.set(px, py, pz);
+      // 회전: 속도 방향(불꽃 줄기) 또는 오일러 → 쿼터니언. 행렬은 직접 합성해 기록 (double 인자 박싱 없음)
+      let sx = d[o + SX] * k, sy = d[o + SY] * k, sz = d[o + SZ] * k;
       if (fl & F_STRETCH) {
         const sp = Math.sqrt(vx * vx + vy * vy + vz * vz);
-        if (sp > 1e-3) { _v.set(vx / sp, vy / sp, vz / sp); _q.setFromUnitVectors(AX_Z, _v); } else _q.identity();
-        _s.set(d[o + SX] * k, d[o + SY] * k, (d[o + SZ] + Math.min(1.8, sp * d[o + STR])) * k);
+        if (sp > 1e-3) { _v.x = vx / sp; _v.y = vy / sp; _v.z = vz / sp; _q.setFromUnitVectors(AX_Z, _v); } else _q.identity();
+        const st = sp * d[o + STR];
+        sz += (st < 1.8 ? st : 1.8) * k;
       } else {
-        _e.set(d[o + EX], d[o + EY], d[o + EZ]);
+        _e._x = d[o + EX]; _e._y = d[o + EY]; _e._z = d[o + EZ];
         _q.setFromEuler(_e);
-        _s.set(d[o + SX] * k, d[o + SY] * k, d[o + SZ] * k);
       }
-      if (k <= 0) _s.set(0, 0, 0);
-      _m.compose(_p, _q, _s);
-      _m.toArray(mat, i * 16);
+      if (k <= 0) { sx = 0; sy = 0; sz = 0; }
+      const qx = _q._x, qy = _q._y, qz = _q._z, qw = _q._w;
+      const x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
+      const xx = qx * x2, xy = qx * y2, xz = qx * z2, yy = qy * y2, yz = qy * z2, zz = qz * z2;
+      const wx = qw * x2, wy = qw * y2, wz = qw * z2;
+      const m = i * 16;
+      mat[m] = (1 - (yy + zz)) * sx; mat[m + 1] = (xy + wz) * sx; mat[m + 2] = (xz - wy) * sx; mat[m + 3] = 0;
+      mat[m + 4] = (xy - wz) * sy; mat[m + 5] = (1 - (xx + zz)) * sy; mat[m + 6] = (yz + wx) * sy; mat[m + 7] = 0;
+      mat[m + 8] = (xz + wy) * sz; mat[m + 9] = (yz - wx) * sz; mat[m + 10] = (1 - (xx + yy)) * sz; mat[m + 11] = 0;
+      mat[m + 12] = px; mat[m + 13] = py; mat[m + 14] = pz; mat[m + 15] = 1;
       const ci = i * 3, rp = d[o + RAMP];
       if (rp >= 0) rampColor(RAMPS[rp], t, d[o + CR], d[o + CG], d[o + CB], col, ci);
       else { col[ci] = d[o + CR]; col[ci + 1] = d[o + CG]; col[ci + 2] = d[o + CB]; }
@@ -270,8 +284,9 @@ class BillboardPool {
     d[o + 7] = size; d[o + 8] = rnd() * 6.283; d[o + 9] = 1; d[o + 10] = rr(-0.4, 0.4); d[o + 11] = rr(-1, 1);
   }
   clear() { this.d.fill(0); this.live = 0; this.head = 0; this.mesh.count = 0; this.mesh.visible = false; }
-  update(dt, camQ) {
+  update(camQ) {
     if (this.live === 0) { if (this.mesh.visible) { this.mesh.visible = false; this.mesh.count = 0; } return; }
+    const dt = FRAME[0];
     const d = this.d, mat = this.mesh.instanceMatrix.array;
     let k = 0;
     for (let i = 0; i < this.cap; i++) {
@@ -351,8 +366,9 @@ class SpritePool {
   }
   _off(s) { s.on = false; s.sp.visible = false; if (s.sp.parent !== this.parent) this.parent.add(s.sp); }
   clear() { for (const s of this.slots) this._off(s); this.live = 0; }
-  update(dt, cx, cy, cz) {
+  update() {
     if (this.live === 0) return;
+    const dt = FRAME[1], cx = CAM[0], cy = CAM[1], cz = CAM[2];
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.on) continue;
@@ -601,7 +617,6 @@ export class FX {
     this._initSpeedLines();
 
     this._palette = []; for (let i = 0; i < 8; i++) this._palette.push(new THREE.Color());
-    this._time = 0;
   }
 
   // ───────── 공용
@@ -612,26 +627,25 @@ export class FX {
     const now = this._now();
     const realDt = this._lastNow < 0 ? 0 : clamp((now - this._lastNow) / 1000, 0, 0.05);
     this._lastNow = now;
-    this._time += dt;
-
-    if (dt > 0) this._updateTrails(dt);
-    const cam = this.camera;
-    if (cam && cam.isObject3D) { cam.getWorldPosition(_w); cam.getWorldQuaternion(_cq); } else { _w.set(0, 1e5, 0); _cq.identity(); }
-    const cx = _w.x, cy = _w.y, cz = _w.z;
-    const camMoved = cx !== this._cx || cy !== this._cy || cz !== this._cz;
-    this._cx = cx; this._cy = cy; this._cz = cz;
-    for (let i = 0; i < this._pools.length; i++) this._pools[i].update(dt, cx, cy, cz, camMoved);
-    this.heartPool.update(dt, _cq);
-    this.starPool.update(dt, _cq);
     // 섬광·스프라이트·셰이크는 "연출 시간"(= max(게임 dt, 실제 경과)) 으로 진행:
     // 히트스톱/슬로모션 중에도 섬광은 팍 터지고 금방 사라져 킬캠을 가리지 않는다. 큐브 파티클은 게임 dt (슬로모 불덩이).
-    const fdt = Math.max(dt, realDt);
-    this.glowSprites.update(fdt, cx, cy, cz);
-    this.starSprites.update(fdt, cx, cy, cz);
-    this._updateRings(dt);
-    this._updateCores(fdt);
-    this._updateSpeedLines(dt);
-    this._updateShake(fdt);
+    FRAME[0] = dt;
+    FRAME[1] = dt > realDt ? dt : realDt;
+
+    if (dt > 0) this._updateTrails();
+    const cam = this.camera;
+    if (cam && cam.isObject3D) { cam.getWorldPosition(_w); cam.getWorldQuaternion(_cq); } else { _w.set(0, 1e5, 0); _cq.identity(); }
+    const camMoved = _w.x !== CAM[0] || _w.y !== CAM[1] || _w.z !== CAM[2];
+    CAM[0] = _w.x; CAM[1] = _w.y; CAM[2] = _w.z;
+    for (let i = 0; i < this._pools.length; i++) this._pools[i].update(camMoved);
+    this.heartPool.update(_cq);
+    this.starPool.update(_cq);
+    this.glowSprites.update();
+    this.starSprites.update();
+    this._updateRings();
+    this._updateCores();
+    this._updateSpeedLines();
+    this._updateShake();
   }
 
   clear() {
@@ -797,8 +811,8 @@ export class FX {
     slot.obj = object3d; slot.on = true; slot.t = dur; slot.dur = dur; slot.acc = 0; slot.has = false; slot.age = 0;
   }
 
-  _updateTrails(dt) {
-    const dl = this.smoke.d, db = this.basic.d;
+  _updateTrails() {
+    const dt = FRAME[0], dl = this.smoke.d, db = this.basic.d;
     for (let i = 0; i < this._trails.length; i++) {
       const tr = this._trails[i];
       if (!tr.on) continue;
@@ -955,7 +969,8 @@ export class FX {
     if (color) r.mat.color.copy(color); else r.mat.color.setHex(0xffffff);
     r.mat.opacity = 0;
   }
-  _updateRings(dt) {
+  _updateRings() {
+    const dt = FRAME[0];
     for (let i = 0; i < this._rings.length; i++) {
       const r = this._rings[i];
       if (!r.on) continue;
@@ -981,7 +996,8 @@ export class FX {
     c.mat.color.copy(this._coreA); c.mat.opacity = 1;
     c.mesh.visible = true;
   }
-  _updateCores(dt) {
+  _updateCores() {
+    const dt = FRAME[1];
     for (let i = 0; i < this._cores.length; i++) {
       const c = this._cores[i];
       if (!c.on) continue;
@@ -1076,8 +1092,8 @@ export class FX {
     this._shakeLeft = Math.max(this._shakeLeft, d);
   }
   get shakeOffset() { return this._shakeOffset; }
-  _updateShake(sdt) {
-    const o = this._shakeOffset;
+  _updateShake() {
+    const sdt = FRAME[1], o = this._shakeOffset;
     if (this._trauma <= 0) { if (o.x || o.y || o.z) o.set(0, 0, 0); return; }
     if (sdt <= 0) return; // 시간이 안 흐르면 오프셋 유지
     this._shakeT += sdt;
@@ -1126,8 +1142,8 @@ export class FX {
     d[o + 4] = rr(0.035, 0.07) * (az / 18);   // 두께 (화면상 비슷한 픽셀 폭)
     d[o + 5] = rr(55, 100);                  // 속도
   }
-  _updateSpeedLines(dt) {
-    const sl = this._sl;
+  _updateSpeedLines() {
+    const dt = FRAME[0], sl = this._sl;
     if (this._slTarget <= 0 && this._slCur <= 0) { if (sl.group.visible) sl.group.visible = false; return; }
     this._slCur += (this._slTarget - this._slCur) * (1 - Math.exp(-4 * dt));
     if (this._slTarget <= 0 && this._slCur < 0.01) { this._slCur = 0; sl.group.visible = false; sl.mesh.count = 0; return; }

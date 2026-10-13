@@ -155,7 +155,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 /* ───────────── 상단 중앙 스택: 내비 / 거리 / 보스 / 힌트 */
 .ui-topstack {
   position: absolute; z-index: 3; top: calc(var(--sat) + 12px); left: 50%; translate: -50% 0;
-  width: clamp(240px, calc(100vw - 560px), 460px);
+  width: clamp(240px, calc(100vw - 510px), 460px);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .ui-topstack > .ui-hudpart { display: none; }
@@ -722,7 +722,6 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .ui-rage__seg { width: 36px; height: 17px; }
   .ui-rage__segs { gap: 4px; }
   .ui-rage__max { font-size: 13px; top: -13px; right: -8px; }
-  .ui-root--touch .ui-rage__seg { width: 32px; }
   .ui-release { top: calc(var(--sat) + 108px); }
   .ui-release__plate { padding: 7px 22px 8px; }
   .ui-release__l { font-size: 16px; }
@@ -735,10 +734,6 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .ui-pop--score, .ui-pop--warn { font-size: 22px; }
   .ui-banner__t { text-shadow: var(--ui-o4), 0 7px 0 var(--ui-ink); }
 
-  /* 폰 세로 + 터치: 속도계·분노 게이지를 버튼 위 한 줄로 */
-  .ui-root--touch .ui-speedo { width: 88px; height: 88px; bottom: calc(var(--sab) + 108px); }
-  .ui-root--touch .ui-speedo__n { font-size: 24px; }
-  .ui-root--touch .ui-rage { bottom: calc(var(--sab) + 116px); }
 
   /* 타이틀: 스테이지 카드를 세로 목록으로 */
   .ui-title__wrap { gap: 12px; justify-content: flex-start; padding-top: calc(var(--sat) + 56px); }
@@ -791,13 +786,45 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 @media (max-height: 500px) {
   .ui-speedo { width: 96px; height: 96px; }
   .ui-speedo__n { font-size: 26px; }
-  .ui-title__wrap { gap: 10px; justify-content: flex-start; }
-  .ui-sign__main, .ui-sign__arrow { font-size: 44px; }
-  .ui-sign--logo { padding: 6px 22px 9px 18px; }
-  .ui-sign__kicker { font-size: 12px; }
-  .ui-stagecard { width: 150px; }
-  .ui-stagecard__title { font-size: 16px; }
-  .ui-btn--xl { font-size: 28px; }
+  .ui-title__wrap { gap: 8px; justify-content: flex-start; padding-top: calc(var(--sat) + 10px); padding-bottom: calc(var(--sab) + 10px); }
+  .ui-sign__main, .ui-sign__arrow { font-size: 36px; }
+  .ui-sign--logo { padding: 5px 20px 8px 16px; border-radius: 14px; }
+  .ui-sign__kicker { font-size: 11px; }
+  .ui-sign__posts { height: 6px; }
+  .ui-vms { font-size: 15px; padding: 4px 16px 5px; }
+  .ui-stages { gap: 10px; }
+  .ui-stagecard { width: 148px; }
+  .ui-stagecard__head { padding: 5px 8px 5px 6px; gap: 6px; }
+  .ui-stagecard__hw b { font-size: 13.5px; }
+  .ui-stagecard__hw span { font-size: 11px; }
+  .ui-shield--card { width: 28px; height: 32px; }
+  .ui-shield--card .ui-shield__n { font-size: 12.5px; }
+  .ui-stagecard__body { padding: 5px 9px 8px; gap: 2px; }
+  .ui-stagecard__title { font-size: 15px; min-height: 2.3em; }
+  .ui-star { width: 18px; height: 18px; }
+  .ui-stagecard__best { font-size: 10.5px; }
+  .ui-stagecard__lock { right: 6px; bottom: 6px; padding: 2px 8px 2px 5px; font-size: 12px; }
+  .ui-stagecard__tag { top: -15px; right: 6px; font-size: 11px; padding: 1px 6px 0; border-width: 2px; }
+  .ui-btn--xl { font-size: 26px; padding: .3em 1.4em .36em; }
+  .ui-btn__sub { font-size: 12px; }
+  .ui-help { display: none; }
+  .ui-result__panel { width: min(780px, 100%); }
+  .ui-sign--result { padding: 7px 14px; }
+  .ui-result__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); grid-template-areas: "who stats" "stamp stats" "stars stats" "score stats" "final stats"; align-items: center; justify-items: center; gap: 2px 16px; padding: 8px 14px 0; }
+  .ui-result__who { grid-area: who; }
+  .ui-stamp { grid-area: stamp; font-size: 32px; }
+  .ui-result__stars { grid-area: stars; }
+  .ui-result__score { grid-area: score; }
+  .ui-result__score b { font-size: 32px; }
+  .ui-result__final { grid-area: final; font-size: 12px; }
+  .ui-stats { grid-area: stats; align-self: center; margin: 0; }
+  .ui-result__villain { font-size: 21px; }
+  .ui-star--big { width: 40px; height: 40px; }
+  .ui-result__stars .ui-star:nth-child(2) { width: 48px; height: 48px; }
+  .ui-stat { padding: 3px 8px 4px; font-size: 12.5px; }
+  .ui-stat__v { font-size: 15px; }
+  .ui-result__btns { padding: 10px 12px 12px; }
+  .ui-result__btns .ui-btn { font-size: 18px; }
   .ui-card { padding-top: calc(var(--sat) + 10px); }
   .ui-card__body { padding: 8px 14px 4px; gap: 4px; }
   .ui-card__title { font-size: 28px; }
@@ -805,11 +832,27 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .ui-release { top: calc(var(--sat) + 56px); }
   .ui-release__n { font-size: 44px; }
   .ui-banners { top: 44%; }
-  .ui-tbtn--super { right: calc(var(--sar) + 128px); bottom: calc(var(--sab) + 70px); }
 }
-/* 넓은 화면 + 터치 (태블릿/폰 가로): 속도계를 ◀▶ 오른쪽에 */
-@media (min-width: 641px) {
-  .ui-root--touch .ui-speedo { left: calc(var(--sal) + 194px); bottom: calc(var(--sab) + 12px); }
+/* 좁은 가로 화면 (641~760px): 칩과 점수 사이 공간에 맞춰 상단 스택을 배치 */
+@media (min-width: 641px) and (max-width: 760px) {
+  .ui-topstack { left: calc(var(--sal) + 176px); right: calc(var(--sar) + 248px); width: auto; translate: none; }
+}
+/* ───────────── 터치 레이아웃: 버튼이 하단 모서리를 차지하므로 속도계·분노 게이지는 버튼 위 한 줄로 */
+.ui-root--touch .ui-speedo { width: 88px; height: 88px; left: calc(var(--sal) + 12px); bottom: calc(var(--sab) + 108px); }
+.ui-root--touch .ui-speedo__n { font-size: 24px; }
+.ui-root--touch .ui-speedo__u { font-size: 10px; }
+.ui-root--touch .ui-rage { bottom: calc(var(--sab) + 116px); gap: 6px; padding: 5px 10px 6px 6px; }
+.ui-root--touch .ui-rage__ico { width: 32px; height: 32px; }
+.ui-root--touch .ui-rage__seg { width: 32px; height: 17px; }
+.ui-root--touch .ui-rage__segs { gap: 4px; }
+.ui-root--touch .ui-rage__l { font-size: 11.5px; }
+/* 폰 가로(낮은 화면) + 터치: 속도계는 좌상 칩 아래, 분노 게이지는 하단 중앙, 분노 버튼은 발사 왼쪽 */
+@media (max-height: 500px) {
+  .ui-root--touch .ui-speedo { width: 80px; height: 80px; top: calc(var(--sat) + 64px); bottom: auto; left: calc(var(--sal) + 12px); }
+  .ui-root--touch .ui-speedo__n { font-size: 22px; }
+  .ui-root--touch .ui-rage { bottom: calc(var(--sab) + 14px); }
+  .ui-tbtn--super { right: calc(var(--sar) + 124px); bottom: calc(var(--sab) + 18px); }
+  .ui-tbtn--left, .ui-tbtn--right { bottom: calc(var(--sab) + 14px); }
 }
 
 /* ───────────── 키프레임 */
