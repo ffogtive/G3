@@ -41,6 +41,9 @@ class LocalAssetServer {
 
   HttpServer? _server;
 
+  /// 마지막으로 바인딩했던 포트. 재시작 때 이 포트를 먼저 시도해 origin(=세이브)을 유지한다.
+  int? _lastPort;
+
   bool get isRunning => _server != null;
 
   /// 바인딩된 포트. [start] 전에는 null.
@@ -62,16 +65,19 @@ class LocalAssetServer {
     final running = _server;
     if (running != null) return running.port;
 
-    final candidates = <int>[
+    final candidates = <int>{
+      // 재시작이면 직전 포트가 최우선: 대체 포트로 떠 있던 세션의 origin 을 바꾸지 않는다.
+      ?_lastPort,
       for (var i = 0; i <= fallbackPortCount; i++) preferredPort + i,
       0, // 최후의 수단: OS 가 고른 포트 (세이브 분리됨)
-    ];
+    }.toList();
     Object? lastError;
     for (final p in candidates) {
       try {
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, p);
         server.autoCompress = false; // 로컬 루프백: 압축은 CPU 낭비
         _server = server;
+        _lastPort = server.port;
         server.listen(
           _handle,
           onError: (Object e) => _log('server error: $e'),
@@ -93,12 +99,15 @@ class LocalAssetServer {
     throw StateError('LocalAssetServer: no port available ($lastError)');
   }
 
-  /// 서버가 실제로 응답하는지 확인하고, 죽어 있으면 같은 포트 우선으로 재시작.
+  /// 서버가 실제로 응답하는지 확인하고, 죽어 있으면 직전 포트 우선으로 재시작.
   /// iOS 는 앱이 일시 중단된 사이 리슨 소켓을 회수할 수 있다.
-  Future<void> ensureRunning() async {
-    if (await isHealthy()) return;
+  /// 반환값: 포트가 바뀌었으면 true → 호출자가 WebView 를 새 [indexUri] 로 다시 로드해야 한다.
+  Future<bool> ensureRunning() async {
+    if (await isHealthy()) return false;
+    final before = _lastPort;
     await close();
-    await start();
+    final now = await start();
+    return before != null && before != now;
   }
 
   /// 루프백으로 [kHealthPath] 를 요청해 200 이 오는지 확인.

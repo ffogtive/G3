@@ -198,7 +198,8 @@ tools/ (레포 루트)
   - traffic: `mulberry32(id·1000+7)`
   - 월드 소품: `mulberry32(id·7919+13)`
   - 차 변형: `seed=floor(rng·1e6)`, `variant=canon(seed % variants)`
-- **spawnJam의 추첨 순서를 그대로 지킨다:** 벽 차로 → 차로 0~3 {pickWeighted, _makeCar 5회, gapOf} → 갓길 셔플 → 아이템(장애물별 소비: 고장차 3, 콘 0, 낙하물 2+3nb) → 잔챙이 {type, cool} → 반대편 26대 × 6. (리뷰에서 node로 재현 ✅)
+- **spawnJam의 추첨 순서를 그대로 지킨다:** 벽 차로 → 차로 0~3 {pickWeighted, _makeCar 5회, gapOf} → 갓길 셔플 → 아이템 루프(아이템마다 순서대로: ① 문자열 아이템이면 위치 지터 `rng()` 1회(traffic.js:194, 객체 아이템 `{kind, at}`은 0회) ② `cheater`면 pickWeighted 1회 + `_makeCar` 5회 + `cheaterV` 1회(196-198) ③ 장애물이면 buildShoulderObstacle 소비(고장차 3, 콘 0, 낙하물 2+3nb)) → 잔챙이 {type, cool} → 반대편 26대 × 6.
+- **계약의 원천은 이 목록이 아니라 골든 트레이스다**(Codex 리뷰 2026-10-13: 목록이 갓길 위치 지터·cheater 소비를 빠뜨렸던 것을 수정). `tools/export-content.mjs`가 JS 실행 중 `rng()` 호출마다 (호출 순번, 호출 지점 태그, 값)을 기록한 `native/tests/golden/rng_trace_stage{1,5,6}.json`을 만들고, C++ 포트는 같은 태그 순서로 호출하는지 T0에서 비교한다. 목록과 트레이스가 다르면 트레이스가 맞다.
 - 골든 데이터는 spawn 레이아웃만 비교한다(런타임 추첨은 dt에 따라 달라진다). 1-1 기준값: 126대, 첫 차는 1차로 버스 s=200.4453, 고장차 109.681(len 7), 콘 147.518, 잔챙이 131.90/66.63, 다음 추첨값 0.3714370721 ✅.
 - 웹의 `Math.random` 부분(보스 공격 선택, 도발, fx 등)은 `RandomNumberGenerator(--seed)`로 바꾼다. 네이티브 헤드리스 실행은 **seed로 완전히 재현된다.**
 
@@ -423,6 +424,9 @@ M1은 게임의 대부분이므로 다섯 단계로 나누고, **사용자의 �
   - T0 perf: GameSim ≤ 2ms/tick. T1: 1-1 20 seed 완주율 100%, 에러 0(시간 실측 기입).
   - **T4: `rules.n_feedback=false` 동등성 빌드가 `web-frozen` 대비 페이즈 시간 ±15%.**
   - 기기: 첫 kill 구간 최대 프레임 ≤ 16.7ms.
+- **웹 오라클의 알려진 버그 → 네이티브는 고쳐서 구현(T4에서 해당 경로 제외):** (Codex 리뷰 2026-10-13, 웹은 동결이라 수정하지 않음)
+  - R1 재도전 스냅샷은 `phaseIdx`만이 아니라 **페이즈가 적용된 보스 상태 전체**(공격표, 이동 상태 stopped/slow/zig, `intervalMul`, 위치)를 저장·복원한다. 웹은 `phaseIdx`만 복원해서 페이즈 전환 뒤 대파하면 초기 공격·이동으로 돌아간다(main.js:712). 테스트: 페이즈 2에서 대파 → 재도전 직후 공격표·이동이 페이즈 2와 같음.
+  - R2 갇힘 보조(rubber band·4초 강제 개방·2회 자동 견인)는 `phase=='jam'`이 아니라 **`jamLike`(정체 + 보스 발견 후 정면 잠금 전)** 동안 돈다. 웹은 원흉 35m 안에 들어오면 꺼져서, 갓길 고장차 + 옆 차로 틈 없음이면 소프트락 가능(traffic.js:342). 테스트: 발견 후 고장차 앞 정지 상태에서 4초 안에 탈출.
 - 중단 기준: GameSim > 2ms면 해당 GDScript 핫패스를 ext로 옮긴 뒤 진행한다. T4가 15%를 넘으면 수치를 맞추지 말고 페이즈별 이벤트 로그(웹 playtest와 네이티브)를 diff해서 이식 버그부터 찾는다.
 
 #### M1c UI · 오디오 · 텍스트 · 결과 (목표 7~10일 ❓)

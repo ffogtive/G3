@@ -125,6 +125,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         unawaited(
           _server
               .ensureRunning()
+              .then((portChanged) {
+                // 직전 포트를 다시 못 잡았으면 WebView 가 죽은 origin 을 보고 있다 → 새 URL 로 재로드.
+                if (portChanged) return _reload();
+              })
               .catchError(
                 (Object e) =>
                     debugPrint('[GamePage] server restart failed: $e'),

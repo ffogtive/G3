@@ -1248,6 +1248,8 @@ stagegen 린트로 검사하고, 위반하면 빌드 경고를 낸다.
 
 ## 구현 순서
 
+> **2026-10-13 갱신 — 웹 동결(`web-frozen` = 753549a).** 사용자 결정 "웹에서 잡을 필요 없고 앱 개발에 바로 적용"에 따라 아래 표에서 **아직 웹에 없는 항목(시그니처 모듈 1-2·1-3·1-4·1-7·1-8·1-9·1-10, P1 터널 패러디, 숨은 위반차, 나머지 갓길 모드, 판 소품, 오버레이)은 `game/js`에 구현하지 않는다.** 이 표의 '파일' 열은 웹 기준 기록으로만 남기고, 실제 구현 위치와 일정은 `docs/NATIVE_PORT.md`가 원천이다: 시그니처 7종·접근 규칙·N3 단속 → M2, P1 터널·RoadGraph 지형·소품·피니시 → M3, 콘텐츠 수치 → `native/data/src`. 이미 웹에 들어간 항목(3·5·6·7·11의 1-5/1-6/1-1)은 동결 오라클의 동작으로 남는다.
+
 | # | 담당 | 크기 | 단계 | 파일 | 세부 |
 |---|---|---|---|---|---|
 | 1 | core | M | 1. 내구도(HP)·실패·재도전 코어: 사용자 질문 '내 피도 닳아야 하지 않나?'에 직결 | game/js/config.js, game/js/main.js, game/js/boss.js, game/js/player.js, game/js/traffic.js, game/js/shoulder.js, docs/SHOP.md | - config: TUNE.hp {max 100, tiers 10/20/30/40, stageMul, jamFloor 20, invuln 1.0, bumpRelV 6}. - boss.js: playerHit 이벤트에 tier 필드(lunge=finisher, highbeam=light, throw=mid 등). miniHit은 5. - main.applyDamage(): onPlayerHit(main.js:605), onBump(상대속도 6m/s 이상이면 10), onSmash(콘 5), 갓길 장애물 고속 충돌(20)에서 호출. JAM 하한 20. - player.js: 손상 연출(80/60/40/20 단계, smokePuff, body.rotation.z, 20 이하에서 setBlinker hazard). - enterPhase('wreck'): 1.5초 슬로모, 스핀, 레커 견인 개그. - 재도전: 보스 진입 시 분노·빌런 HP 스냅샷 → debugSkip('boss') 경로(main.js:1154)로 재시작 → 빌런 HP 복원. 포상금 ×0.8씩(최저 ×0.6). 3회 실패하면 도움 플래그. - 별 미션 ②(main.js:530) → 'HP 60 이상'. 20 이하 분노 ×2. - 상점: 포터 최대 130, 에어백 = 치명타 1회 생존, 레커 = 견인비 면제. |

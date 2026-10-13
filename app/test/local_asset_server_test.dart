@@ -129,9 +129,26 @@ void main() {
       await server.close();
       expect(server.isRunning, isFalse);
       expect(await server.isHealthy(), isFalse);
-      await server.ensureRunning();
+      expect(await server.ensureRunning(), isFalse);
       expect(server.port, testPort);
       expect(await server.isHealthy(), isTrue);
+    });
+
+    test('대체 포트로 떠 있던 서버는 재시작해도 그 포트를 유지 (origin·세이브 보존)', () async {
+      final blocker = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        testPort,
+      );
+      final int fallback;
+      try {
+        fallback = await server.start();
+        expect(fallback, testPort + 1);
+      } finally {
+        await blocker.close(); // 이제 preferred 포트가 비었다
+      }
+      await server.close();
+      expect(await server.ensureRunning(), isFalse);
+      expect(server.port, fallback);
     });
   });
 }
