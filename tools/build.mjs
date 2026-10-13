@@ -14,7 +14,7 @@ const r = await build({
 });
 let js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const css = readFileSync(resolve(root, 'game/css/style.css'), 'utf8');
-const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">';
+const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap" media="print" onload="this.media=\'all\'">';
 const bodyInner = `<canvas id="game"></canvas><div id="ui"></div><div id="boot">로딩 중…</div>\n<script>${js}</script>`;
 mkdirSync(resolve(root, 'dist'), { recursive: true });
 const full = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><title>1차선 참교육</title>${fonts}<style>${css}</style></head><body>${bodyInner}</body></html>`;

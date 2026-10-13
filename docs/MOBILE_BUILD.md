@@ -19,7 +19,7 @@
 | 현재 Flutter stable | **3.47.7** (2026-10-08, Dart 3.13.5). `app/`도 이 버전으로 생성됨 | [releases_macos.json](https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json) |
 | Flutter 최소 iOS | **iOS 15** (3.47에서 13 → 15로 상향) | [Supported platforms](https://docs.flutter.dev/reference/supported-platforms), [What's new in 3.47](https://flutter.dev/blog/whats-new-in-flutter-3-47) |
 | Xcode 최소 버전 | `flutter doctor`의 하한은 Xcode 15(권장 16)지만, **실제로는 Xcode 26 이상 필수** (App Store 업로드 요건: 2026-04-28부터 Xcode 26 + iOS 26 SDK) | [flutter_tools xcode.dart](https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/macos/xcode.dart), [Apple Upcoming Requirements](https://developer.apple.com/news/upcoming-requirements/) |
-| CocoaPods 필요한가? | ❓ 대체로 불필요할 수 있으나 **설치를 권장**. Flutter 3.44부터 Swift Package Manager가 기본이고, SwiftPM을 지원하지 않는 플러그인만 CocoaPods로 처리한다 | [Flutter SwiftPM 문서](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers) |
+| CocoaPods 필요한가? | **이 프로젝트는 불필요** (소스로 ✅, Mac 실빌드는 ❓). Flutter 3.47 stable은 SwiftPM이 기본값이고(Xcode 15 이상일 때), 모든 플러그인이 SwiftPM을 지원하면 Podfile을 만들지 않고 `pod install`도 건너뛴다. `app/`의 유일한 iOS 플러그인 `flutter_inappwebview_ios 1.2.0-beta.3`은 `Package.swift`를 포함한다. 그래서 `ios/Podfile`이 없는 게 정상이다. SwiftPM 미지원 플러그인을 나중에 추가할 때만 필요하다 | [Flutter SwiftPM 문서](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers), flutter_tools 3.47.7 소스(`features.dart`의 `swiftPackageManager` stable 기본 활성, `macos/darwin_dependency_management.dart`) |
 
 ---
 
@@ -62,13 +62,15 @@ echo 'export PATH="$HOME/develop/flutter/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
 flutter --version     # 3.47.x stable 인지 확인
-flutter doctor -v     # Xcode / CocoaPods 항목이 [✓] 인지 확인
+flutter doctor -v     # Xcode 항목이 [✓] 인지 확인 (CocoaPods 미설치 경고는 이 프로젝트에선 무시해도 됨 — 2-3 참고)
 ```
 - zip 파일명과 경로는 [Flutter 수동 설치 문서](https://docs.flutter.dev/install/manual)와 [releases_macos.json](https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json)을 기준으로 했다. VS Code의 Flutter 확장으로 설치해도 된다.
 
-### 2-3. CocoaPods (권장)
+### 2-3. CocoaPods (선택 — 지금 `app/`에는 불필요)
 - Flutter 3.44부터 **Swift Package Manager(SwiftPM)가 기본**이고, SwiftPM 미지원 플러그인만 CocoaPods로 폴백한다. CocoaPods 레지스트리(trunk)는 **2026-12-02부터 읽기 전용**이다. 기존 pod은 계속 쓸 수 있다. ✅ [Flutter SwiftPM](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers), [CocoaPods blog](https://blog.cocoapods.org/CocoaPods-Specs-Repo/)
-- `app/`이 쓰는 `flutter_inappwebview_ios 1.2.0-beta.3`은 SwiftPM을 지원한다(Package.swift 포함, changelog "Add Swift Package Manager support"). 그래서 CocoaPods 없이도 빌드될 **가능성**이 있지만 ❓ 미검증이다. `flutter doctor`의 경고를 없애고 폴백에 대비하려고 설치를 권장한다.
+- `app/`이 쓰는 `flutter_inappwebview_ios 1.2.0-beta.3`은 SwiftPM을 지원한다(`ios/flutter_inappwebview_ios/Package.swift`, changelog "Add Swift Package Manager support"). flutter_tools 3.47.7 소스상 이 경우 Podfile 생성과 `pod install`을 건너뛴다. 그래서 **CocoaPods 없이 빌드된다**(소스 ✅ / Mac 실빌드 ❓). `flutter doctor`의 CocoaPods 경고(`[!]`)는 무시해도 된다.
+- 대신 **첫 Xcode 빌드 때 SwiftPM이 github.com에서 `swift-collections`를 받는다**(플러그인 의존성). 인터넷이 연결된 상태에서 빌드한다.
+- 나중에 SwiftPM 미지원 플러그인을 추가하면 Flutter가 `ios/Podfile`을 만들고 `pod install`을 돌린다. 그때만 아래처럼 설치한다.
 ```bash
 # 공식 가이드 방식 (macOS 기본 Ruby, 설치할 때만 sudo)
 sudo gem install cocoapods
@@ -90,15 +92,17 @@ npm install
 
 ## 3) 게임 빌드 → 앱에 동기화
 
-앱 폴더: `app/` (Flutter 프로젝트). 게임은 `dist/index.html`(약 1.3MB, 단일 파일)이다. 앱은 이 파일을 **앱 번들 에셋에 포함**하고, 앱 안의 로컬 HTTP 서버(`http://localhost:<고정포트>`)로 띄운다.
+앱 폴더: `app/` (Flutter 프로젝트). 게임은 `dist/index.html`(약 1.3MB, 단일 파일)이다. 앱은 이 파일을 **앱 번들 에셋에 포함**하고, 앱 안의 로컬 HTTP 서버로 `http://localhost:28080/assets/web/index.html`을 띄운다.
 
 ```bash
 cd ~/G3
-npm run build:app     # = npm run build (dist/index.html) + app 의 웹 에셋 폴더로 복사
+npm run build:app     # = npm run build && node tools/sync-app.mjs
+                      #   dist/index.html → app/assets/web/index.html 복사
 ```
-- `build:app` 스크립트와 정확한 에셋 경로는 Build 에이전트가 `package.json`과 `app/`에 추가하는 중이다. 최종 경로는 `app/README.md`와 `app/pubspec.yaml`의 `flutter: assets:` 항목을 따른다.
+- 경로 대응: `package.json`의 `build:app` → `tools/sync-app.mjs` → `app/assets/web/index.html` → `app/pubspec.yaml`의 `flutter: assets: - assets/web/` → `app/lib/src/local_asset_server.dart`가 `/assets/web/…`만 서빙(포트 28080).
+- `app/assets/web/index.html`은 레포에 커밋돼 있다. 그래서 Node 없이도 바로 Xcode로 빌드할 수 있다. 다만 게임 최신본이라는 보장은 없으니, 가능하면 `npm run build:app`부터 한다.
 - **게임을 고칠 때마다**: `npm run build:app` → 앱 다시 빌드(Run). Flutter 에셋은 빌드할 때 번들에 들어가므로, 앱을 다시 빌드하지 않으면 반영되지 않는다.
-- **포트는 절대 바꾸지 않는다.** localStorage(세이브)는 origin(`http://localhost:포트`) 단위로 저장되므로 포트가 바뀌면 기존 세이브가 보이지 않는다.
+- **포트(28080)는 절대 바꾸지 않는다.** localStorage(세이브)는 origin(`http://localhost:28080`) 단위로 저장되므로 포트가 바뀌면 기존 세이브가 보이지 않는다. 28080이 사용 중이면 28081 → 28082 → 임의 포트로 대체하는데, 그 세션에서는 세이브가 분리된다.
 
 ---
 
@@ -110,8 +114,9 @@ npm run build:app     # = npm run build (dist/index.html) + app 의 웹 에셋 �
    ```bash
    cd ~/G3/app
    flutter pub get
-   flutter build ios --config-only     # Generated.xcconfig 등 Xcode 설정만 갱신 (빌드는 안 함)
+   flutter build ios --config-only     # Generated.xcconfig, SwiftPM 플러그인 패키지 등 Xcode 설정만 갱신 (빌드는 안 함)
    ```
+   - `ios/Flutter/Generated.xcconfig`, `ios/Flutter/ephemeral/`는 git에서 제외된 생성물이다. clone 직후 이 단계를 건너뛰고 Xcode를 열면 `FlutterGeneratedPluginSwiftPackage`를 찾지 못한다. `--config-only`는 flutter_tools 3.47.7 `commands/build_ios.dart`에 있는 플래그다(✅ 소스 확인).
 2. **워크스페이스 열기**: 반드시 `.xcworkspace`를 연다(`.xcodeproj` 아님).
    ```bash
    open ios/Runner.xcworkspace
@@ -147,7 +152,9 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 ```
 
 ### 4-C. 디버깅 팁 (웹뷰 안 들여다보기)
-- 앱 코드에서 `InAppWebViewSettings(isInspectable: true)`를 켜면 iOS 16.4 이상에서 Mac Safari로 웹뷰를 검사할 수 있다(출시 빌드에서는 끌 것). ✅ [WebKit: isInspectable](https://webkit.org/blog/13936)
+- iOS 16.4 이상에서는 `isInspectable`이 켜진 웹뷰만 Mac Safari로 검사할 수 있다. ✅ [WebKit: isInspectable](https://webkit.org/blog/13936)
+  - `app/lib/src/game_page.dart`는 `isInspectable: kDebugMode`다. 따라서 **Debug 빌드에서만 검사**할 수 있다(Xcode Scheme을 Debug로 하거나 `flutter run`을 `--release` 없이 실행).
+  - 4-A 6단계의 Release 설치본은 검사할 수 없는 게 정상이다.
 - 아이폰: 설정 > (앱 >) Safari > 고급 > **웹 속성(Web Inspector)** 켜기. Mac Safari: 설정 > 고급 > **"웹 개발자용 기능 보기"** 체크 → 메뉴 `개발 > (내 아이폰) > localhost`. ✅ [WebKit: Enabling Web Inspector](https://webkit.org/web-inspector/enabling-web-inspector/)
 - 콘솔에서 `window.__game`으로 상태를 볼 수 있다.
 
@@ -166,14 +173,16 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 | 기기 iOS가 Xcode보다 새것이라 실행 불가 | Xcode에 해당 iOS 지원이 없음 | Xcode를 최신으로 업데이트(iOS 27 기기 → Xcode 27) ❓ |
 | 7일 뒤 앱이 안 열림 | 무료 프로비저닝 7일 만료 | Mac에 연결해 다시 Run / `flutter run --release` |
 | 홈 화면에서 앱을 누르면 바로 꺼짐(Mac 연결 해제 후) | **Debug 빌드**로 설치함 | Scheme을 Release로 바꾸거나 `flutter run --release` |
-| `CocoaPods not installed` / `pod install` 실패 | CocoaPods 미설치, 낡은 specs | 2-3 설치. 그다음 `cd app && flutter clean && flutter pub get && cd ios && pod install --repo-update` |
+| `CocoaPods not installed` / `pod install` 실패 | SwiftPM 미지원 플러그인을 추가해 Flutter가 `ios/Podfile`을 만든 경우에만 생긴다(지금 `app/`에는 Podfile이 없어 해당 없음). 또는 Xcode 15 미만이라 SwiftPM이 꺼진 경우 | 2-3 설치. 그다음 `cd app && flutter clean && flutter pub get && flutter build ios --config-only`(Flutter가 `pod install`까지 돌린다). 그래도 실패하면 `cd ios && pod install --repo-update` |
+| `Package resolution failed` / `swift-collections` 다운로드 실패 | 첫 빌드 때 SwiftPM이 github.com에서 의존성을 받지 못함 | 인터넷 연결 확인. Xcode `File > Packages > Reset Package Caches` 후 다시 빌드 |
 | Apple silicon에서 `ffi` 관련 pod 오류 | Ruby ffi gem 문제 | `sudo gem uninstall ffi && sudo gem install ffi -- --enable-libffi-alloc` (Flutter 도구가 안내하는 명령) ✅ [cocoapods.dart](https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/macos/cocoapods.dart) |
-| `Module 'flutter_inappwebview_ios' not found` 등 | `.xcodeproj`로 열었거나 설정 미생성 | **`Runner.xcworkspace`**로 열기. `flutter pub get` 후 `flutter build ios --config-only` |
-| **검은/흰 화면** (게임이 안 뜸) | ① 에셋 미동기화(`build:app` 누락) → localhost 404 ② `127.0.0.1`로 로드(iOS 17 이상은 ATS가 IP 주소 접속을 기본 차단) ③ 로컬 서버 시작 전에 URL 로드 ④ 포트 충돌 | ① `npm run build:app` 후 재빌드 ② URL은 **`http://localhost:포트`** 사용, Info.plist에 `NSAppTransportSecurity > NSAllowsLocalNetworking = YES` 명시 권장 ✅ [Apple: NSAllowsLocalNetworking](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsallowslocalnetworking) ③ `await server.start()` 후 로드 ④ 흔하지 않은 고정 포트 사용 ❓. 4-C의 Web Inspector로 콘솔 확인 |
-| WebGL이 안 나옴 / 백그라운드에서 돌아오면 화면이 멈춤 | WebGL 컨텍스트 손실 | 게임 쪽 `webglcontextlost`/`restored` 처리, 앱이 백그라운드로 가면 일시정지 ❓ (실기기 확인 필요) |
+| `Module 'flutter_inappwebview_ios' not found` / `Missing package product 'FlutterGeneratedPluginSwiftPackage'` 등 | `.xcodeproj`로 열었거나 설정 미생성(`ios/Flutter/ephemeral`은 git 제외 생성물) | **`Runner.xcworkspace`**로 열기. `flutter pub get` 후 `flutter build ios --config-only` |
+| **검은/흰 화면** 또는 앱의 "게임 파일이 앱에 없습니다" 화면 | ① 에셋 미동기화(`build:app` 누락) → localhost 404 ② `127.0.0.1`로 로드(iOS 17 이상은 ATS가 IP 주소 접속을 기본 차단) ③ 로컬 서버 시작 전에 URL 로드 ④ 포트 충돌 | ① `npm run build:app` 후 재빌드. ②③④는 `app/`에 이미 반영됐다: `http://localhost:28080` 로드, Info.plist `NSAllowsLocalNetworking = YES`, `await _server.start()` 후 로드, 포트 충돌 시 28081·28082로 대체. ✅ [Apple: NSAllowsLocalNetworking](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsallowslocalnetworking) (iOS 17부터 IP 주소 기본 차단, 원문 확인). 그 밖에는 4-C의 Web Inspector(Debug 빌드)로 콘솔 확인 |
+| 첫 화면이 "로딩 중…"에서 오래 멈춤 (와이파이가 느리거나 인증 필요한 공용 와이파이) | 게임 HTML이 Google Fonts CSS를 `<head>`의 일반 `<link rel="stylesheet">`로 받는다. 이 요청이 실패하지 않고 **응답 없이 매달리면** 뒤따르는 게임 `<script>` 실행이 막힌다. 완전 오프라인(비행기 모드)이면 바로 실패해서 문제없다 | 헤드리스 Chromium 실측: 폰트 요청을 차단하면 정상 부팅, 응답 없이 매달리게 하면 15초가 지나도 "로딩 중…". 출시 전 **폰트 번들화**(6-3)로 해결한다. 임시로는 네트워크를 바꾸거나 비행기 모드로 실행한다 |
+| WebGL이 안 나옴 / 백그라운드에서 돌아오면 화면이 멈춤 | WebGL 컨텍스트 손실 | 백그라운드 일시정지와 오디오 정지는 `app/`이 이미 처리한다(`WebBridge.hideScript`, Chromium으로 확인). 게임 쪽 `webglcontextlost`/`restored` 처리는 ❓ (실기기 확인 필요) |
 | **소리 안 남** | ① 첫 터치 전이라 AudioContext가 잠김 ② **무음(벨소리) 스위치 ON**: iOS 16.3 이상에서 Web Audio는 기본 세션(ambient)이라 무음 모드면 음소거됨 ③ 웹뷰 설정 | ① 화면을 한 번 터치(`audio.init()`) ② 게임 JS에서 `navigator.audioSession.type = 'playback'` 설정(지원 시), 또는 네이티브에서 AVAudioSession 카테고리를 playback으로 ❓ [WebKit bug 251532](https://bugs.webkit.org/show_bug.cgi?id=251532), [WebKit bug 237322](https://bugs.webkit.org/show_bug.cgi?id=237322) ③ `mediaPlaybackRequiresUserGesture: false`, `allowsInlineMediaPlayback: true` (flutter_inappwebview 설정) |
 | 폰트가 시스템 폰트로 보임 | Google Fonts는 네트워크로 받음(오프라인이면 대체) | 출시 전 폰트 파일을 번들에 포함 (6-3 체크리스트) |
-| (Android) 흰 화면 | `http://localhost` 평문(cleartext) 차단 | AndroidManifest/network security config에서 localhost cleartext 허용 ❓ (Build 에이전트 설정 확인) |
+| (Android) 흰 화면 | `http://localhost` 평문(cleartext) 차단 | `app/`에 이미 반영됐다: `android/app/src/main/res/xml/network_security_config.xml`이 `localhost`와 `127.0.0.1`만 평문을 허용하고, 매니페스트에 INTERNET 권한이 있다. Android 실빌드는 ❓ |
 
 ---
 
@@ -183,7 +192,7 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 1. **Apple Developer Program 가입**: 연 **99 USD**(현지 통화로 표시되며, 한국은 약 ₩129,000 ❓ [2차 출처](https://support.cafe24.com/hc/ko/articles/25401873784089)). 개인으로 가입하면 D-U-N-S가 필요 없다. 법적 실명과 2단계 인증이 필요하다. 법인으로 가입하면 D-U-N-S, 공식 웹사이트, 도메인 이메일이 필요하다. ✅ [Apple Enroll](https://developer.apple.com/programs/enroll/)
 2. Xcode에서 Team을 Personal Team에서 **유료 팀**으로 바꾼다. 번들 ID를 최종 확정하고 등록한다(Automatic signing을 쓰면 Xcode가 등록해 준다).
 3. **App Store Connect > 앱 > + > 신규 앱**을 만들고 번들 ID를 연결한다. ✅ [Flutter: Build and release an iOS app](https://docs.flutter.dev/deployment/ios)
-4. 버전: `app/pubspec.yaml`의 `version: 1.0.0+1`(빌드 번호 `+N`은 업로드할 때마다 올림).
+4. 버전: `app/pubspec.yaml`의 `version: 0.1.0+1`(현재값). 출시할 때 `1.0.0+1` 등으로 올리고, 빌드 번호 `+N`은 업로드할 때마다 올린다. `app/lib/src/game_page.dart`의 `kAppVersion`도 함께 맞춘다.
 5. 빌드와 업로드:
    ```bash
    cd ~/G3 && npm run build:app
@@ -217,16 +226,17 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 리뷰어가 비행기 모드로 테스트해 흰 화면이 뜨면 래퍼로 판정한다는 보고가 있다 ❓ ([MobiLoud](https://www.mobiloud.com/blog/app-store-review-guidelines-webview-wrapper), [Apple 포럼 4.2 사례](https://developer.apple.com/forums/thread/121924)).
 
 - [ ] **완전 오프라인**: HTML/JS/폰트/사운드가 모두 앱 번들에 있다. 비행기 모드로 첫 실행부터 클리어까지 확인한다.
-- [ ] **폰트 번들화**: Black Han Sans, Jua(Google Fonts) 파일을 에셋에 넣고 `@font-face`로 로컬 로드한다(라이선스 확인 ❓).
-- [ ] **브라우저 흔적 제거**: 주소창, 뒤로가기, 로딩 스피너 없음. 길게 눌러 링크 미리보기, 텍스트 선택, 확대/축소(핀치), 바운스 스크롤, 더블탭 줌을 끈다.
-- [ ] **네이티브 셸 품질**: 앱 아이콘, 런치 스크린(스플래시), 상태바/노치(safe area), 화면 방향 고정, 앱 이름(Info.plist `CFBundleDisplayName`은 현재 "Lane1 Chamgyoyuk" → "1차선 참교육"으로 바꾸기).
+- [ ] **폰트 번들화**: Black Han Sans, Jua(Google Fonts) 파일을 에셋에 넣고 `@font-face`로 로컬 로드한다(라이선스 확인 ❓). 오프라인 완결성뿐 아니라, 느린 네트워크에서 "로딩 중…"에 멈추는 문제(5장 표)도 이걸로 해결된다.
+- [ ] **브라우저 흔적 제거**: 주소창, 뒤로가기, 로딩 스피너 없음. 길게 눌러 링크 미리보기, 텍스트 선택, 확대/축소(핀치), 바운스 스크롤, 더블탭 줌을 끈다. (`app/`의 WebView 설정에 대부분 반영됨: `disableContextMenu`, `isTextInteractionEnabled: false`, `supportZoom: false`, `disallowOverScroll`, `allowsLinkPreview: false`. 실기기 ❓)
+- [ ] **네이티브 셸 품질**: 앱 아이콘(지금은 Flutter 기본 아이콘), 런치 스크린(검정 처리됨), 상태바/노치(safe area), 화면 방향(세로 + 가로 좌우).
+  - [x] 앱 이름: Info.plist `CFBundleDisplayName`과 Android `android:label`은 "1차선 참교육"이다.
 - [ ] **네이티브 기능 통합** (JS → `window.flutter_inappwebview.callHandler(...)` → Dart):
-  - [ ] **햅틱**: 펑크, 충돌, 해소 순간에 Flutter `HapticFeedback` 호출.
+  - [ ] **햅틱**: 펑크, 충돌, 해소 순간에 Flutter `HapticFeedback`을 호출한다. 네이티브 쪽 `haptic` 핸들러는 준비됐다(`light`·`medium`·`heavy`·`selection`·`vibrate`). 게임 JS가 `window.__LANE1_APP__`이 있을 때 `callHandler('haptic', …)`를 부르는 작업만 남았다.
   - [ ] **Game Center**: 스테이지 기록 리더보드와 업적. 유료 Developer Program이 필요할 가능성이 높다 ❓.
   - [ ] **공유 시트**: 결과 카드 스크린샷 공유.
-  - [ ] **수명주기**: 앱이 백그라운드로 가면 자동 일시정지하고 오디오를 정지하며, 복귀하면 재개한다.
+  - [x] **수명주기**: 앱이 백그라운드로 가면 자동 일시정지하고 오디오를 정지한다. 복귀하면 오디오만 되살리고, 일시정지는 유저가 직접 푼다(`app/lib/src/web_bridge.dart`). Chromium으로 확인했고 실기기는 ❓.
 - [ ] **세이브 데이터 이중화**: localStorage 진행도를 네이티브 저장소(예: shared_preferences)에도 백업한다. WKWebView에 WebKit의 7일 스토리지 삭제 정책이 적용되는지는 불확실하다 ❓.
-- [ ] **디버그 기능 숨김**: 릴리스 빌드에서 `window.__game`, `?skip=` 같은 URL 디버그 파라미터, `isInspectable`을 끈다.
+- [ ] **디버그 기능 숨김**: 릴리스 빌드에서 `window.__game`과 `?skip=` 같은 URL 디버그 파라미터를 끈다. `isInspectable`은 이미 `kDebugMode`라 릴리스에서 꺼진다.
 - [ ] **완성도**: 크래시나 플레이스홀더 텍스트가 없게 한다(2.1). 개인정보처리방침 URL을 앱 안에도 넣는다(5.1.1).
 - [ ] **심사 메모**(App Review Information > Notes)에 "WebGL 게임 엔진을 앱 번들에 내장, 완전 오프라인 동작, 햅틱·Game Center 등 네이티브 통합"을 명시한다.
 
@@ -235,8 +245,8 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 ## 7) 확인 못 한 것 (❓)
 
 - **실기기 설치 전 과정 미검증**: 이 문서는 Linux 컨테이너(Xcode, iOS 시뮬레이터, Android SDK 없음)에서 공식 문서만 보고 작성했다. Mac에서 처음 따라 할 때 막히는 단계가 나오면 이 문서를 고쳐야 한다.
-- **`npm run build:app`과 `app/` 세부 사항**(에셋 경로, 포트, Info.plist 키, Android cleartext 설정): Build 에이전트가 작업 중이라 일반적인 Flutter 구조를 기준으로 썼다.
-- **CocoaPods 없이 SwiftPM만으로 빌드되는지**: 플러그인은 SwiftPM을 지원하지만 실제 빌드로 확인하지 않았다.
+- ~~`npm run build:app`과 `app/` 세부 사항~~ → 리뷰에서 실제 파일과 맞췄다 ✅ (에셋 `app/assets/web/index.html`, 포트 28080, `NSAllowsLocalNetworking`, Android cleartext는 localhost만 허용).
+- **CocoaPods 없이 SwiftPM만으로 빌드되는지**: flutter_tools 3.47.7 소스와 플러그인 `Package.swift`로는 ✅이다. Mac 실빌드는 ❓.
 - **Xcode 26으로 iOS 27 기기에 설치되는지**: 안전하게 Xcode 27을 권장했다.
 - **Xcode 27이 Apple silicon 전용인지**: 2차 출처뿐이다(Apple 페이지는 macOS Tahoe 26.6 이상만 명시).
 - **Game Center를 Personal Team에서 쓸 수 있는지**: Apple capability 표의 체크 표시를 텍스트로 확인하지 못했다.
@@ -244,7 +254,7 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 - **WKWebView localStorage 7일 삭제 정책 적용 여부**: 출처끼리 엇갈린다. 그래서 네이티브 백업을 권장했다.
 - **한국 원화 가격**(₩129,000)과 **한국 게임 등급 처리 방식**: 2차 출처뿐이다.
 - **iOS 한국어 설정 메뉴 이름**: "VPN 및 기기 관리", "개발자 모드", "웹 속성"은 iOS 버전에 따라 표기가 다를 수 있다.
-- **`flutter build ios --config-only`**: 출처 확인 없이 일반 지식으로 쓴 단계다. 실패하면 `flutter build ios --release --no-codesign`으로 대신한다.
+- ~~`flutter build ios --config-only` 출처 없음~~ → flutter_tools 3.47.7 `commands/build_ios.dart`에 이 플래그가 있음을 확인했다 ✅. 그래도 실패하면 `flutter build ios --release --no-codesign`으로 대신한다.
 - `flutter_inappwebview` 6.2.0은 아직 **beta**다. 출시 전에 정식 버전이 나왔는지 확인한다.
 
 ---
@@ -263,6 +273,9 @@ flutter run --release -d <기기ID>   # 릴리스 빌드로 설치 + 실행 (홈
 - Install Flutter manually — https://docs.flutter.dev/install/manual
 - flutter_tools Xcode 최소/권장 버전 — https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/macos/xcode.dart
 - flutter_tools CocoaPods 최소/권장 버전 — https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/macos/cocoapods.dart
+- flutter_tools SwiftPM 기본 활성(stable) — https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/features.dart
+- flutter_tools 플러그인이 모두 SwiftPM이면 Podfile·pod install 생략 — https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/macos/darwin_dependency_management.dart
+- `flutter build ios --config-only` 플래그 — https://github.com/flutter/flutter/blob/stable/packages/flutter_tools/lib/src/commands/build_ios.dart
 - Flutter iOS 14 debug 제한 — https://flutter.cn/docs/development/ios-14 , https://docs.agora.io/en/api-reference/faq/quality/flutter_debug
 
 **CocoaPods / 플러그인**
