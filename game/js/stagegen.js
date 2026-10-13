@@ -108,7 +108,7 @@ function attacksFor(e, lay, diff) {
 }
 
 function shoulderFor(diff, rng, setting) {
-  const n = 2 + Math.floor(diff / 3);
+  const n = 2 + Math.floor(diff / 4);
   const kinds = ['cones', 'debris', 'breakdown'];
   const counts = { cones: 0, debris: 0, breakdown: 0 };
   for (let i = 0; i < n; i++) counts[kinds[Math.floor(rng() * (diff >= 5 ? 3 : 2))]]++;
@@ -137,7 +137,7 @@ export function stageFromEntry(e) {
   } else if (/도심|시내|간선|대로|강변|올림픽/.test(road + e.setting)) {
     highway = URBAN.find((u) => road.includes(u)) || URBAN[(e.id || 0) % URBAN.length];
     direction = road.replace(highway, '').trim() || (rng() < 0.5 ? '잠실 방향' : '여의도 방향');
-    r = { route: 0, signs: [['잠실', '6km'], ['여의도', '11km']] };
+    r = { route: highway === '올림픽대로' ? 88 : highway === '경인고속도로' ? 120 : '시', signs: [['잠실', '6km'], ['여의도', '11km']] };
   } else {
     const keys = Object.keys(ROUTES);
     const k = keys[(e.id * 7) % keys.length];
@@ -157,7 +157,7 @@ export function stageFromEntry(e) {
     violation: e.violation || '도로교통법 위반',
     fine: e.fine_krw || 30000,
     sky: SKY_OF[e.time] || 'day',
-    jamLength: Math.min(260, 160 + diff * 9),
+    jamLength: Math.min(215, 150 + diff * 6.5),
     displayKm: +(1.8 + diff * 1.2 + rng() * 1.5).toFixed(1),
     density: 1 + diff * 0.008,
     jamSpeed,

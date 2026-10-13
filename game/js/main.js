@@ -608,10 +608,13 @@ function updateCamera(realDt) {
       break;
     }
     case 'kill': {
+      // 앞줄(화물차·버스)이 빌런 옆에 붙어 있으니, 그 반대편(분리대 쪽)에서 높게 돈다
       const vp = G.killVillain.mesh.position;
-      const ang = 0.7 + G.phaseReal * 0.55;
-      const r = por ? 17 : 14;
-      tPos.set(vp.x + Math.cos(ang) * r, Math.max(3.5, vp.y * 0.55 + 4), vp.z + Math.sin(ang) * r);
+      const wallX = traffic.cars.filter((c) => c.isWall).reduce((a, c, _, arr) => a + c.x / arr.length, 0) || vp.x + 4;
+      const side = vp.x <= wallX ? -1 : 1;
+      const ang = -0.9 + G.phaseReal * 0.5;             // 앞쪽 → 옆 → 뒤쪽으로 쓸고 지나감
+      const r = por ? 16 : 13;
+      tPos.set(vp.x + side * Math.cos(ang) * r, Math.max(7.5, vp.y * 0.55 + 8), vp.z - Math.sin(ang) * r);
       tLook.copy(vp);
       if (G.killVillain.vel) tLook.addScaledVector(G.killVillain.vel, 0.12);
       k = 7;
