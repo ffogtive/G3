@@ -162,7 +162,13 @@ export const ui = {
   vignette(amount),              // 0..1 분노 빨간 비네트
   setPausedVisible(bool),
   hint(text, ms = 2600),         // (통합 중 추가) 상단 작은 튜토리얼 토스트
+  // v0.2 보상·수집 (docs/REWARDS.md)
+  // showResult(r): r.reward = { photo, villainName, violation, fine, payout, bonus, stars, wallet, views, subsGain, subs, comments[3], milestone, stageId, cause, speedKmh? }
+  //   → 블박 제보 카드(과태료 고지서) + 포상금 흐름 + 참교육 채널 댓글 + 마일스톤(실버/골드 참교육 버튼). reward 없으면 기존 화면
+  // showTitle(stages, progress, chapters?): progress.wallet/subs/album → 칩·앨범 버튼. stage.chapter 로 챕터 탭(활성 챕터만 렌더)
+  showAlbum(stages?, progress?, chapters?), hideAlbum(),   // 블박 제보 앨범(도감)
 }
+// handlers 에 선택적으로 onAlbum(open) 추가 가능
 ```
 
 ## core (main / world / traffic / player / boss / weapons / input)

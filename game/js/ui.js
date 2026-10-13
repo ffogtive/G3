@@ -2,6 +2,17 @@
 //
 // 가설: 클래시/길건너친구들 풍 통통한 DOM UI + 한국 도로표지 모티프(녹색 표지판, 고속도로 방패 번호)가
 //      목업의 첫인상과 "쾌감 연출"(뻥 뚫렸다!!, 해방 카운터, 참교육 완료 도장)을 책임진다.
+// 가설(v0.2): 결과 = 블박 제보 카드(과태료 도장) → ★ → 포상금 → 참교육 채널, 타이틀 = 챕터 탭 + 지갑/구독자 + 제보 앨범
+//      → '퇴치 → 보상 → 수집' 루프가 한눈에 보인다. (docs/REWARDS.md)
+//
+// v0.2 API (하위 호환 — 기존 호출 그대로 동작)
+//  showResult(r)  r.reward?: { photo, villainName, violation, fine, payout, bonus, stars, wallet, views, subsGain, subs,
+//                             comments[3], milestone, stageId, cause, speedKmh? } → 보상 레이아웃. 없으면 기존 결과 화면.
+//  showTitle(stages, progress, chapters?)  progress += { wallet, subs, album: {[id]: {stars, fine, photo, count}} }
+//                 stages[].chapter(1..) 로 챕터 묶음 (없으면 한 챕터). chapters = [{ no, name, setting, theme }]
+//                 → 챕터 탭(현재 챕터 타일만 렌더) · 지갑/구독자 칩 · '제보 앨범' 버튼
+//  showAlbum(stages?, progress?, chapters?) / hideAlbum()  인자 없으면 마지막 showTitle 데이터 사용
+//  handlers.onAlbum?(open: boolean)  앨범 열림/닫힘 알림 (선택)
 //
 // 규칙
 //  - #ui 루트 안에 전부 동적으로 생성. 클래스 접두사 'ui-'.
@@ -984,7 +995,7 @@ function stageTileHTML(s, i, label, P, opts) {
   for (let k = 0; k < 3; k++) st += `<span class="ui-star ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`;
   const cls = `ui-stagecard ui-stagecard--sm${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${fin ? ' is-final' : ''}`;
   return `<button type="button" class="${cls}" data-i="${i}" style="--i:${opts.k}" aria-label="${esc(label + ' ' + stageTitle(s))}">
-      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${fin ? '<em>BOSS</em>' : ''}</span></span>
+      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${fin ? '<em>BOSS</em>' : ''}</span><span class="ui-stars ui-stagecard__hstars">${st}</span></span>
       <span class="ui-stagecard__body">
         <span class="ui-stagecard__title">${esc(stageTitle(s))}</span>
         <span class="ui-stagecard__meta"><span class="ui-stars">${st}</span>${locked ? '' : `<span class="ui-stagecard__best">${best > 0 ? 'BEST ' + fmt(best) : ''}</span>`}</span>
@@ -1264,7 +1275,8 @@ function showStageCard(stage) {
 let resT = [];
 let resRaf = 0;
 function clearResultTimers() { resT.forEach(clearTimeout); resT = []; cancelAnimationFrame(resRaf); resRaf = 0; clearTweens(); }
-const later = (ms, fn) => { resT.push(setTimeout(() => { try { fn(); } catch (e) { console.error('[ui] result', e); } }, reduceMotion ? 0 : ms)); };
+// 연출 타이머 (모션 줄이기 = 즉시). real=true 는 모션과 무관한 실제 대기(토스트 자동 닫힘 등)
+const later = (ms, fn, real = false) => { resT.push(setTimeout(() => { try { fn(); } catch (e) { console.error('[ui] result', e); } }, reduceMotion && !real ? 0 : ms)); };
 function showResult(r) {
   r = r || {};
   finishCard();
@@ -1512,13 +1524,15 @@ function showRewardResult(r, w) {
   sc.addEventListener('touchstart', mark, { passive: true, once: true });
   later(TL.chan + 150, () => {
     if (touched || !sc.isConnected) return;
+    const col = panel.querySelector('.ui-rw__col');
+    if (!col || getComputedStyle(col).display !== 'contents') return; // 한 줄(세로 폰) 배치일 때만
     const chan = panel.querySelector('.ui-chan');
     const over = chan.getBoundingClientRect().top + Math.min(chan.offsetHeight, 150) - sc.getBoundingClientRect().bottom;
     if (over > 4) try { sc.scrollTo({ top: sc.scrollTop + over + 8, behavior: reduceMotion ? 'auto' : 'smooth' }); } catch { sc.scrollTop += over + 8; }
   });
   if (mile) {
     later(TL.mile, () => { mile.hidden = false; panel.querySelector('.ui-chan__badge')?.classList.add('is-on'); });
-    later(TL.mile + 4200, closeMile);
+    later(TL.mile + 4200, closeMile, true);
   }
 }
 function hideResult() { clearResultTimers(); setShown(E.result, false, 300); }
