@@ -291,6 +291,9 @@ ensure_manifest_libraries() { # [--allow-fake] : stub every missing iOS library 
 t0=$SECONDS
 FAILED=0
 if [ "$NO_HAPTICS" = 1 ]; then
+  # Codex review: drop a cached real build so the export really uses the stub (ensure_manifest_libraries only
+  # stubs missing files).
+  rm -rf "$HAPTICS_BIN/liblane1_haptics.ios.xcframework"
   status "haptics=skipped --no-haptics"
 else
   ensure_interface_header
@@ -314,6 +317,7 @@ fi
 
 if [ "$HOST_ONLY" = 0 ]; then
   if [ "$NO_EXT" = 1 ]; then
+    rm -rf "$EXT_DIR/bin/libtraffic.ios.$TARGET.xcframework"   # same as --no-haptics: force the stub
     status "traffic=skipped --no-ext"
   elif build_traffic_ios; then
     status "traffic=ok"

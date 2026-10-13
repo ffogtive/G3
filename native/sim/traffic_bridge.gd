@@ -439,7 +439,10 @@ class _Creep:
 				var so: float = s0 + (s1 - s0) / kinds_ob.size() * (k + 0.5)
 				var is_bd: bool = kinds_ob[k] == "breakdown"
 				obstacles.append({"id": 10000 + k, "kind": kinds_ob[k], "s": so, "x": 8.9,
-					"len": 8.0 if is_bd else 11.5, "w": 2.1 if is_bd else 2.4, "smash": not is_bd, "hazard": is_bd, "detail": {}})
+					"len": 8.0 if is_bd else 11.5, "w": 2.1 if is_bd else 2.4, "smash": not is_bd, "hazard": is_bd,
+					# Codex review: the view only draws a breakdown car when detail.carKind is set (game._breakdown_cars).
+					"detail": {"carKind": "sedan", "variant": 0, "color": 0xf4f4f2, "carLen": 4.5, "rotY": 0.08,
+						"triangle": true} if is_bd else {}})
 		for k: int in 26:
 			var j: int = int(floor(_rng.next_float() * 4.0))
 			opp_j.append(j)

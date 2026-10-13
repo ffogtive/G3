@@ -21,7 +21,8 @@
 # ~/.lane1/deploy.env (chmod 600). A Team ID chosen interactively is cached there.
 # Outputs: <repo>/.local/ (gitignored): iphone-deploy/ (DerivedData), ios-export/, deploy-runs/<ts>-<pid>/
 #          (build.log, install.json, launch.json, exit-code, receipt.txt, ...), iphone-deploy.lock (while running).
-# Exit: 0 launched and still running after 8 s | 2 usage | 3 environment | 4 build/export | 5 device | 6 install | 7 launch | 9 locked.
+# Exit: 0 launched and still running after 8 s (or, if the process list can't be read, a fresh boot.txt from this launch)
+#       | 2 usage | 3 environment | 4 build/export | 5 device | 6 install | 7 launch failed or not verifiable | 9 locked.
 set -euo pipefail
 # Not `umask 077` for the whole run (guide §5 does that): build outputs keep normal modes so the app bundle's
 # files stay readable after install; the run logs live in a 700 directory and ~/.lane1/deploy.env is chmod 600.
@@ -496,7 +497,7 @@ launch_app() {
 # black screen from a GDScript parse error still exit 0 (review). Wait, then check the process list, and pull the
 # boot line the game writes to user://boot.txt (Documents/ on iOS) for native=true|false. Both are best-effort.
 LAUNCH_WAIT=${LANE1_LAUNCH_WAIT:-8}
-RUNNING="not checked" NATIVE="?"
+RUNNING="not checked" NATIVE="?" BOOT_FRESH=0
 verify_running() {
   log "waiting ${LAUNCH_WAIT}s, then checking that $PRODUCT is still running…"
   sleep "$LAUNCH_WAIT"
@@ -517,6 +518,7 @@ verify_running() {
     local boot_t
     boot_t=$(sed -n 's/.*boot_unix=\([0-9]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1)
     if is_number "$boot_t" && [ "$boot_t" -ge $((LAUNCH_EPOCH - 60)) ]; then
+      BOOT_FRESH=1
       NATIVE=$(sed -n 's/.*native=\([a-z]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1)
       [ -n "$NATIVE" ] || NATIVE="?"
       log "boot: $(head -n 1 "$RUN_DIR/boot.txt")"
@@ -539,8 +541,18 @@ verify_running() {
       return 1
       ;;
     *)
-      LAUNCH_RESULT="ok (liveness unknown)"
-      warn "could not read the device process list — check the iPhone screen yourself"
+      # Codex review: an unreadable process list must not become a success receipt. Accept only independent
+      # evidence that this launch booted the game (boot.txt written after LAUNCH_EPOCH); otherwise fail (exit 7).
+      if [ "$BOOT_FRESH" = 1 ]; then
+        LAUNCH_RESULT="ok (process list unavailable; boot.txt from this launch, native traffic: $NATIVE)"
+        warn "could not read the device process list; the game wrote boot.txt for this launch — check the iPhone screen"
+      else
+        LAUNCH_RESULT="unverified (process list unavailable and no boot.txt from this launch)"
+        warn "could not verify that $PRODUCT is running: devicectl process list failed and no fresh boot.txt."
+        hint "details: $(rel "$RUN_DIR/procs.log"), $(rel "$RUN_DIR/copy-boot.log")." \
+          "Check the cable / unlock the iPhone, then: bash tools/mac/ios_run.sh --launch-only"
+        return 1
+      fi
       ;;
   esac
   return 0
