@@ -130,6 +130,7 @@ function build() {
     reduceMotion = mq.matches;
     mq.addEventListener?.('change', (e) => { reduceMotion = e.matches; });
   } catch { /* */ }
+  makeRays();
   const onResize = () => { VW = innerWidth || 1280; VH = innerHeight || 720; };
   onResize();
   addEventListener('resize', onResize);
@@ -183,6 +184,26 @@ function build() {
   E.flash = R.appendChild(el('div', 'ui-flash'));
 
   resetCache();
+}
+
+// 배너 뒤 회전 광선: 한 번만 비트맵으로 그려 두고 회전은 컴포지터 transform 으로만 (마스크/코닉 매 프레임 래스터 회피)
+function makeRays() {
+  try {
+    const N = 256, cv = document.createElement('canvas');
+    cv.width = cv.height = N;
+    const g = cv.getContext('2d');
+    const grad = g.createRadialGradient(N / 2, N / 2, N * 0.06, N / 2, N / 2, N / 2);
+    grad.addColorStop(0, 'rgba(255,230,90,.6)');
+    grad.addColorStop(0.55, 'rgba(255,225,77,.32)');
+    grad.addColorStop(1, 'rgba(255,225,77,0)');
+    g.fillStyle = grad;
+    const rays = 20;
+    for (let i = 0; i < rays; i++) {
+      const a0 = (i / rays) * Math.PI * 2, a1 = a0 + Math.PI / rays;
+      g.beginPath(); g.moveTo(N / 2, N / 2); g.arc(N / 2, N / 2, N / 2, a0, a1); g.closePath(); g.fill();
+    }
+    R.style.setProperty('--ui-rays', `url(${cv.toDataURL('image/png')})`);
+  } catch { /* CSS 폴백 사용 */ }
 }
 
 function resetCache() {

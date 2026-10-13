@@ -31,6 +31,9 @@ const stage = STAGES[si];
 const coarse = matchMedia('(pointer: coarse)').matches;
 const touch = P.has('touch') ? P.get('touch') === '1' : coarse;
 if (P.get('shot') === '1' || navigator.webdriver) document.body.classList.add('dev-shot');
+// ?still=1 : 레이아웃 확인용 — 진입 애니메이션을 즉시 끝 상태로 (헤드리스 소프트웨어 렌더는 컴포지터 애니 시작이 늦음)
+if (P.get('css')) { const st = document.createElement('style'); st.textContent = P.get('css'); document.head.appendChild(st); }  // 디버그: 임의 CSS 주입
+if (P.get('still') === '1') { const st = document.createElement('style'); st.textContent = '.ui-root *,.ui-root *::before,.ui-root *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important}'; document.head.appendChild(st); }
 window.ui = ui; window.STAGES = STAGES;
 
 // 개발 바
@@ -110,10 +113,11 @@ function paint(t) {
   if (night) { g.fillStyle = 'rgba(10,14,40,.25)'; g.fillRect(0, 0, W, H); }
 }
 function loop(t) { paint(t); requestAnimationFrame(loop); }
+const STATIC_BG = P.get('bg') === 'static' || navigator.webdriver;  // 헤드리스 캡처는 정지 배경 (소프트웨어 렌더라 느림)
 seedCars(screen === 'release' ? 'release' : 'jam');
 phaseMode = screen === 'release' ? 'release' : 'jam';
 paint(0);
-requestAnimationFrame(loop);
+if (!STATIC_BG) requestAnimationFrame(loop);
 const car = (pred) => cars.find(pred) || cars[0];
 
 // ───────── UI

@@ -36,6 +36,16 @@ const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _cq = new THREE
 const _e = new THREE.Euler(), _m = new THREE.Matrix4(), _c = new THREE.Color();
 const AX_Z = new THREE.Vector3(0, 0, 1);
 
+// 인스턴스 버퍼 부분 업로드 [0, count). addUpdateRange() 는 매번 {start,count} 객체를 만들므로
+// 속성마다 범위 객체 1개를 재사용한다 (three 는 업로드 후 updateRanges 를 비움).
+function uploadRange(attr, count) {
+  let r = attr.userData && attr.userData.fxRange;
+  if (!r) { attr.userData = attr.userData || {}; r = attr.userData.fxRange = { start: 0, count: 0 }; }
+  r.start = 0; r.count = count;
+  const ur = attr.updateRanges;
+  ur.length = 0; ur.push(r);
+  attr.needsUpdate = true;
+}
 function readPos(p, out) {
   if (!p || typeof p !== 'object') return false;
   const x = Array.isArray(p) ? +p[0] : +p.x, y = Array.isArray(p) ? +p[1] : +p.y, z = Array.isArray(p) ? +p[2] : +p.z;
@@ -68,7 +78,7 @@ const R_FIRE = 0, R_SPARK = 1, R_GLOW = 2, R_SMOKE = 3, R_TRAILFIRE = 4, R_HIT =
 const RAMPS = [
   ramp([[0, 0xffffff], [0.06, 0xfff07a], [0.16, 0xffc81a], [0.32, 0xff8a10], [0.5, 0xf04a18], [0.66, 0xb02a18], [0.8, 0x3c3232], [1, 0x4c4646]]),
   ramp([[0, 0xffffff], [0.18, 0xfff27a], [0.5, 0xffb41e], [0.8, 0xff5a14], [1, 0xc42a10]]),
-  ramp([[0, 0xfff6d0], [0.3, 0xffc040], [0.62, 0xff6a10], [1, 0x000000]]),
+  ramp([[0, 0xffd27a], [0.3, 0xffa830], [0.62, 0xff5a10], [1, 0x000000]]),
   ramp([[0, 0x3e3836], [0.45, 0x5e5958], [1, 0x8a8686]]),
   ramp([[0, 0xfff8c8], [0.35, 0xffc83a], [0.7, 0xff6a14], [1, 0xb8301a]]),
   ramp([[0, 0xffffff], [1, 0xfff0a0]]),
@@ -147,10 +157,11 @@ class CubePool {
     this.n = 0; this.rr = 0; this.dirty = false;
     this.mesh.count = 0; this.mesh.visible = false;
   }
-  update(dt) {
+  // cx,cy,cz = 카메라 월드 위치: 카메라 코앞(1.5~8m)의 큐브는 작아져서 화면을 가리지 않는다 (킬캠이 불덩이/연기꼬리를 관통)
+  update(dt, cx, cy, cz, camMoved) {
     let n = this.n;
     if (n === 0) { if (this.mesh.visible) { this.mesh.visible = false; this.mesh.count = 0; } return; }
-    if (dt <= 0 && !this.dirty) return; // 정지(히트스톱/일시정지) 중엔 다시 쓸 필요 없음
+    if (dt <= 0 && !this.dirty && !camMoved) return; // 정지(히트스톱/일시정지) 중엔 다시 쓸 필요 없음
     this.dirty = false;
     const d = this.d, mat = this.mesh.instanceMatrix.array, col = this.mesh.instanceColor.array;
     let i = 0;
@@ -170,7 +181,11 @@ class CubePool {
       }
       const t = d[o + LIFE] / d[o + MAX], fl = d[o + FLAGS];
       let px = d[o + PX], py = d[o + PY], pz = d[o + PZ], vx = d[o + VX], vy = d[o + VY], vz = d[o + VZ];
-      const k = curve(d[o + CURVE], t) * (1 + (d[o + ENDMUL] - 1) * t);
+      let k = curve(d[o + CURVE], t) * (1 + (d[o + ENDMUL] - 1) * t);
+      {
+        const ex = px - cx, ey = py - cy, ez = pz - cz, dd = ex * ex + ey * ey + ez * ez;
+        if (dd < 64) { const u = (Math.sqrt(dd) - 1.5) / 6.5; k *= u <= 0 ? 0 : u * u * (3 - 2 * u); }
+      }
       if (dt > 0) {
         const dr = 1 / (1 + d[o + DRAG] * dt);
         vy -= d[o + GRAV] * dt;
@@ -225,9 +240,8 @@ class CubePool {
     mesh.count = n;
     mesh.visible = n > 0;
     if (n > 0) {
-      const im = mesh.instanceMatrix, ic = mesh.instanceColor;
-      im.clearUpdateRanges(); im.addUpdateRange(0, n * 16); im.needsUpdate = true;
-      ic.clearUpdateRanges(); ic.addUpdateRange(0, n * 3); ic.needsUpdate = true;
+      uploadRange(mesh.instanceMatrix, n * 16);
+      uploadRange(mesh.instanceColor, n * 3);
     }
   }
 }
@@ -284,7 +298,7 @@ class BillboardPool {
     }
     const mesh = this.mesh;
     mesh.count = k; mesh.visible = k > 0;
-    if (k > 0) { const im = mesh.instanceMatrix; im.clearUpdateRanges(); im.addUpdateRange(0, k * 16); im.needsUpdate = true; }
+    if (k > 0) uploadRange(mesh.instanceMatrix, k * 16);
   }
 }
 
@@ -293,6 +307,7 @@ const SP_FLASH = 0, SP_TWINKLE = 1, SP_FADE = 2, SP_POP = 3;
 class SpritePool {
   constructor(parent, tex, cap, additive, name) {
     this.tex = tex;
+    this.parent = parent;
     this.slots = [];
     this.next = 0;
     this.live = 0;
@@ -316,6 +331,9 @@ class SpritePool {
     for (let j = 0; j < n; j++) { const c = this.slots[(this.next + j) % n]; if (!c.on) { s = c; this.next = (this.next + j + 1) % n; break; } }
     if (!s) { s = this.slots[this.next]; this.next = (this.next + 1) % n; this.live--; }
     s.on = true; this.live++;
+    // opts.parent: 카메라 등 다른 부모의 로컬 좌표로 붙임 (twinkle 화면 고정용). 끝나면 root 로 복귀
+    const par = (opts && opts.parent) || this.parent;
+    if (s.sp.parent !== par) par.add(s.sp);
     s.t = 0; s.dur = Math.max(0.02, dur); s.size = size; s.curve = curveId;
     s.delay = opts?.delay || 0; s.rot = opts?.rot ?? rnd() * 6.283; s.rotV = opts?.rotV || 0;
     s.vx = opts?.vx || 0; s.vy = opts?.vy || 0; s.vz = opts?.vz || 0; s.drag = opts?.drag || 0;
@@ -331,8 +349,9 @@ class SpritePool {
     s.sp.visible = false;
     return s;
   }
-  clear() { for (const s of this.slots) { s.on = false; s.sp.visible = false; } this.live = 0; }
-  update(dt) {
+  _off(s) { s.on = false; s.sp.visible = false; if (s.sp.parent !== this.parent) this.parent.add(s.sp); }
+  clear() { for (const s of this.slots) this._off(s); this.live = 0; }
+  update(dt, cx, cy, cz) {
     if (this.live === 0) return;
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
@@ -340,7 +359,7 @@ class SpritePool {
       if (s.delay > 0) { s.delay -= dt; continue; }
       s.t += dt;
       const t = s.t / s.dur;
-      if (t >= 1) { s.on = false; s.sp.visible = false; this.live--; continue; }
+      if (t >= 1) { this._off(s); this.live--; continue; }
       if (dt > 0) {
         const dr = 1 / (1 + s.drag * dt);
         s.vx *= dr; s.vy *= dr; s.vz *= dr;
@@ -361,7 +380,11 @@ class SpritePool {
       }
       const z = Math.max(0.0001, s.size * sc);
       s.sp.scale.set(z, z, 1);
-      s.mat.opacity = clamp(op * s.op, 0, 1);
+      // 카메라가 스프라이트 크기만큼 가까우면 서서히 투명 (화면 전체가 하얘지는 것 방지)
+      const p = s.sp.position, local = s.sp.parent !== this.parent; // 카메라 자식이면 position 자체가 카메라 기준
+      const ex = local ? p.x : p.x - cx, ey = local ? p.y : p.y - cy, ez = local ? p.z : p.z - cz, dist = Math.sqrt(ex * ex + ey * ey + ez * ez);
+      const near = clamp((dist - 0.45 * s.size) / (0.6 * s.size), 0, 1);
+      s.mat.opacity = clamp(op * s.op * near, 0, 1);
       s.mat.rotation = s.rot;
       s.sp.visible = true;
     }
@@ -592,16 +615,19 @@ export class FX {
     this._time += dt;
 
     if (dt > 0) this._updateTrails(dt);
-    for (let i = 0; i < this._pools.length; i++) this._pools[i].update(dt);
     const cam = this.camera;
-    if (cam && cam.isObject3D) cam.getWorldQuaternion(_cq); else _cq.identity();
+    if (cam && cam.isObject3D) { cam.getWorldPosition(_w); cam.getWorldQuaternion(_cq); } else { _w.set(0, 1e5, 0); _cq.identity(); }
+    const cx = _w.x, cy = _w.y, cz = _w.z;
+    const camMoved = cx !== this._cx || cy !== this._cy || cz !== this._cz;
+    this._cx = cx; this._cy = cy; this._cz = cz;
+    for (let i = 0; i < this._pools.length; i++) this._pools[i].update(dt, cx, cy, cz, camMoved);
     this.heartPool.update(dt, _cq);
     this.starPool.update(dt, _cq);
     // 섬광·스프라이트·셰이크는 "연출 시간"(= max(게임 dt, 실제 경과)) 으로 진행:
     // 히트스톱/슬로모션 중에도 섬광은 팍 터지고 금방 사라져 킬캠을 가리지 않는다. 큐브 파티클은 게임 dt (슬로모 불덩이).
     const fdt = Math.max(dt, realDt);
-    this.glowSprites.update(fdt);
-    this.starSprites.update(fdt);
+    this.glowSprites.update(fdt, cx, cy, cz);
+    this.starSprites.update(fdt, cx, cy, cz);
     this._updateRings(dt);
     this._updateCores(fdt);
     this._updateSpeedLines(dt);
@@ -672,7 +698,7 @@ export class FX {
       const k = this.basic.add();
       d1[k + PX] = x + _v.x * r0; d1[k + PY] = y + _v.y * r0; d1[k + PZ] = z + _v.z * r0;
       d1[k + VX] = _v.x * sp; d1[k + VY] = _v.y * sp + 1.4; d1[k + VZ] = _v.z * sp;
-      const sz = (big ? rr(1.5, 2.3) : rr(0.55, 1.25)) * s;
+      const sz = (big ? rr(1.3, 2.0) : rr(0.5, 1.15)) * s;
       d1[k + SX] = sz; d1[k + SY] = sz; d1[k + SZ] = sz;
       d1[k + EX] = rnd() * 6; d1[k + EY] = rnd() * 6; d1[k + EZ] = rnd() * 6;
       d1[k + WX] = rr(-5, 5); d1[k + WY] = rr(-5, 5); d1[k + WZ] = rr(-5, 5);
@@ -702,12 +728,12 @@ export class FX {
       const r0 = rnd() * 1.5 * s, sp = rr(1.2, 3.6) * s;
       const k = this.smoke.add();
       dm[k + PX] = x + _v.x * r0; dm[k + PY] = y + _v.y * r0 + 0.3; dm[k + PZ] = z + _v.z * r0;
-      dm[k + VX] = _v.x * sp; dm[k + VY] = _v.y * sp + rr(1.4, 3.2); dm[k + VZ] = _v.z * sp;
-      const sz = rr(0.95, 1.9) * s;
+      dm[k + VX] = _v.x * sp; dm[k + VY] = _v.y * sp + rr(2.4, 4.6); dm[k + VZ] = _v.z * sp;
+      const sz = rr(0.75, 1.4) * s;
       dm[k + SX] = sz; dm[k + SY] = sz; dm[k + SZ] = sz;
       dm[k + EX] = rnd() * 6; dm[k + EY] = rnd() * 6; dm[k + EZ] = rnd() * 6;
       dm[k + WX] = rr(-1.5, 1.5); dm[k + WY] = rr(-1.5, 1.5); dm[k + WZ] = rr(-1.5, 1.5);
-      dm[k + DRAG] = 1.5; dm[k + GRAV] = -1.4; dm[k + ENDMUL] = 1.85;
+      dm[k + DRAG] = 1.3; dm[k + GRAV] = -2.4; dm[k + ENDMUL] = 1.65;
       dm[k + MAX] = rr(1.4, 2.5); dm[k + DELAY] = rr(0.08, 0.34);
       dm[k + CURVE] = C_GROW; dm[k + RAMP] = R_SMOKE;
       const tint = rr(0.8, 1.15); dm[k + CR] = tint; dm[k + CG] = tint; dm[k + CB] = tint;
@@ -796,11 +822,11 @@ export class FX {
         const k = this.smoke.add();
         dl[k + PX] = px + rr(-0.2, 0.2); dl[k + PY] = py + rr(-0.2, 0.2); dl[k + PZ] = pz + rr(-0.2, 0.2);
         dl[k + VX] = rr(-0.8, 0.8); dl[k + VY] = rr(0.2, 1.2); dl[k + VZ] = rr(-0.8, 0.8);
-        const sz = rr(0.5, 0.95) * fade;
+        const sz = rr(0.45, 0.85) * fade;
         dl[k + SX] = sz; dl[k + SY] = sz; dl[k + SZ] = sz;
         dl[k + EX] = rnd() * 6; dl[k + EY] = rnd() * 6; dl[k + EZ] = rnd() * 6;
         dl[k + WX] = rr(-2, 2); dl[k + WY] = rr(-2, 2);
-        dl[k + DRAG] = 2.2; dl[k + GRAV] = -1.1; dl[k + ENDMUL] = 2.1;
+        dl[k + DRAG] = 2.2; dl[k + GRAV] = -1.1; dl[k + ENDMUL] = 1.8;
         dl[k + MAX] = rr(0.7, 1.25); dl[k + CURVE] = C_GROW;
         const g = rr(0.8, 0.97); _c.setRGB(g, g, g * 0.98);
         dl[k + CR] = _c.r; dl[k + CG] = _c.g; dl[k + CB] = _c.b;
@@ -852,6 +878,7 @@ export class FX {
     const n = clamp(Math.round(num(count, 120)), 0, 700);
     const R = clamp(num(spread, 30), 1, 200);
     const pool = this.conf, d = pool.d;
+    const pm = clamp(Math.sqrt(R / 30), 0.8, 1.7); // 넓게 뿌릴수록 조각도 크게 (드론샷 가독성)
     // 폭죽 발사 지점 4~6곳
     const nPop = 4 + Math.floor(rnd() * 3);
     const popX = this._popX || (this._popX = new Float32Array(8)), popZ = this._popZ || (this._popZ = new Float32Array(8));
@@ -877,7 +904,7 @@ export class FX {
         d[k + DELAY] = rnd() * 0.7;
         d[k + MAX] = rr(3.4, 4.8);
       }
-      const sz = rr(1.1, 1.6);
+      const sz = rr(1.1, 1.6) * pm;
       if (i % 7 === 3) { d[k + SX] = 0.17 * sz; d[k + SY] = 0.05 * sz; d[k + SZ] = 1.5 * sz; } // 리본
       else { d[k + SX] = 0.78 * sz; d[k + SY] = 0.07 * sz; d[k + SZ] = 0.5 * sz; }
       d[k + EX] = rnd() * 6; d[k + EY] = rnd() * 6; d[k + EZ] = rnd() * 6;
@@ -970,25 +997,38 @@ export class FX {
   }
 
   // ───────── 반짝★ (원흉이 하늘로 날아가 사라짐 — 로켓단 "또 당했다~")
+  // 화면 안에서 터지면 별 일행을 카메라 공간에 고정(카메라 자식) → 직후 카메라가 홱 돌아가도(킬캠→드론샷) 1초간 확실히 보인다.
   twinkle(pos) {
     if (!readPos(pos, _P)) return;
-    const x = _P.x, y = _P.y, z = _P.z;
-    const top = { depthTest: false, renderOrder: 42 };
-    // 노란 후광 (일반 블렌딩 — 밝은 하늘에서도 노랗게 보임) + 순간 백열 (가산)
-    this.starSprites.spawn(x, y, z, 16, 1.05, 0xffbe2e, SP_TWINKLE, { depthTest: false, renderOrder: 38, map: this._tex.glow, opacity: 0.7, rot: 0 });
-    this.glowSprites.spawn(x, y, z, 12, 0.32, 0xffffff, SP_FLASH, { depthTest: false, renderOrder: 39 });
-    // 대각선 보조 별 (흰색, 메인 뒤에서 반대로 회전)
-    this.starSprites.spawn(x, y, z, 6.5, 0.95, 0xffffff, SP_TWINKLE, { depthTest: false, renderOrder: 40, rot: Math.PI / 4, rotV: -3.6, delay: 0.04 });
-    // 메인 별 (노랑 4갈래, 주황 외곽선)
-    this.starSprites.spawn(x, y, z, 10, 1.1, 0xffffff, SP_TWINKLE, { ...top, map: this._twinkleTex, rot: 0, rotV: 2.6 });
-    // 미니 반짝이들이 화면 평면으로 퍼짐
     const cam = this.camera;
-    if (cam && cam.isObject3D) { cam.updateMatrixWorld(); _R.setFromMatrixColumn(cam.matrixWorld, 0); _U.setFromMatrixColumn(cam.matrixWorld, 1); }
+    let parent = null, x = _P.x, y = _P.y, z = _P.z, dist = 30;
+    if (cam && cam.isCamera) {
+      cam.updateMatrixWorld();
+      _v.copy(_P); cam.worldToLocal(_v);
+      dist = _v.length();
+      _w.copy(_P).project(cam);
+      if (_v.z < -2 && Math.abs(_w.x) < 1.15 && Math.abs(_w.y) < 1.15) { parent = cam; x = _v.x; y = _v.y; z = _v.z; }
+    }
+    const S = clamp(dist * 0.36, 8, 12); // 별 크기 (m): 가까우면 8, 멀면 12
+    const base = parent ? { parent, depthTest: false } : { depthTest: false };
+    // 노란 후광 (일반 블렌딩 — 밝은 하늘에서도 노랗게) + 순간 백열 (가산)
+    this.starSprites.spawn(x, y, z, S * 1.6, 1.05, 0xffbe2e, SP_TWINKLE, { ...base, renderOrder: 38, map: this._tex.glow, opacity: 0.7, rot: 0 });
+    this.glowSprites.spawn(x, y, z, S * 1.2, 0.32, 0xffffff, SP_FLASH, { ...base, renderOrder: 39 });
+    // 대각선 보조 별 (흰색, 메인 뒤에서 반대로 회전)
+    this.starSprites.spawn(x, y, z, S * 0.65, 0.95, 0xffffff, SP_TWINKLE, { ...base, renderOrder: 40, rot: Math.PI / 4, rotV: -3.6, delay: 0.04 });
+    // 메인 별 (노랑 4갈래, 주황 외곽선)
+    this.starSprites.spawn(x, y, z, S, 1.1, 0xffffff, SP_TWINKLE, { ...base, renderOrder: 42, map: this._twinkleTex, rot: 0, rotV: 2.6 });
+    // 미니 반짝이들이 화면 평면으로 퍼짐
+    if (parent) { _R.set(1, 0, 0); _U.set(0, 1, 0); }
+    else if (cam && cam.isObject3D) { _R.setFromMatrixColumn(cam.matrixWorld, 0); _U.setFromMatrixColumn(cam.matrixWorld, 1); }
     else { _R.set(1, 0, 0); _U.set(0, 1, 0); }
     for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + rnd() * 0.5, sp = rr(11, 18);
-      const vx = (_R.x * Math.cos(a) + _U.x * Math.sin(a)) * sp, vy = (_R.y * Math.cos(a) + _U.y * Math.sin(a)) * sp, vz = (_R.z * Math.cos(a) + _U.z * Math.sin(a)) * sp;
-      this.starSprites.spawn(x, y, z, rr(2.4, 3.8), rr(0.6, 0.9), i % 2 ? 0xffffff : 0xfff07a, SP_POP, { ...top, renderOrder: 43, vx, vy, vz, drag: 2.2, rotV: rr(-6, 6), delay: 0.06 });
+      const a = (i / 8) * Math.PI * 2 + rnd() * 0.5, sp = rr(1.1, 1.8) * S;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      this.starSprites.spawn(x, y, z, rr(0.24, 0.38) * S, rr(0.6, 0.9), i % 2 ? 0xffffff : 0xfff07a, SP_POP, {
+        ...base, renderOrder: 43, vx: (_R.x * ca + _U.x * sa) * sp, vy: (_R.y * ca + _U.y * sa) * sp, vz: (_R.z * ca + _U.z * sa) * sp,
+        drag: 2.2, rotV: rr(-6, 6), delay: 0.06,
+      });
     }
   }
 
@@ -1012,14 +1052,14 @@ export class FX {
   // ───────── 감사 하트/별 (해방된 차량 위) — 초당 20회 호출도 OK, 최대 60+30 재활용
   hearts(pos) {
     if (!readPos(pos, _P)) return;
-    // 멀리(드론샷)서도 읽히도록 카메라 거리에 비례해 키움 (20m 이내 1배 ~ 2.6배)
+    // 멀리(드론샷)서도 읽히도록 카메라 거리에 비례해 키움 (24m 이내 1배 ~ 최대 3.6배)
     let m = 1;
     const cam = this.camera;
     if (cam && cam.matrixWorld) {
       const e = cam.matrixWorld.elements, dx = e[12] - _P.x, dy = e[13] - _P.y, dz = e[14] - _P.z;
-      m = clamp(Math.sqrt(dx * dx + dy * dy + dz * dz) / 26, 1, 2.6);
+      m = clamp(Math.sqrt(dx * dx + dy * dy + dz * dz) / 24, 1, 3.6);
     }
-    const n = rnd() < 0.55 ? 2 : 1;
+    const n = rnd() < 0.5 ? 3 : 2;
     for (let i = 0; i < n; i++) {
       const x = _P.x + rr(-0.8, 0.8) * m, y = _P.y + rr(-0.1, 0.5) * m, z = _P.z + rr(-0.8, 0.8) * m;
       if (rnd() < 0.24) this.starPool.spawn(x, y, z, rr(1.3, 1.8) * m, rr(1.1, 1.5), rr(2.6, 3.8) * m, rr(-0.5, 0.5) * m);
@@ -1112,7 +1152,7 @@ export class FX {
     }
     sl.mesh.count = active;
     sl.mat.opacity = 0.18 + 0.42 * cur;
-    const im = sl.mesh.instanceMatrix; im.clearUpdateRanges(); im.addUpdateRange(0, active * 16); im.needsUpdate = true;
+    uploadRange(sl.mesh.instanceMatrix, active * 16);
     sl.group.visible = active > 0;
   }
 

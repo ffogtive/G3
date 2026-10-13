@@ -119,7 +119,7 @@ const camModes = {
     const vp = villain.position, ang = 0.7 + t * 0.55;
     o.tPos.set(vp.x + Math.cos(ang) * 10.5, Math.max(3.5, vp.y * 0.55 + 4), vp.z + Math.sin(ang) * 10.5); o.tLook.copy(vp); o.k = 7;
   },
-  drone: (o, t) => { o.tPos.set(13 + t * 1.2, 30 + t * 2.2, -46 - t * 13); o.tLook.set(-2, 0, 65 - t * 12); o.k = 2.2; },
+  drone: (o, t) => { const r = cur && cur.s.rel != null ? t - cur.s.rel : t; o.tPos.set(13 + r * 1.2, 30 + r * 2.2, -35 - r * 13); o.tLook.set(-2, 0, 76 - r * 12); o.k = r < 0.4 ? 3 : 2.2; },
   droneFixed: (o) => { o.tPos.set(14, 32, -48); o.tLook.set(-2, 0, 50); o.k = 4; },
   cruise: (o) => { o.tPos.set(player.position.x * 0.45 + 2.4, 10.5, player.position.z + 15); o.tLook.set(player.position.x * 0.6, 0.4, player.position.z - 14); o.k = 5; },
 };
@@ -172,8 +172,8 @@ const SCN = {
       s.vel.y += (s.stage ? -5 : -26) * dt; m.position.addScaledVector(s.vel, dt);
       if (!s.stage && m.position.y < 0) { m.position.y = 0; s.vel.y = Math.abs(s.vel.y) * 0.45; fx.sparks(m.position, { count: 10 }); }
       m.rotation.x += s.spin.x * dt; m.rotation.y += s.spin.y * dt; m.rotation.z += s.spin.z * dt;
-      if (s.stage === 1 && s.gt > 2.15) { s.stage = 2; fx.twinkle(m.position.clone()); m.visible = false; s.tw = t; }
-      if (s.stage === 2 && t - s.tw > 0.9) { s.stage = 3; setCam('drone'); s.rel = t; fx.confetti(new THREE.Vector3(0, 0, -9 + 30), 220, 46); fx.shake(0.5, 0.4); }
+      // main.js 와 똑같이: twinkle 과 같은 프레임에 release 진입 (드론 카메라 전환 + 컨페티)
+      if (s.stage === 1 && s.gt > 2.15) { s.stage = 3; fx.twinkle(m.position.clone()); m.visible = false; s.tw = t; setCam('drone'); s.rel = t; fx.confetti(new THREE.Vector3(0, 0, -9 + 30), 220, 46); fx.shake(0.5, 0.4); }
       if (s.stage === 3) { const k = t - s.rel; for (const c of traffic) if (!c.userData.thx && c.position.z < -9 + k * 70) { c.userData.thx = 1; if (Math.random() < 0.6) fx.hearts(c.position.clone().setY(2.4)); } }
     },
     end() { fxScale = 1; for (const c of traffic) c.userData.thx = 0; } },
