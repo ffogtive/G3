@@ -554,7 +554,7 @@ function setupTunnel() {
   V.setHeadlights(player, true);
   blinkAll(fullCars);
   const camChase = chaseCam(px, -pS, 'chase');
-  const camPortal = chaseCam(px, 46, 'chase');
+  const camPortal = chaseCam(px, +(Q.get('pz') || 26), 'chase');
   const lead = fullCars[0];
   const camInside = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.3, 800);
   camInside.position.set(lead.position.x + 6.2, 3.6, lead.position.z - 12); camInside.lookAt(lead.position.x - 0.5, 1.6, lead.position.z + 4);

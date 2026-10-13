@@ -643,7 +643,8 @@ export const TUNNEL = Object.freeze({
   springY: 3.0,     // 직벽 → 아치 시작
   crownY: 8.0,      // 천장 꼭대기 (안쪽)
   capY: 9.2,        // 산 윗면 (컷어웨이 단면 높이)
-  portalTopY: 10.9, // 포털 현판부 꼭대기
+  portalTopY: 10.3, // 포털 현판부 꼭대기
+  boardY: 9.1,      // 현판 중심 높이 (아치 꼭대기 바로 위 — 추격캠이 포털 30~45m 앞에서 화면 위쪽에 잡음)
   approach: 14,     // 포털 앞(+Z) 날개벽·비탈 길이
 });
 const TN = TUNNEL;
@@ -837,9 +838,22 @@ export function buildTunnelSegment(length = SEG_LEN, opts = {}) {
 export const TUNNEL_AMBIENCE = Object.freeze({ hemiSky: 0xffdcb4, hemiGround: 0x5a4632, hemiI: 1.45, sunI: 0.55, fog: 0x3a2c22, fogNear: 50, fogFar: 260 });
 
 // 포털 현판 (캔버스): 녹색 판 + 흰 테두리 + 터널 이름(크게) + 길이
-function tunnelBoardMaterial(name, sub, night) {
-  const key = 'tboard|' + name + '|' + sub + '|' + (night ? 1 : 0);
+const SIGN_X = TN.wallX + 2.6, SIGN_Y = 2.6; // 입구 안내 표지 (오른쪽 날개벽 끝 바깥, 판 하단 2.6m)
+function tunnelBoardMaterial(name, sub, night, stacked = false) {
+  const key = 'tboard|' + name + '|' + sub + '|' + (night ? 1 : 0) + '|' + (stacked ? 1 : 0);
   return cached(_matCache, key, () => {
+    if (stacked) { // 길가 표지: 위 이름 / 아래 길이 (2줄)
+      const W = 1024, H = 350;
+      const tex = textTexture(W, H, (ctx) => {
+        ctx.fillStyle = '#0b7a4b'; rrect(ctx, 0, 0, W, H, 30); ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 10; rrect(ctx, 16, 16, W - 32, H - 32, 22); ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        fitFont(ctx, name, FONT_DISPLAY, sub ? 150 : 190, W - 110);
+        ctx.fillText(name, W / 2, sub ? H * 0.38 : H * 0.53);
+        if (sub) { fitFont(ctx, sub, FONT_DISPLAY, 92, W - 160); ctx.fillText(sub, W / 2, H * 0.75); }
+      }, { aniso: 16 });
+      return new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: night ? 0.6 : 0.25, name: 'scenery.tunnelSign' });
+    }
     const W = 1536, H = 300;
     const tex = textTexture(W, H, (ctx) => {
       ctx.fillStyle = '#0b7a4b'; rrect(ctx, 0, 0, W, H, 34); ctx.fill();
@@ -911,7 +925,11 @@ function buildPortalGeo(night) {
     }
   }
   // 현판 받침 (판 뒤 어두운 테두리)
-  F.box(0, 9.15, ZF + 0.03, 7.9, 1.72, 0.06, 0x3a3d42);
+  F.box(0, TN.boardY - 0.86, ZF + 0.03, 7.9, 1.72, 0.06, 0x3a3d42);
+  // 입구 오른쪽 터널 안내 표지 기둥 (판은 별도 메시) — 낮아서 추격캠에서 오래 읽힘
+  F.box(SIGN_X - 1.4, 0, ZF + AP - 1.0, 0.16, SIGN_Y + 0.1, 0.16, 0x8a939b, { nb: true });
+  F.box(SIGN_X + 1.4, 0, ZF + AP - 1.0, 0.16, SIGN_Y + 0.1, 0.16, 0x8a939b, { nb: true });
+  F.box(SIGN_X, SIGN_Y - 0.08, ZF + AP - 1.08, 3.96, 1.46, 0.08, 0x9aa1a8);
   return F.build();
 }
 /**
@@ -934,8 +952,10 @@ export function buildTunnelPortal(name = '○○터널', opts = {}) {
     const sub = opts.sub ?? (opts.length ? `L=${Math.round(opts.length).toLocaleString('en-US')}m` : '');
     const bw = 7.6, bh = 1.5;
     board = new THREE.Mesh(cached(_propCache, 'tboardGeo', () => new THREE.PlaneGeometry(bw, bh)), tunnelBoardMaterial(name, sub, night));
-    board.name = 'board'; board.position.set(0, 10.0, 0.8 + 0.07);
-    g.add(board);
+    board.name = 'board'; board.position.set(0, TN.boardY, 0.8 + 0.07);
+    const side = new THREE.Mesh(cached(_propCache, 'tsideGeo', () => new THREE.PlaneGeometry(3.8, 1.3)), tunnelBoardMaterial(name, sub, night, true));
+    side.name = 'sideSign'; side.position.set(SIGN_X, SIGN_Y + 0.65, 0.8 + TN.approach - 1.0);
+    g.add(board, side);
   }
   g.userData = { kind: 'tunnelPortal', name, board, drawCalls: g.children.length, approach: TN.approach };
   return g;
