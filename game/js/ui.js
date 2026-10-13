@@ -376,8 +376,36 @@ function clearTweens() { tweens.clear(); cancelAnimationFrame(twRaf); twRaf = 0;
 function shieldHTML(route, cls = '') {
   return `<span class="ui-shield ${cls}">${SVG.shield}<b class="ui-shield__n">${esc(route ?? '')}</b></span>`;
 }
-function stageTitle(s) { return String(s?.title || '').replace(/\s*\(최종보스\)\s*/, ''); }
-const isFinalBoss = (s) => /최종보스/.test(String(s?.title || ''));
+// ── 스테이지 등급 · 처분 카드 (100스테이지 카탈로그)
+// 제목 접두사 [최종보스]/[보스]/[엘리트]/[보너스] → 제목에서 떼고 배지로. 없으면 플래그(boss/elite), 그다음 옛 '(최종보스)' 꼬리표.
+const KIND_RE = /^\s*\[(최종보스|보스|엘리트|보너스)\]\s*/;
+const KIND_OF = { 최종보스: 'final', 보스: 'boss', 엘리트: 'elite', 보너스: 'bonus' };
+const KIND_LABEL = { final: '최종보스', boss: '보스', elite: '엘리트', bonus: '보너스' };
+function stageKind(s) {
+  const t = String(s?.title || '');
+  const m = KIND_RE.exec(t);
+  if (m) return KIND_OF[m[1]];
+  if (s && s.elite) return 'elite';
+  if (s && s.boss) return 'boss';
+  if (/최종보스/.test(t)) return 'final';
+  return '';
+}
+function stageTitle(s) { return String(s?.title || '').replace(KIND_RE, '').replace(/\s*\(최종보스\)\s*/, '').trim(); }
+const isFinalBoss = (s) => stageKind(s) === 'final';
+const kindBadge = (k, cls = '') => (k ? `<span class="ui-kindb ui-kindb--${k} ${cls}">${KIND_LABEL[k]}</span>` : '');
+const CASE_CHIP = { crime: '형사', rescue: '구조', warn: '계도' };
+const caseChip = (ck, cls = '') => (CASE_CHIP[ck] ? `<span class="ui-casechip ui-casechip--${ck} ${cls}">${CASE_CHIP[ck]}</span>` : '');
+// 처분 카드: 고지서(기본) · 형사(빨강 '형사 입건') · 표창(금색 '구조 표창') · 계도(회색 '계도장', 범칙금 0)
+const CASE_OF = { 고지서: 'fine', 형사: 'crime', 표창: 'rescue', 계도: 'warn' };
+const caseKind = (c) => CASE_OF[String(c ?? '').trim()] || 'fine';
+const CASE = {
+  fine: { stamp: '과태료 고지서', tag: '오늘의 빌런', amt: '범칙금', done: '참교육 완료', seal: ['참교', '육청'] },
+  crime: { stamp: '형사 입건', tag: '형사 사건', amt: '벌금', done: '형사 입건', seal: ['입', '건'] },
+  rescue: { stamp: '구조 표창', tag: '구조 요청', amt: '', done: '구조 완료', seal: ['표', '창'] },
+  warn: { stamp: '계도장', tag: '계도 대상', amt: '', done: '계도 완료', seal: ['계', '도'] },
+};
+// 큰 금액은 '1,500만원' (형사 벌금은 최대 5천만원), 작은 금액은 '₩40,000'
+const bigWon = (n) => { n = Math.max(0, Math.round(num(n))); return n >= 1e6 ? `${kor(n)}원` : won(n); };
 
 // ───────────────────────────── 빌드
 function ensure() {
@@ -1212,15 +1240,16 @@ function stageCardHTML(s, i, label, P, opts) {
   const locked = i >= TS.unlocked;
   const stars = starsOf(P, s);
   const best = Math.round(num(P.best[s?.id]));
-  const fin = isFinalBoss(s);
+  const kd = stageKind(s);
+  const ck = caseKind(s?.card);
   let st = '';
   for (let k = 0; k < 3; k++) st += `<span class="ui-star ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`;
-  const cls = `ui-stagecard${opts.compact ? ' ui-stagecard--sm' : ''}${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${fin ? ' is-final' : ''}`;
+  const cls = `ui-stagecard${opts.compact ? ' ui-stagecard--sm' : ''}${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${kd ? ` is-${kd}` : ''} is-case-${ck}`;
   const meta = best > 0 ? 'BEST ' + fmt(best) : (locked ? '' : (s?.displayKm != null ? '정체 ' + esc(s.displayKm) + 'km' : ''));
   return `<button type="button" class="${cls}" data-i="${i}" style="--i:${opts.k}">
       <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b><span>${esc(s?.direction)}</span></span></span>
       <span class="ui-stagecard__body">
-        <span class="ui-stagecard__no">${label}${fin ? '<em>최종보스</em>' : ''}</span>
+        <span class="ui-stagecard__no">${label}${kindBadge(kd)}${caseChip(ck)}</span>
         <span class="ui-stagecard__title">${esc(stageTitle(s))}</span>
         <span class="ui-stagecard__meta"><span class="ui-stars">${st}</span><span class="ui-stagecard__best">${meta}</span></span>
       </span>
@@ -1234,14 +1263,16 @@ function stageTileHTML(s, i, label, P, opts) {
   const locked = i >= TS.unlocked;
   const stars = starsOf(P, s);
   const best = Math.round(num(P.best[s?.id]));
-  const fin = isFinalBoss(s);
+  const kd = stageKind(s);
+  const ck = caseKind(s?.card);
   let st = '';
   for (let k = 0; k < 3; k++) st += `<span class="ui-star ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`;
-  const cls = `ui-stagecard ui-stagecard--sm${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${fin ? ' is-final' : ''}`;
-  return `<button type="button" class="${cls}" data-i="${i}" style="--i:${opts.k}" aria-label="${esc(label + ' ' + stageTitle(s))}">
-      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${fin ? '<em>BOSS</em>' : ''}</span><span class="ui-stars ui-stagecard__hstars">${st}</span></span>
+  const cls = `ui-stagecard ui-stagecard--sm${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${kd ? ` is-${kd}` : ''} is-case-${ck}`;
+  const aria = `${label} ${kd ? KIND_LABEL[kd] + ' ' : ''}${stageTitle(s)}${ck !== 'fine' ? ' (' + CASE[ck].tag + ')' : ''}`;
+  return `<button type="button" class="${cls}" data-i="${i}" style="--i:${opts.k}" aria-label="${esc(aria)}">
+      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${kd ? `<em>${KIND_LABEL[kd]}</em>` : ''}</span><span class="ui-stars ui-stagecard__hstars">${st}</span></span>
       <span class="ui-stagecard__body">
-        <span class="ui-stagecard__title">${esc(stageTitle(s))}</span>
+        <span class="ui-stagecard__title">${caseChip(ck, 'ui-casechip--tile')}${esc(stageTitle(s))}</span>
         <span class="ui-stagecard__meta"><span class="ui-stars">${st}</span>${locked ? '' : `<span class="ui-stagecard__best">${best > 0 ? 'BEST ' + fmt(best) : ''}</span>`}</span>
       </span>
       ${locked ? `<span class="ui-stagecard__lock"><span class="ui-stagecard__lockico">${SVG.lock}</span><span>잠김</span></span>` : ''}
