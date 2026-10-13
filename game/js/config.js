@@ -19,6 +19,7 @@ export const MEDIAN_X = ROAD_LEFT - MEDIAN_GAP - MEDIAN_W / 2; // 분리대 중�
 export const OPP_LANE_X = (j) => MEDIAN_X - MEDIAN_W / 2 - MEDIAN_GAP - LANE_W * (j + 0.5);
 export const OPP_ROAD_LEFT = OPP_LANE_X(3) - LANE_W / 2; // 반대편 도로 바깥 끝 ≈ -23.25
 export const SEG_LEN = 40;                           // 도로 세그먼트 길이 (s 방향)
+export const SHOULDER_LANE = 4;                      // 갓길 = 가상의 5번째 차선 (laneX(4) = 9.0, 갓길 x∈[7.2,10.2])
 
 export const sToZ = (s) => -s;
 export const zToS = (z) => -z;
@@ -53,8 +54,13 @@ export const SKY = {
 // ─────────────────────────────────────────────────────────────
 // 스테이지: 매 스테이지 = 정체 → 원흉 발견 → 참교육 → 뻥 뚫림
 // villains[].kind 는 vehicles.js buildVehicle kind 와 일치해야 함.
-// attacks: 'brakeCheck' | 'throw' | 'swerve' | 'smoke' | 'zigzag'
-// throwItem: projectile kind (vehicles.js buildProjectile)
+// 정체의 개연성: 빌런이 1차선(추월차선) 등을 막고, 나머지 차선은 frontRow(원래 느린 화물차·버스)가 나란히 →
+//   아무도 추월 못 함 → 빌런 바로 뒤부터 빽빽한 정체. 플레이어는 갓길(긴급차량)로 맨 앞까지 간다.
+// attacks (플레이어가 빌런 '앞'에서 싸움, 공격은 앞으로 날아옴):
+//   'highbeam'(상향등: 차선 섬광) | 'horn'(경적 충격파) | 'lunge'(돌진) | 'throw'(직격 투척) | 'roll'(굴러오는 것)
+//   'swerve'(차선 가로막기) | 'zigzag'(갈지자) | 'smoke'(매연)
+// frontRow: { [lane]: kind } — 빌런 옆에 나란히 서서 '벽'이 되는 정상 저속 차량
+// shoulder: 갓길 장애물 구성 [kind, count] — 'breakdown'(고장차+삼각대) | 'cones'(공사 콘) | 'debris'(낙하물) | 'cheater'(갓길 얌체)
 export const STAGES = [
   {
     id: 1,
@@ -63,19 +69,22 @@ export const STAGES = [
     direction: '부산 방향',
     title: '1차선 정속주행러',
     villainLine: '"규정속도 지키는데 뭐가 문제죠?"',
-    blurb: '1차선에서 혼자 정속주행 중. 뒤로 3.2km가 막혔다.',
+    blurb: '추월차선(1차선)을 혼자 정속주행. 2~4차선은 화물차라 아무도 못 지나간다.',
+    cause: '1차선 저속차량',
     sky: 'day',
     jamLength: 170,          // 실제 시뮬 거리(m). 연출상 표시 거리는 displayKm
     displayKm: 3.2,
-    density: 1.0,            // 1.0 = 기본 차간
-    jamSpeed: 2.4,           // 정체 기본 속도 m/s (~13km/h)
+    density: 1.0,
+    jamSpeed: 2.4,           // 정체 기본 속도 m/s (~9km/h)
     villainSpeedLabel: '정속 80km/h',
     villains: [
       { kind: 'villainSedan', lane: 0, hp: 140, name: '정속주행 김사장', color: 0xd9c9a3 },
     ],
-    attacks: { brakeCheck: 3, throw: 1 },
+    frontRow: { 1: 'bus', 2: 'truck', 3: 'truck' },
+    shoulder: [['breakdown', 1], ['cones', 1], ['cheater', 1]],
+    attacks: { highbeam: 2, horn: 2, lunge: 2, throw: 1 },
     throwItem: 'cup',
-    attackInterval: [2.6, 3.8],
+    attackInterval: [2.4, 3.6],
     taunts: ['규정속도 준수 중입니다~', '추월은 2차선으로 하세요', '1차선은 내 차선인데?', '왜 빵빵거려?', '난 안 급해~', '정속주행이 죄냐?'],
     signs: [['부산', '387km'], ['대전', '128km']],
     vms: '1차선은 추월차선입니다',
@@ -83,24 +92,27 @@ export const STAGES = [
   {
     id: 2,
     highway: '영동고속도로',
-    route: 50,              // 실제 고속도로 노선번호 (방패 배지)
+    route: 50,
     direction: '강릉 방향',
     title: '화물차 나란히 주행',
     villainLine: '"형님 먼저~ 아우 먼저~"',
-    blurb: '25톤 두 대가 1·2차선을 나란히 막고 수다 떠는 중.',
+    blurb: '25톤 두 대가 1·2차선을 나란히 막고 무전 수다 중. 3·4차선도 화물차 행렬.',
+    cause: '화물차 병렬 주행',
     sky: 'sunset',
     jamLength: 190,
     displayKm: 5.8,
-    density: 1.03,
+    density: 1.0,
     jamSpeed: 2.4,
     villainSpeedLabel: '나란히 60km/h',
     villains: [
       { kind: 'villainTruck', lane: 0, hp: 120, name: '형님 트럭', color: 0x2f6fd6 },
       { kind: 'villainTruck', lane: 1, hp: 120, name: '아우 트럭', color: 0x3a9d5d },
     ],
-    attacks: { throw: 3, brakeCheck: 1 },
+    frontRow: { 2: 'truck', 3: 'pickup1t' },
+    shoulder: [['breakdown', 1], ['debris', 2], ['cheater', 1]],
+    attacks: { roll: 3, horn: 2, lunge: 1 },
     throwItem: 'watermelon',
-    attackInterval: [2.2, 3.2],
+    attackInterval: [2.0, 3.0],
     taunts: ['형님 먼저 가세요~', '아우 먼저 가~', '우린 나란히가 좋아', '수박 사세요~', '무전기 감도 좋고~'],
     signs: [['강릉', '164km'], ['원주', '52km']],
     vms: '화물차는 우측 차로로',
@@ -108,21 +120,24 @@ export const STAGES = [
   {
     id: 3,
     highway: '서해안고속도로',
-    route: 15,              // 실제 고속도로 노선번호 (방패 배지)
+    route: 15,
     direction: '목포 방향',
     title: '차선 물고 가는 SUV',
     villainLine: '"차선? 그게 뭐임?"',
-    blurb: '1·2차선 사이를 물고 달리며 아무도 못 지나가게 한다.',
+    blurb: '1·2차선을 물고 달리다가 추월하려는 차가 오면 옆으로 막아버린다.',
+    cause: '차선 걸침 주행',
     sky: 'morning',
     jamLength: 200,
     displayKm: 7.1,
-    density: 1.06,
+    density: 1.02,
     jamSpeed: 2.4,
     villainSpeedLabel: '두 차선 점유',
     villains: [
       { kind: 'villainSuv', lane: 0.5, hp: 200, name: '차선물기 대마왕', color: 0x1d1f22 },
     ],
-    attacks: { swerve: 3, throw: 2, brakeCheck: 1 },
+    frontRow: { 3: 'truck' },
+    shoulder: [['cones', 2], ['breakdown', 1], ['cheater', 1]],
+    attacks: { swerve: 3, highbeam: 2, lunge: 1, throw: 1 },
     throwItem: 'cup',
     attackInterval: [2.0, 3.0],
     taunts: ['내 차 크잖아~', '두 칸이 편해', '깜빡이? 고장났어', '비켜 비켜~', '안 보여서 몰랐어'],
@@ -132,21 +147,24 @@ export const STAGES = [
   {
     id: 4,
     highway: '중부고속도로',
-    route: 35,              // 실제 고속도로 노선번호 (방패 배지)
+    route: 35,
     direction: '통영 방향',
     title: '폰 보며 지그재그',
     villainLine: '"ㅋㅋㅋ 잠만 이것만 보고"',
-    blurb: '숏폼 보면서 1~3차선을 갈지자로. 급정거는 덤.',
+    blurb: '숏폼 보면서 1~3차선을 갈지자로. 무서워서 아무도 옆으로 못 지나간다.',
+    cause: '휴대폰 보며 갈지자 운전',
     sky: 'night',
     jamLength: 200,
     displayKm: 9.4,
-    density: 1.08,
+    density: 1.04,
     jamSpeed: 2.4,
     villainSpeedLabel: '시속 ??km',
     villains: [
       { kind: 'villainPhone', lane: 1, hp: 220, name: '숏폼중독 드라이버', color: 0xe85d9a },
     ],
-    attacks: { zigzag: 3, brakeCheck: 2, throw: 1 },
+    frontRow: { 3: 'bus' },
+    shoulder: [['breakdown', 1], ['debris', 2], ['cones', 1], ['cheater', 1]],
+    attacks: { zigzag: 3, highbeam: 2, throw: 1, lunge: 1 },
     throwItem: 'phone',
     attackInterval: [1.8, 2.8],
     taunts: ['ㅋㅋㅋㅋ', '잠만 이것만', '어? 여기 차선이었어?', '좋아요 눌러주세요~', '구독과 알림설정!'],
@@ -156,21 +174,24 @@ export const STAGES = [
   {
     id: 5,
     highway: '남해고속도로',
-    route: 10,              // 실제 고속도로 노선번호 (방패 배지)
+    route: 10,
     direction: '순천 방향',
     title: '1차선 경운기 (최종보스)',
     villainLine: '"허허, 젊은 것들이 급하긴"',
-    blurb: '어떻게 들어왔는지 모를 경운기가 1차선을 점령했다.',
+    blurb: '시속 15km 경운기가 1차선을 점령. 옆 차선은 벌초 가는 트럭 행렬.',
+    cause: '1차선 경운기',
     sky: 'day',
     jamLength: 220,
     displayKm: 12.7,
-    density: 1.1,
+    density: 1.05,
     jamSpeed: 2.4,
     villainSpeedLabel: '시속 15km',
     villains: [
       { kind: 'tractor', lane: 0, hp: 340, name: '전설의 경운기 할배', color: 0x3f8f3a },
     ],
-    attacks: { throw: 3, smoke: 2, brakeCheck: 1 },
+    frontRow: { 1: 'pickup1t', 2: 'truck', 3: 'truck' },
+    shoulder: [['cones', 2], ['debris', 2], ['breakdown', 1], ['cheater', 1]],
+    attacks: { roll: 3, smoke: 2, throw: 1, horn: 1 },
     throwItem: 'hay',
     attackInterval: [1.7, 2.6],
     taunts: ['허허 급하긴~', '탈탈탈탈탈', '논에 물 대러 가는 길이여', '빵빵거리지 마라 귀 아프다', '옛날엔 다 이렇게 다녔어'],
@@ -185,6 +206,9 @@ export const BUMP_LINES = ['아 뭐야!', '조심 좀!', '빵빵!!', '거리 유
 export const CUTIN_LINES = ['깜빡이 안 켜고 칼치기!', '끼어들기 ㅡㅡ', '말도 없이?!'];
 export const YIELD_LINES = ['네네 가세요~', '급하시네 ㅎ', '에휴 먼저 가요', '비켜드림', '형님 먼저!'];
 export const NOWAY_LINES = ['어디로 비켜!', '나도 막혔어!', '틈이 없어요!', '빵빵해도 소용없음'];
+export const LETIN_LINES = ['들어오세요~', '긴급차량 먼저!', '어서 가세요!', '저 놈 좀 혼내줘요!'];
+export const FRONT_RAGE_LINES = ['1차선 좀 비켜!!', '추월 좀 하자!!', '빵빵빵빵!', '앞에 뭐야 진짜…', '추월차선인데?!', '저 차 때문에…'];
+export const CHEATER_LINES = ['죄송합니다~', '아 들켰다', '급해서요ㅠ', '블박 찍혔나?'];
 
 // 게임플레이 튜닝 값 (main/player/boss/weapons 공유)
 export const TUNE = {
@@ -198,8 +222,8 @@ export const TUNE = {
   cutinRage: 0.1,
   nowayRage: 0.03,         // 경적 울렸는데 못 비킬 때
   tauntRage: 0.025,        // 원흉 도발 볼 때마다
-  bossTriggerDist: 45,     // 원흉과 이 거리 이내 → 보스전
-  bossFollowGap: 13,       // 보스전에서 플레이어는 원흉 뒤 이 거리 유지
+  bossAheadGap: 11,        // 보스전: 플레이어는 원흉 '앞' 이 거리에서 싸운다 (뒤는 정체라 못 감)
+  shoulderMaxV: 18,        // 갓길 최고속 m/s
   tackDmg: 4,
   tackRate: 7,             // 초당 발사
   superDmg: 38,
@@ -207,5 +231,7 @@ export const TUNE = {
   hitRage: 0.14,           // 원흉 공격 맞으면 분노 +
   releaseWaveSpeed: 70,    // m/s, 해방 물결이 뒤로 퍼지는 속도
   releaseSpeed: [27, 36],  // 해방 후 NPC 목표 속도 m/s (~100~130km/h)
+  releaseLaneDelay: 0.45,  // 해방 순서: 1차선 먼저 → 차선마다 이만큼 늦게 (인과가 보이도록)
+  truckFreeSpeed: [20, 23],// 해방 후 화물차/버스 속도 (원래 느린 차들)
   cruiseTime: 4.2,         // 해방 후 질주 시간
 };

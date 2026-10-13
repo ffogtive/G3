@@ -1,8 +1,21 @@
-// 교통 시뮬레이션: IDM(지능형 차간거리 모델) 기반 차량 추종 + 정체 클러스터 + 칼치기 + 해방 물결.
+// 교통 시뮬레이션 v2 — "정체의 인과"가 보이게
+//
+// 가설: 빌런이 1차선(추월차선)을 막고, 나머지 차선은 원래 느린 화물차·버스(frontRow)가 나란히 → 추월 불가 →
+//       빌런 바로 뒤부터 빽빽한 정체. 플레이어(긴급차량)는 갓길로 맨 앞까지 간다.
+//       빌런이 사라지면 1차선부터 터지고 → 2~4차선 차들이 1차선으로 빠져 추월 → 뒤로 물결.
+//
+// 구성
+//  - IDM 차량 추종 (차선 0~3 = 1~4차선, 4 = 갓길)
+//  - frontRow(isWall): 빌런 옆에 나란히 붙어 속도를 맞추는 정상 저속 차량
+//  - 정체: frontRow/빌런 바로 뒤부터 촘촘하게
+//  - 갓길: 고정 장애물(고장차/콘/낙하물) + 갓길 얌체(cheater, 경적 울리면 4차선으로 복귀)
+//  - 경적: 갓길에서 → 얌체 복귀 / 장애물 앞에서 4차선이 끼워줌(let-in). 차선에서 → 앞차 양보 or 옆 차선이 끼워줌
+//  - 해방: 1차선부터 차선별 지연 + 앞→뒤 물결, 해방 후 느린 차는 오른쪽, 빠른 차는 1차선으로 추월
 import {
-  laneX, LANE_W, NUM_LANES, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, TUNE, OPP_LANE_X,
+  laneX, LANE_W, NUM_LANES, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, TUNE, OPP_LANE_X, SHOULDER_LANE,
 } from './config.js';
 import { buildVehicle, setBrake, setHazard, setHeadlights } from './vehicles.js';
+import { buildShoulderObstacle } from './shoulder.js';
 
 // 결정적 난수 (스테이지마다 같은 배치)
 export function mulberry32(a) {
@@ -14,9 +27,10 @@ export function mulberry32(a) {
   };
 }
 
+export const ALL_LANES = NUM_LANES + 1; // 갓길 포함
 const LANE_HALF_OCC = LANE_W / 2 - 0.6;
 
-// 엔티티 e(x,w)가 차선 i를 점유하는가
+// 엔티티 e(x,w)가 차선 i를 점유하는가 (i=4 갓길 포함)
 export function occupies(e, i) {
   return Math.abs(e.x - laneX(i)) < e.w / 2 + LANE_HALF_OCC;
 }
@@ -29,32 +43,36 @@ function pickWeighted(rng, table) {
   return table[0][0];
 }
 
+const SLOW_KINDS = new Set(['truck', 'bus', 'pickup1t']);
 let CAR_ID = 1;
 
 export class Traffic {
   constructor(scene) {
     this.scene = scene;
     this.cars = [];
+    this.obstacles = [];
     this.opp = [];
-    this.buckets = Array.from({ length: NUM_LANES }, () => []);
+    this.buckets = Array.from({ length: ALL_LANES }, () => []);
     this.time = 0;
     this.frontLine = 0;
     this.frontV = 0;
-    this.arenaGap = 30;
     this.released = false;
     this.releasedCount = 0;
     this.onReleased = null;   // (car) => void
-    this.onCutIn = null;      // (car) => void
+    this.onCheater = null;    // (car) => void  갓길 얌체 등장
     this.night = false;
   }
 
   clear() {
     for (const c of this.cars) this.scene.remove(c.mesh);
     for (const c of this.opp) this.scene.remove(c.mesh);
+    for (const o of this.obstacles) this.scene.remove(o.mesh);
     this.cars.length = 0;
     this.opp.length = 0;
+    this.obstacles.length = 0;
     this.released = false;
     this.releasedCount = 0;
+    this.stuckT = 0;
   }
 
   _makeCar(rng, kind, lane, s, v, extra = {}) {
@@ -70,9 +88,9 @@ export class Traffic {
       len: ud.length || 4.5, w: ud.width || 1.9,
       personal: 0.97 + rng() * 0.06,
       phase: rng() * Math.PI * 2,
-      brakeT: 0, brakeOn: false, hazardUntil: 0, hazardOn: false,
-      released: false, releaseAt: Infinity, vFree: 30,
-      isWall: false, nextLcAt: 6 + rng() * 16,
+      brakeT: 0, pullT: 0, brakeOn: false, hazardUntil: 0, hazardOn: false,
+      released: false, releaseAt: Infinity, vFree: 30, slow: SLOW_KINDS.has(kind),
+      isWall: false, isCheater: false, nextLcAt: 0,
       bumpJolt: 0, yaw: 0,
       ...extra,
     };
@@ -83,7 +101,7 @@ export class Traffic {
     return car;
   }
 
-  // 정체 생성. villains: [{s, x, w, len, laneSet:Set}], playerStart: {s, lane}
+  // villains: [{s, x, w, len}], playerStart: {s, lane}
   spawnJam(stage, villains, playerStart, rng, night = false) {
     this.clear();
     this.night = night;
@@ -93,62 +111,73 @@ export class Traffic {
     this.frontV = stage.jamSpeed;
     this.jamSpeed = stage.jamSpeed;
     const density = stage.density || 1;
-    const tail = playerStart.s - 70;
-    const jamHead = sFront - this.arenaGap;
+    const tail = playerStart.s - 45;
     this.sTail = tail;
-    this.sHead = jamHead;
 
-    // 원흉이 점유하지 않는 차선에 "나란히 막는 벽" 차량
+    // ① 앞줄(frontRow): 빌런 옆에 나란히 서는 정상 저속 차량 → '벽'
     const villainLanes = new Set();
     for (const v of villains) for (let i = 0; i < NUM_LANES; i++) if (occupies(v, i)) villainLanes.add(i);
     if (stage.attacks && stage.attacks.zigzag) { villainLanes.add(0); villainLanes.add(1); villainLanes.add(2); }
+    const fr = stage.frontRow || { 1: 'truck', 2: 'truck', 3: 'truck' };
+    const frontRear = new Array(NUM_LANES).fill(Infinity);
+    for (const v of villains) for (let i = 0; i < NUM_LANES; i++) if (occupies(v, i)) frontRear[i] = Math.min(frontRear[i], v.s - v.len / 2);
+    this.zigzag = !!(stage.attacks && stage.attacks.zigzag);
     for (let l = 0; l < NUM_LANES; l++) {
       if (villainLanes.has(l)) continue;
-      const kind = rng() < 0.25 ? 'truck' : pickWeighted(rng, NPC_KINDS.filter(([k]) => k !== 'bus'));
-      const c = this._makeCar(rng, kind, l, sFront - 7 - rng() * 1.5, stage.jamSpeed);
-      c.isWall = true;
-      c.wallOffset = 7 + rng() * 1.5 + (c.len - 4.5) / 2;
+      if (!fr[l]) continue; // 빌런이 스워브로 막는 차선 (가상의 '못 지나감' 벽)
+      const kind = fr[l] || 'truck';
+      const off = (rng() - 0.5) * 1.2;
+      const c = this._makeCar(rng, kind, l, sFront + off, stage.jamSpeed, { isWall: true, wallOffset: off });
+      frontRear[l] = c.s - c.len / 2;
     }
+    // 지그재그 빌런: 빌런 바로 뒤 차선들은 겁나서 거리 둠 (그래도 막혀 있음)
+    for (let l = 0; l < NUM_LANES; l++) if (!isFinite(frontRear[l])) frontRear[l] = sFront - 3;
 
-    // 차선별 클러스터 배치 (앞→뒤)
-    // 기본: 랜덤 간격(가끔 2대 묶음). 너무 촘촘하면 차선 변경이 불가능해 진행이 막힌다 (시뮬로 검증: tools/sim)
-    const cMin = stage.clusterMin ?? 1, cMax = stage.clusterMax ?? 1;
-    const gMin = stage.gapMin ?? 12, gMax = stage.gapMax ?? 28;
+    // ② 정체: 앞줄 바로 뒤부터 빽빽하게 (플레이어 시작 자리만 비움)
     for (let l = 0; l < NUM_LANES; l++) {
-      // 차선마다 선두 위치를 엇갈리게 (선두가 일렬로 막지 않도록)
-      let cursor = jamHead - rng() * 14 - l * 3;
-      let clusterLeft = cMin + Math.floor(rng() * (cMax - cMin + 1));
+      let cursor = frontRear[l] - (2.2 + rng() * 1.6) - (villainLanes.has(l) && stage.attacks?.zigzag ? 6 : 0);
       while (cursor > tail) {
         const kind = pickWeighted(rng, NPC_KINDS);
-        // 길이를 알기 위해 먼저 빌드
-        const tmp = this._makeCar(rng, kind, l, 0, stage.jamSpeed * 0.8);
-        const s = cursor - tmp.len / 2;
-        // 플레이어 시작 위치 근처는 비워둔다
-        if (l === playerStart.lane && Math.abs(s - playerStart.s) < tmp.len / 2 + 9) {
-          this.scene.remove(tmp.mesh); this.cars.pop();
-          cursor = playerStart.s - 10;
-          continue;
+        const tmp = this._makeCar(rng, kind, l, 0, stage.jamSpeed * 0.7);
+        let s = cursor - tmp.len / 2;
+        if (l === playerStart.lane && s + tmp.len / 2 > playerStart.s - 3.4 && s - tmp.len / 2 < playerStart.s + 3.4) {
+          // 플레이어 자리: 바로 뒤로 밀어 둔다
+          s = playerStart.s - 3.4 - tmp.len / 2 - 2.0;
         }
         tmp.s = s;
         tmp.mesh.position.z = -s;
-        let gap;
-        clusterLeft--;
-        if (clusterLeft <= 0) {
-          gap = (gMin + rng() * (gMax - gMin)) / density;
-          clusterLeft = cMin + Math.floor(rng() * (cMax - cMin + 1) * Math.min(1.4, density));
-        } else {
-          gap = 2.0 + rng() * 1.2;
-        }
-        cursor = s - tmp.len / 2 - gap;
+        cursor = s - tmp.len / 2 - (1.5 + rng() * 1.7) / density;
       }
     }
 
-    // 반대편 차로 (뻥 뚫려서 쌩쌩)
+    // ③ 갓길: 장애물 + 얌체
+    const spec = stage.shoulder || [['breakdown', 1], ['cones', 1], ['cheater', 1]];
+    const list = [];
+    for (const [k, n] of spec) for (let i = 0; i < n; i++) list.push(k);
+    // 섞기
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+    const s0 = playerStart.s + 38, s1 = sFront - 22;
+    const step = (s1 - s0) / Math.max(1, list.length);
+    list.forEach((kind, i) => {
+      const s = s0 + step * (i + 0.25 + rng() * 0.5);
+      if (kind === 'cheater') {
+        const c = this._makeCar(rng, pickWeighted(rng, [['sedan', 3], ['suv', 2], ['compact', 1]]), SHOULDER_LANE, s, 4.5, { isCheater: true });
+        c.cheaterV = 4 + rng() * 2.5;
+        return;
+      }
+      const ob = buildShoulderObstacle(kind, rng);
+      ob.group.position.set(laneX(SHOULDER_LANE) - 0.1, 0, -s);
+      this.scene.add(ob.group);
+      const e = { id: CAR_ID++, kind, mesh: ob.group, s, x: laneX(SHOULDER_LANE) - 0.1, len: ob.len, w: ob.w, v: 0, isObstacle: true, hazardCar: ob.hazardCar, smash: kind !== 'breakdown' };
+      if (ob.hazardCar && night) setHeadlights(ob.hazardCar, false);
+      this.obstacles.push(e);
+    });
+
+    // ④ 반대편 차로 (뻥 뚫려서 쌩쌩 — 약 올림)
     for (let i = 0; i < 26; i++) {
       const j = Math.floor(rng() * 4);
       const kind = pickWeighted(rng, NPC_KINDS);
-      const mono = rng() < 0.7;
-      const pal = mono ? NPC_COLORS_MONO : NPC_COLORS_POP;
+      const pal = rng() < 0.7 ? NPC_COLORS_MONO : NPC_COLORS_POP;
       const mesh = buildVehicle(kind, { color: pal[Math.floor(rng() * pal.length)] });
       mesh.rotation.y = Math.PI;
       if (night) setHeadlights(mesh, true);
@@ -160,25 +189,23 @@ export class Traffic {
     for (const c of this.cars) setBrake(c.mesh, true);
   }
 
-  // 차선 버킷 구축 (s 오름차순)
+  // 차선 버킷 (s 오름차순)
   _buildBuckets(extra) {
     const B = this.buckets;
     for (const b of B) b.length = 0;
-    const add = (e) => {
-      for (let i = 0; i < NUM_LANES; i++) if (occupies(e, i)) B[i].push(e);
-    };
+    const add = (e) => { for (let i = 0; i < ALL_LANES; i++) if (occupies(e, i)) B[i].push(e); };
     for (const c of this.cars) add(c);
+    for (const o of this.obstacles) add(o);
     for (const e of extra) if (e) add(e);
     for (const b of B) b.sort((a, b2) => a.s - b2.s);
   }
 
-  // 엔티티 e 의 전방 선행 차량 (점유 차선들 중 가장 가까운 것)
+  // 엔티티 e 의 전방 선행 차량 (점유 차선 중 가장 가까운 것)
   leaderOf(e) {
     let best = null, bestGap = Infinity;
-    for (let i = 0; i < NUM_LANES; i++) {
+    for (let i = 0; i < ALL_LANES; i++) {
       if (!occupies(e, i)) continue;
       const b = this.buckets[i];
-      // 이진 탐색 대신 선형 (차선당 ~40대)
       for (let k = 0; k < b.length; k++) {
         const o = b[k];
         if (o === e || o.s <= e.s) continue;
@@ -190,19 +217,34 @@ export class Traffic {
     return best ? { car: best, gap: bestGap } : null;
   }
 
-  // 특정 차선/구간에 무언가 있는가 (차선 변경 판단용)
   laneBlocked(lane, sMin, sMax, exclude) {
-    for (const o of this.buckets[lane]) {
+    const b = this.buckets[lane];
+    if (!b) return null;
+    for (const o of b) {
       if (o === exclude) continue;
       if (o.s + o.len / 2 > sMin && o.s - o.len / 2 < sMax) return o;
     }
     return null;
   }
 
-  // 차선 lane 에서 s 앞쪽 가장 가까운 엔티티와의 간격
+  // 플레이어가 lane 으로 끼어들 수 있나: 양보 중인 뒤차는 앞범퍼가 살짝(≤1.3m) 겹쳐도 OK (멈칫해서 넣어줌)
+  canMergeInto(lane, player, margin = 0.35) {
+    const sMin = player.s - player.len / 2 - margin, sMax = player.s + player.len / 2 + margin;
+    for (const o of this.buckets[lane] || []) {
+      if (o === player) continue;
+      const oFront = o.s + o.len / 2, oRear = o.s - o.len / 2;
+      if (oFront <= sMin || oRear >= sMax) continue;
+      if (o.yieldUntil > this.time && o.s < player.s && oFront - (player.s - player.len / 2) < 1.3) continue;
+      return o;
+    }
+    return null;
+  }
+
   gapAhead(lane, s, exclude) {
     let best = Infinity, who = null;
-    for (const o of this.buckets[lane]) {
+    const b = this.buckets[lane];
+    if (!b) return { gap: best, who };
+    for (const o of b) {
       if (o === exclude) continue;
       const rear = o.s - o.len / 2;
       if (rear > s && rear - s < best) { best = rear - s; who = o; }
@@ -210,49 +252,54 @@ export class Traffic {
     return { gap: best, who };
   }
 
+  // 해방: 빌런 자리(1차선)부터, 차선별 지연 + 앞→뒤 물결
   release(time, waveSpeed = TUNE.releaseWaveSpeed) {
     this.released = true;
     this.releaseTime = time;
     const front = this.frontLine;
     const [lo, hi] = TUNE.releaseSpeed;
+    const [tlo, thi] = TUNE.truckFreeSpeed;
     for (const c of this.cars) {
-      c.releaseAt = time + Math.max(0, front - c.s) / waveSpeed + (c.isWall ? 0 : 0.15);
-      c.vFree = lo + this.rng() * (hi - lo) - (c.kind === 'truck' || c.kind === 'bus' ? 5 : 0);
+      const laneDelay = Math.min(3, c.lane) * TUNE.releaseLaneDelay;
+      c.releaseAt = time + Math.max(0, front - c.s) / waveSpeed + laneDelay + (c.isWall ? 0.35 : 0.08);
+      c.vFree = c.slow ? tlo + this.rng() * (thi - tlo) : lo + this.rng() * (hi - lo);
     }
   }
 
-  // ctx: { dt, time, player, villains:[...], phase, allowCutIn }
+  // ctx: { dt, time, player, villains:[...], phase, allowEvents, focusS }
   update(dt, ctx) {
     this.time = ctx.time;
     const player = ctx.player;
     const villains = ctx.villains || [];
     const alive = villains.filter((v) => v.alive);
     if (alive.length) {
-      this.frontLine = Math.max(...alive.map((v) => v.s));
-      this.frontV = alive[0].v;
+      this.frontLine = Math.max(...alive.map((v) => v.baseS ?? v.s));
+      this.frontV = alive[0].vNominal ?? alive[0].v;
     }
-    const extra = [player, ...alive];
-    this._buildBuckets(extra);
+    this._buildBuckets([player, ...alive]);
 
     const t = ctx.time;
     const jamV = this.jamSpeed;
     const rng = this.rng;
 
-    // 랜덤 급정거 이벤트 (브레이크 물결)
-    if (!this.released && rng() < dt * 0.7) {
-      const cand = this.cars.filter((c) => !c.isWall && c.s > player.s && c.s < player.s + 90);
-      if (cand.length) cand[Math.floor(rng() * cand.length)].brakeT = 0.7 + rng() * 0.8;
+    // 랜덤 급정거 (브레이크 물결)
+    if (!this.released && rng() < dt * 0.6) {
+      const cand = this.cars.filter((c) => !c.isWall && !c.isCheater && c.s > player.s - 10 && c.s < player.s + 80);
+      if (cand.length) cand[Math.floor(rng() * cand.length)].brakeT = 0.6 + rng() * 0.7;
+    }
+    // 갇힘 보조 (갓길 장애물 앞 등): 옆 차선이 끼워준다
+    if (!this.released && ctx.phase === 'jam') this._stuckAssist(dt, player);
+    // 갓길 얌체 등장 이벤트: 4차선 차가 플레이어 앞 갓길로 튀어나옴
+    if (ctx.allowEvents && player.lane === SHOULDER_LANE && player.v > 8 && t > (this.nextCheater || 6)) {
+      this.nextCheater = t + 7 + rng() * 5;
+      this._spawnCheaterAhead(player);
     }
 
-    // 고무줄 보조: 플레이어가 ~1.8초 이상 갇혀 있으면 옆 차선 차들이 치고 나가 틈을 만든다.
-    // (모든 차선 앞에 차가 있는 '계단식 벽'은 흔하다 — 시뮬로 확인. 막힘은 잠깐의 답답함으로만)
-    if (!this.released && ctx.phase === 'jam') this._breakWallForPlayer(ctx.dt ?? 1 / 60, player);
-
     for (const c of this.cars) {
-      // 해방 시작
       if (!c.released && t >= c.releaseAt) {
         c.released = true;
         c.hazardUntil = t + 1.05;
+        c.nextLcAt = t + 0.4 + rng() * 0.6;
         this.releasedCount++;
         if (this.onReleased) this.onReleased(c);
       }
@@ -260,30 +307,30 @@ export class Traffic {
       // 목표 속도
       let v0, T, s0, aMax;
       if (c.released) {
-        v0 = c.vFree; T = 0.55; s0 = 2.2; aMax = 4.2;
+        v0 = c.vFree; T = 0.5; s0 = 2.0; aMax = c.slow ? 2.6 : 4.6;
       } else if (c.isWall) {
-        // 원흉 옆에서 나란히 (pace)
-        const target = this.frontLine - c.wallOffset;
-        v0 = Math.max(0, this.frontV + (target - c.s) * 0.8);
+        const target = this.frontLine + c.wallOffset;
+        v0 = Math.max(0, this.frontV + (target - c.s) * 0.9);
         T = 0.5; s0 = 1.5; aMax = 3.0;
+      } else if (c.isCheater) {
+        v0 = c.cheaterV || 5; T = 0.6; s0 = 2.0; aMax = 2.5;
       } else {
-        // 차선 단위 stop & go: 같은 차선은 같이 움직여 간격 구조가 유지된다 (평균은 원흉보다 약간 느림)
-        const lf = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * 0.42 + c.lane * 1.9));
-        // 최고치도 원흉보다 느리게 → 선두가 가상벽에 일렬로 붙어 '얼어붙는' 상태를 막는다 (시뮬 검증)
-        v0 = jamV * c.personal * lf * 0.9;
-        T = 0.55; s0 = 1.6; aMax = 1.8;
+        // 차선 단위 stop & go (같은 차선은 같이 움직임)
+        const lf = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.42 + c.lane * 1.9));
+        v0 = jamV * c.personal * lf * 1.25;
+        T = 0.5; s0 = 1.4; aMax = 1.8;
       }
-      if (c.pullT > 0 && !c.released) { c.pullT -= dt; v0 = Math.max(v0, jamV * 2.8); aMax = 3.0; }
+      if (c.pullT > 0 && !c.released) { c.pullT -= dt; v0 = Math.max(v0, jamV * (c.letInBoost ? 3.6 : 2.2)); aMax = 3.6; T = 0.3; s0 = 1.0; }
+      else c.letInBoost = 0;
       if (c.brakeT > 0) { c.brakeT -= dt; v0 = 0.01; }
 
       // IDM
       const L = this.leaderOf(c);
       let gap = Infinity, dv = 0, lv = 0;
       if (L) { gap = L.gap; lv = L.car.v; dv = c.v - lv; }
-      // 해방 전에는 앞 정체선(가상의 벽)을 넘지 못함
-      if (!c.released && !c.isWall) {
-        const wallS = this.frontLine - this.arenaGap;
-        const g2 = wallS - (c.s + c.len / 2);
+      // 해방 전: 빌런 옆을 지나가지 못함 (빌런이 막는 차선은 가상의 벽)
+      if (!c.released && !c.isWall && !c.isCheater) {
+        const g2 = (this.frontLine - 3 - (this.zigzag ? 5 : 0)) - (c.s + c.len / 2);
         if (g2 < gap) { gap = g2; dv = c.v - this.frontV; lv = this.frontV; }
       }
       const b = 3.0;
@@ -294,25 +341,24 @@ export class Traffic {
       c.a = acc;
       c.v = Math.max(0, c.v + acc * dt);
       c.s += c.v * dt;
-      // 겹침 방지
-      if (L && gap < 0.25 && L.car !== player) {
-        c.v = Math.min(c.v, Math.max(0, lv));
-      }
+      if (L && gap < 0.25 && L.car !== player) c.v = Math.min(c.v, Math.max(0, lv));
 
-      // NPC 차선 변경 (자연스럽게) + 칼치기
+      // 차선 변경 진행
       if (c.lcT < 1) {
         c.lcT = Math.min(1, c.lcT + dt / c.lcDur);
         const e = c.lcT * c.lcT * (3 - 2 * c.lcT);
-        const xFrom = laneX(c.laneFrom), xTo = laneX(c.laneTo);
-        const nx = xFrom + (xTo - xFrom) * e;
+        const nx = laneX(c.laneFrom) + (laneX(c.laneTo) - laneX(c.laneFrom)) * e;
         c.yaw = -Math.atan2((nx - c.x) / Math.max(dt, 1e-4), Math.max(2, c.v)) * 0.8;
         c.x = nx;
-        if (c.lcT >= 1) { c.lane = c.laneTo; c.yaw = 0; }
-      } else if (!c.isWall && !c.released && t > c.nextLcAt && Math.abs(c.s - player.s) > 12) {
-        c.nextLcAt = t + 14 + rng() * 16;
-        const dir = rng() < 0.5 ? -1 : 1;
-        const tl = c.lane + dir;
-        if (tl >= 0 && tl < NUM_LANES && this._safeToEnter(c, tl, 4)) this._startLaneChange(c, tl, 2.2);
+        if (c.lcT >= 1) {
+          c.lane = c.laneTo; c.yaw = 0;
+          if (c.isCheater && c.lane !== SHOULDER_LANE) c.isCheater = false;
+        }
+      } else if (c.released && t > c.nextLcAt) {
+        this._postReleaseLaneChange(c);
+      } else if (c.isCheater && this.released) {
+        // 해방되면 얌체도 슬쩍 복귀
+        if (this._safeToEnter(c, NUM_LANES - 1, 2.5)) this._startLaneChange(c, NUM_LANES - 1, 1.2);
       }
 
       // 차체 연출
@@ -321,22 +367,16 @@ export class Traffic {
       m.position.x = c.x;
       m.position.z = -c.s;
       m.rotation.y = c.yaw;
-      // +rotation.x = 코 들림. 감속(acc<0)이면 코가 숙여지도록 +acc
       if (m.userData.body) m.userData.body.rotation.x = -c.bumpJolt * 0.12 + Math.max(-0.05, Math.min(0.05, acc * 0.006));
 
-      // 브레이크등: 정체 중엔 대부분 켜짐 (빨간 바다)
       const wantBrake = !c.released && (acc < -0.25 || c.v < 1.6 || c.brakeT > 0 || Math.sin(t * 1.3 + c.phase) > 0.2);
       if (wantBrake !== c.brakeOn) { c.brakeOn = wantBrake; setBrake(m, wantBrake); }
-      // 비상등 (해방 감사 깜빡깜빡)
-      const hz = t < c.hazardUntil && ((t - c.hazardUntil) % 0.5 + 0.5) % 0.5 < 0.27;
+      const hz = (t < c.hazardUntil && ((t - c.hazardUntil) % 0.5 + 0.5) % 0.5 < 0.27) || (c.isCheater && Math.floor(t * 2.2) % 2 === 0);
       if (hz !== c.hazardOn) { c.hazardOn = hz; setHazard(m, hz); }
     }
 
-    // 칼치기 이벤트 (플레이어 앞으로 끼어들기)
-    if (ctx.allowCutIn && player.v > 6 && t > (this.nextCutIn || 0)) {
-      this.nextCutIn = t + 4.5 + rng() * 3.5;
-      this._tryCutIn(player);
-    }
+    // 고장차 비상등
+    for (const o of this.obstacles) if (o.hazardCar) setHazard(o.hazardCar, Math.floor(t * 2) % 2 === 0);
 
     // 반대편
     const focus = ctx.focusS ?? player.s;
@@ -347,87 +387,127 @@ export class Traffic {
     }
   }
 
-  _breakWallForPlayer(dt, player) {
-    if (player.v < 3 && player.mode === 'jam') this.stuckT = (this.stuckT || 0) + dt;
+  // 해방 후: 느린 차(화물·버스)는 오른쪽 차로로, 빠른 차는 느린 앞차를 1차선 쪽으로 추월 → "1차선은 추월차선"이 제대로 작동
+  _postReleaseLaneChange(c) {
+    c.nextLcAt = this.time + 0.8 + this.rng() * 0.8;
+    if (c.lane === SHOULDER_LANE) return;
+    if (c.slow) {
+      const tl = c.lane + 1;
+      if (tl <= NUM_LANES - 1 && this._safeToEnter(c, tl, 3)) this._startLaneChange(c, tl, 1.4);
+      return;
+    }
+    const L = this.leaderOf(c);
+    if (L && L.gap < 22 && L.car.v < c.vFree - 3 && c.lane > 0) {
+      const tl = c.lane - 1;
+      if (this._safeToEnter(c, tl, 3.5)) this._startLaneChange(c, tl, 0.95);
+    }
+  }
+
+  // 갇힘 보조: 1.6초 이상 거의 못 움직이면, 진행하고 싶은 옆 차선이 자리를 내준다
+  _stuckAssist(dt, player) {
+    if (player.v < 2.5 && player.mode === 'jam') this.stuckT = (this.stuckT || 0) + dt;
     else this.stuckT = Math.max(0, (this.stuckT || 0) - dt * 2);
-    if (this.stuckT < (this.stuckLimit || 1.8)) return;
+    if (this.stuckT < 1.2) return;
     this.stuckT = 0;
-    // 옆 차선 중 '플레이어 뒤꽁무니 기준 앞차가 가장 먼' 차선을 연다
-    let best = -1, bestGap = -Infinity;
-    for (const d of [-1, 1]) {
-      const l = player.lane + d;
-      if (l < 0 || l >= NUM_LANES) continue;
-      const g = this.gapAhead(l, player.s - player.len / 2 - 3, player).gap;
-      if (g > bestGap) { bestGap = g; best = l; }
-    }
-    if (best < 0) return;
-    let n = 0;
-    for (const o of this.buckets[best]) {
-      if (!this.cars.includes(o) || o.isWall || o.released) continue;
-      if (o.s > player.s - 5 && o.s < player.s + 22) { o.pullT = 3.2; n++; }
-    }
-    // 내 차선 앞차도 살짝 앞으로 (경적 안 눌러도 숨통)
-    const { who } = this.gapAhead(player.lane, player.s, player);
-    if (who && this.cars.includes(who) && !who.isWall) who.pullT = Math.max(who.pullT || 0, 1.5);
+    const tl = player.lane === SHOULDER_LANE ? NUM_LANES - 1 : Math.min(SHOULDER_LANE, player.lane + 1);
+    this.letIn(tl, player);
     this.assists = (this.assists || 0) + 1;
   }
 
+  // 차선 tl 이 플레이어 옆에 자리를 만든다: 앞쪽 차는 살짝 당기고 뒤쪽 차는 멈칫
+  letIn(tl, player) {
+    let who = null;
+    for (const o of this.buckets[tl] || []) {
+      if (!this.cars.includes(o) || o.isWall || o.released) continue;
+      const d = o.s - player.s;
+      // 옆·앞 차들은 줄줄이 당겨 앞으로 (앞 3~4대 연쇄) / 뒤 차들은 멈칫 → 플레이어 옆에 자리가 생김
+      if (d > -3.5 && d < 22) { o.pullT = Math.max(o.pullT, 2.2); o.letInBoost = 1; who = who || o; }
+      else if (d <= -3.5 && d > -14) { o.brakeT = Math.max(o.brakeT, 2.2); o.yieldUntil = this.time + 2.8; who = who || o; }
+    }
+    return who;
+  }
+
+  _spawnCheaterAhead(player) {
+    // 플레이어 12~28m 앞, 4차선 차 중 하나가 갓길로 튀어나옴
+    const cands = this.cars.filter((c) => c.lane === NUM_LANES - 1 && !c.isWall && !c.released && c.lcT >= 1 && c.s - player.s > 14 && c.s - player.s < 30);
+    if (!cands.length) return;
+    const c = cands[Math.floor(this.rng() * cands.length)];
+    if (this.laneBlocked(SHOULDER_LANE, c.s - c.len / 2 - 2, c.s + c.len / 2 + 2, c)) return;
+    c.isCheater = true;
+    c.cheaterV = 4 + this.rng() * 2;
+    this._startLaneChange(c, SHOULDER_LANE, 0.9);
+    if (this.onCheater) this.onCheater(c);
+  }
+
   _safeToEnter(c, tl, margin) {
-    const b = this.buckets[tl];
-    for (const o of b) {
+    for (const o of this.buckets[tl] || []) {
       if (o === c) continue;
       const ahead = (o.s - o.len / 2) - (c.s + c.len / 2);
       const behind = (c.s - c.len / 2) - (o.s + o.len / 2);
       if (ahead > -0.1 && ahead < margin) return false;
       if (behind > -0.1 && behind < margin + Math.max(0, o.v - c.v) * 1.5) return false;
-      if (ahead <= -0.1 && behind <= -0.1) return false; // 겹침
+      if (ahead <= -0.1 && behind <= -0.1) return false;
     }
     return true;
   }
 
   _startLaneChange(c, tl, dur) {
     c.laneFrom = c.lane; c.laneTo = tl; c.lcT = 0; c.lcDur = dur;
-    c.lane = tl; // 목표 차선 기준으로 추종
+    c.lane = tl;
   }
 
-  _tryCutIn(player) {
+  // 경적. 반환: { car, kind: 'cheater'|'yield'|'letin'|'noway'|'villain' } | null
+  honk(player) {
     const pl = player.lane;
-    const cands = [];
-    for (const c of this.cars) {
-      if (c.isWall || c.released || c.lcT < 1) continue;
-      if (Math.abs(c.lane - pl) !== 1) continue;
-      const d = c.s - player.s;
-      if (d < 7 || d > 15) continue;
-      // 플레이어 차선에 들어갈 자리
-      const { gap } = this.gapAhead(pl, player.s + player.len / 2, player);
-      if (gap < d + c.len + 2) continue;
-      cands.push(c);
+    const { gap, who } = this.gapAhead(pl, player.s + player.len / 2 - 0.5, player);
+    if (who && who.isVillain && gap < 30) return { car: who, kind: 'villain' };
+    if (pl === SHOULDER_LANE) {
+      // 갓길 얌체 → 4차선으로 복귀 (4차선 뒤차가 멈칫해서 자리 줌)
+      if (who && who.isCheater && gap < 30) {
+        this.letIn(NUM_LANES - 1, who);
+        this._startLaneChange(who, NUM_LANES - 1, 1.1);
+        who.cheaterV = 0;
+        return { car: who, kind: 'cheater' };
+      }
+      // 장애물이 앞에 있으면 4차선이 끼워줌
+      if (who && who.isObstacle && gap < 18) {
+        const c = this.letIn(NUM_LANES - 1, player);
+        return c ? { car: c, kind: 'letin' } : { car: who, kind: 'noway' };
+      }
+      return null;
     }
-    if (!cands.length) return;
-    const c = cands[Math.floor(this.rng() * cands.length)];
-    this._startLaneChange(c, pl, 0.75);
-    c.v = Math.max(c.v, 3);
-    if (this.onCutIn) this.onCutIn(c);
+    if (!who || gap > 16 || !who.mesh || who.released) return null;
+    // 앞차가 옆으로 비켜줄 수 있으면 비켜줌
+    if (this.cars.includes(who) && !who.isWall && who.lcT >= 1) {
+      const opts = [who.lane - 1, who.lane + 1].filter((l) => l >= 0 && l < NUM_LANES);
+      for (const tl of opts) {
+        if (this._safeToEnter(who, tl, 1.6)) { this._startLaneChange(who, tl, 0.85); return { car: who, kind: 'yield' }; }
+      }
+    }
+    // 아니면 오른쪽(갓길 쪽) 차선이 끼워줌
+    const c = this.letIn(Math.min(SHOULDER_LANE, pl + 1), player);
+    return c ? { car: c, kind: 'letin' } : { car: who, kind: 'noway' };
   }
 
-  // 경적: 바로 앞 차가 옆 차선 틈으로 비켜준다 (원흉은 절대 안 비킴)
-  // 반환: { car, moved: boolean } | null
-  honk(player, range = 16) {
-    const { gap, who } = this.gapAhead(player.lane, player.s + player.len / 2 - 0.5, player);
-    if (!who || gap > range || !who.mesh || who.isWall || who.released) return null;
-    if (who.isVillain || !this.cars.includes(who)) return { car: who, moved: false, villain: true };
-    if (who.lcT < 1) return { car: who, moved: true };
-    const opts = [who.lane - 1, who.lane + 1].filter((l) => l >= 0 && l < NUM_LANES);
-    // 더 넓은 쪽 우선
-    opts.sort((a, b) => this.gapAhead(b, who.s, who).gap - this.gapAhead(a, who.s, who).gap);
-    for (const tl of opts) {
-      if (this._safeToEnter(who, tl, 1.6)) { this._startLaneChange(who, tl, 0.85); who.nextLcAt = this.time + 6; return { car: who, moved: true }; }
-    }
-    return { car: who, moved: false };
+  // 빌런 바로 뒤 몇 대 (짜증 말풍선용)
+  carsBehindFront(n = 6, range = 35) {
+    return this.cars.filter((c) => !c.released && !c.isWall && !c.isCheater && this.frontLine - c.s < range && this.frontLine - c.s > 0).slice(0, n);
   }
 
-  // 플레이어 추돌 시 상대 차 반응
-  jolt(car) { car.bumpJolt = 1; }
+  // 콘·낙하물을 날려버림 → 장애물 제거, 날아갈 조각 위치 반환
+  smash(o) {
+    const i = this.obstacles.indexOf(o);
+    if (i < 0) return null;
+    this.obstacles.splice(i, 1);
+    const pieces = [];
+    o.mesh.updateMatrixWorld(true);
+    for (const ch of [...o.mesh.children]) {
+      const p = ch.getWorldPosition(new ch.position.constructor());
+      pieces.push({ obj: ch, pos: p });
+    }
+    return { group: o.mesh, pieces };
+  }
 
+  jolt(car) { if (car) car.bumpJolt = 1; }
   countReleased() { return this.releasedCount; }
 }

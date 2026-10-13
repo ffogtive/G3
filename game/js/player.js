@@ -1,6 +1,9 @@
 // 플레이어 "참교육 머신": 차선 홉 이동, 자동 가속, 추돌 처리, 연출(롤/요/홉/바퀴 회전)
-import { laneX, NUM_LANES, TUNE } from './config.js';
+import * as THREE from 'three';
+import { laneX, TUNE, SHOULDER_LANE } from './config.js';
 import { buildVehicle, setBrake } from './vehicles.js';
+
+const MAX_LANE = SHOULDER_LANE; // 0~3 차선 + 4 갓길
 
 export class Player {
   constructor(scene) {
@@ -11,6 +14,13 @@ export class Player {
     this.w = ud.width || 1.85;
     this.kind = 'player';
     this.isPlayer = true;
+    // 지붕 긴급 경광등 (주황, 깜빡) — 갓길 통행 명분: 참교육 긴급차량
+    const h = ud.height || 1.7;
+    this.beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.32), new THREE.MeshBasicMaterial({ color: 0xffa000 }));
+    this.beacon.position.set(-0.55, h - 0.05, 0.55);
+    (ud.body || this.mesh).add(this.beacon);
+    this.beaconOff = new THREE.MeshBasicMaterial({ color: 0x5a3a00 });
+    this.beaconOn = this.beacon.material;
     this.reset(0, 2);
   }
 
@@ -34,10 +44,10 @@ export class Player {
   // dir: -1 왼쪽(1차선 쪽), +1 오른쪽. 반환: 'ok' | 'edge' | {blocked: entity}
   requestLane(dir, traffic) {
     const tl = this.lane + dir;
-    if (tl < 0 || tl >= NUM_LANES) { this._wiggle(dir); return 'edge'; }
+    if (tl < 0 || tl > MAX_LANE) { this._wiggle(dir); return 'edge'; }
     if (this.lcT < 0.65) return 'busy';
     if (!this.ghost && traffic) {
-      const blocker = traffic.laneBlocked(tl, this.s - this.len / 2 - 0.35, this.s + this.len / 2 + 0.35, this);
+      const blocker = traffic.canMergeInto ? traffic.canMergeInto(tl, this) : traffic.laneBlocked(tl, this.s - this.len / 2 - 0.35, this.s + this.len / 2 + 0.35, this);
       if (blocker) { this._wiggle(dir); return { blocked: blocker }; }
     }
     this.lcFrom = this.x;
@@ -69,10 +79,18 @@ export class Player {
     if (ctx.mode === 'jam') {
       const braking = ctx.brake;
       if (braking) this.v = Math.max(0, this.v - TUNE.playerBrake * dt);
-      else this.v = Math.min(TUNE.playerMaxV, this.v + TUNE.playerAccel * dt * (this.v < 0 ? 2.2 : 1));
-      this.brakeOn = braking;
+      else this.v = Math.min(this.lane === SHOULDER_LANE ? TUNE.shoulderMaxV : TUNE.playerMaxV, this.v + TUNE.playerAccel * dt * (this.v < 0 ? 2.2 : 1));
+      // 소프트 추종: 앞차를 고속으로 들이받지 않게 자동 감속 (부술 수 있는 콘·낙하물은 예외 → 날려버림)
+      const L0 = ctx.traffic ? ctx.traffic.leaderOf(this) : null;
+      let auto = false;
+      if (L0 && !L0.car.smash) {
+        const vSafe = Math.max(0, L0.car.v + Math.max(0, L0.gap - 0.9) * 2.4);
+        if (this.v > vSafe) { this.v = Math.max(vSafe, this.v - TUNE.playerBrake * dt); auto = true; }
+      }
+      this.brakeOn = braking || auto;
     } else if (ctx.mode === 'boss') {
-      const target = ctx.bossRefS - TUNE.bossFollowGap;
+      // 보스전: 빌런 '앞'에서 (뒤는 정체라 못 감) 같은 속도로 달리며 뒤로 압정 투척
+      const target = ctx.bossRefS + TUNE.bossAheadGap;
       const vCmd = ctx.bossRefV + Math.max(-7, Math.min(9, (target - this.s) * 1.6));
       const dv = vCmd - this.v;
       this.v += Math.max(-14 * dt, Math.min(12 * dt, dv));
@@ -96,7 +114,11 @@ export class Player {
     // ── 추돌 (정체 구간만)
     if (ctx.mode === 'jam' && ctx.traffic && !this.ghost) {
       const L = ctx.traffic.leaderOf(this);
-      if (L && L.gap < 0) {
+      if (L && L.gap < 0 && L.car.smash) {
+        // 콘·낙하물: 날려버리고 살짝 감속
+        events.push({ type: 'smash', other: L.car });
+        this.v *= 0.62;
+      } else if (L && L.gap < 0) {
         const other = L.car;
         this.s = other.s - other.len / 2 - this.len / 2 - 0.35;
         if (this.invuln <= 0) {
@@ -147,6 +169,14 @@ export class Player {
     const r = m.userData.wheelRadius || 0.42;
     for (const w of m.userData.wheels || []) w.rotation.x -= (this.v * dt) / r;
     setBrake(m, this.brakeOn);
+    const blink = Math.floor(performance.now() / 180) % 2 === 0;
+    this.beacon.material = (ctx.mode === 'jam' || ctx.mode === 'boss') && blink ? this.beaconOn : this.beaconOff;
+    // 보스전에선 지붕 압정포가 뒤(빌런 쪽)를 본다
+    const cannon = m.userData.cannon;
+    if (cannon) {
+      const want = ctx.mode === 'boss' ? Math.PI : 0;
+      cannon.rotation.y += (want - cannon.rotation.y) * Math.min(1, dt * 8);
+    }
 
     // 무적 깜빡임
     m.visible = !(this.invuln > 0.05 && Math.floor(this.invuln * 16) % 2 === 0 && ctx.mode === 'boss');

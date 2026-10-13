@@ -4,7 +4,8 @@
 //      대비가 쾌감의 본체. 연출 타이밍은 전부 이 파일에서 조율한다.
 import * as THREE from 'three';
 import {
-  STAGES, TUNE, laneX, toKmh, THANKS_LINES, BUMP_LINES, CUTIN_LINES, YIELD_LINES, NOWAY_LINES, NUM_LANES, LANE_W,
+  STAGES, TUNE, laneX, toKmh, THANKS_LINES, BUMP_LINES, YIELD_LINES, NOWAY_LINES, NUM_LANES, LANE_W,
+  LETIN_LINES, FRONT_RAGE_LINES, CHEATER_LINES, SHOULDER_LANE,
 } from './config.js';
 import { Input } from './input.js';
 import { World } from './world.js';
@@ -131,7 +132,7 @@ boss.onPop = (v, p) => {
 };
 boss.onGone = (v) => {
   if (v.isLast) {
-    ui.banner('참교육 완료!', 'big', 1500);
+    ui.banner('원인 제거!', 'big', 1500);
     G.releaseAt = G.realTime + 0.95; // 반짝★을 잠깐 감상한 뒤 드론샷으로
   }
 };
@@ -143,12 +144,12 @@ traffic.onReleased = (c) => {
   if (Math.random() < 0.18) fx.hearts(c.mesh.position.clone().setY((c.mesh.userData.height || 1.6) + 0.6));
   if (Math.random() < 0.06) audio.play('blink', { volume: 0.4 });
 };
-traffic.onCutIn = (c) => {
+traffic.onCheater = (c) => {
   if (G.phase !== 'jam') return;
-  const line = CUTIN_LINES[Math.floor(Math.random() * CUTIN_LINES.length)];
-  bubble('cut' + c.id, line, 'angry', 1.6, carTop(c, 0.8));
+  bubble('cheat' + c.id, '갓길 얌체 끼어들기!', 'angry', 1.6, carTop(c, 0.8));
   addRage(TUNE.cutinRage);
   audio.play('cutin');
+  if (!G.cheaterHinted) { G.cheaterHinted = true; ui.hint?.('갓길 얌체! 경적 울리면 제자리(4차선)로 돌아갑니다', 2800); }
 };
 
 function addRage(a) {
@@ -206,9 +207,9 @@ function setupStage(stage) {
   const night = !!world.night;
   boss.spawn(stage, frontS);
   const rng = mulberry32(stage.id * 1000 + 7);
-  traffic.spawnJam(stage, boss.villains, { s: startS, lane: 2 }, rng, night);
+  traffic.spawnJam(stage, boss.villains, { s: startS, lane: 3 }, rng, night);
   G.tailS = traffic.sTail;
-  player.reset(startS, 2);
+  player.reset(startS, 3);
   setHeadlights(player.mesh, night);
   for (const v of boss.villains) setHeadlights(v.mesh, night);
   // 표시용 배수: 실제 시뮬 차량 수 → "몇 km 정체"에 맞는 대수
@@ -274,8 +275,10 @@ function enterPhase(name) {
       ui.banner('출발!', 'go', 900);
       ui.setTouchVisible(IS_TOUCH);
       audio.play('go');
+      G.cheaterHinted = G.stageIdx > 0;
       if (G.stageIdx === 0 || G.auto) {
-        setTimeout(() => G.phase === 'jam' && ui.hint?.(IS_TOUCH ? '◀ ▶ 차선 변경 · 막히면 [발사] = 경적!' : '← → 차선 변경 · 막히면 Space = 경적!', 3200), 1100);
+        setTimeout(() => G.phase === 'jam' && ui.hint?.(IS_TOUCH ? '꽉 막혔다! ▶ 갓길로 빠져서 원인을 찾아라 (긴급차량)' : '꽉 막혔다! → 갓길로 빠져서 원인을 찾아라 (긴급차량)', 3400), 900);
+        setTimeout(() => G.phase === 'jam' && ui.hint?.(IS_TOUCH ? '갓길이 막히면 [경적] → 4차선이 끼워줍니다' : '갓길이 막히면 Space(경적) → 4차선이 끼워줍니다', 3200), 5200);
       }
       break;
     }
@@ -283,7 +286,7 @@ function enterPhase(name) {
       G.bossStart = G.time;
       boss.attackT = 2.0;
       const names = boss.villains.map((v) => v.name).join(' & ');
-      ui.banner('원흉 발견!', 'boss', 1300);
+      ui.banner('원인 발견!', 'boss', 1300);
       setTimeout(() => {
         if (G.phase !== 'boss') return;
         const bars = Math.floor(G.rage * 3 + 1e-6);
@@ -293,10 +296,10 @@ function enterPhase(name) {
       ui.showBoss({ name: names, hp: 1, tires: 4 });
       audio.startMusic('boss');
       audio.play('warn');
-      setTimeout(() => G.phase === 'boss' && ui.hint?.(IS_TOUCH ? '[발사] 꾹 = 압정 연사 · [분노] = 미사일 · 공격은 차선 바꿔 피하기!' : 'Space 꾹 = 압정 연사 · R = 분노 미사일 · 공격은 차선 바꿔 피하기!', 3600), 2600);
+      setTimeout(() => G.phase === 'boss' && ui.hint?.(IS_TOUCH ? '앞을 막고 [발사] 꾹 = 뒤로 압정 투척 (밟으면 펑크!) · [분노] = 폭탄' : '앞을 막고 Space 꾹 = 뒤로 압정 투척 (밟으면 펑크!) · R = 분노 폭탄', 3600), 2400);
       audio.play('hornAngry', { volume: 0.5 });
       // 벽 차량들 짜증 경적
-      for (const c of traffic.cars) if (c.isWall && Math.random() < 0.7) bubble('w' + c.id, ['빵빵!!', '좀 비켜!', '1차선 왜 막아!'][Math.floor(Math.random() * 3)], 'angry', 1.8, carTop(c, 0.8));
+      for (const c of traffic.carsBehindFront(5)) bubble('w' + c.id, FRONT_RAGE_LINES[Math.floor(Math.random() * FRONT_RAGE_LINES.length)], 'angry', 1.8, carTop(c, 0.8));
       break;
     }
     case 'kill': {
@@ -316,11 +319,12 @@ function enterPhase(name) {
     }
     case 'release': {
       traffic.release(G.time);
-      world.setVMS('소통 원활 ^^', '#3dff7f');
+      world.setVMS('소통 원활\n1차선은 추월차선!', '#3dff7f');
       audio.cheerHorns();
       audio.startAmbience(null);
       setTimeout(() => { if (G.phase === 'release' || G.phase === 'cruise') audio.startMusic('release'); }, 600);
-      ui.banner('뻥 뚫렸다!!', 'big', 2400);
+      ui.banner('1차선 개방!', 'go', 1100);
+      setTimeout(() => (G.phase === 'release' || G.phase === 'cruise') && ui.banner('뻥 뚫렸다!!', 'big', 2400), 1250);
       ui.setReleaseCounter(0);
       fx.confetti(new THREE.Vector3(0, 0, -(G.killS - 30)), 220, 46);
       releaseWave.start(G.frontS + (G.time - 0) * 0, traffic.frontLine);
@@ -414,7 +418,10 @@ function onWeaponHit(v, dmg, pos, kind) {
 
 function onPlayerHit(ev) {
   if (player.invuln > 0) return;
-  player.knock(3.2, 1);
+  // 정면전: 맞으면 앞으로 밀려나며 휘청 (빌런과의 간격은 자동 복귀)
+  player.knock(-(ev.push || 2.5), 1);
+  player.v = boss.refV() + 5;
+  if (ev.flash) ui.flash('#fffbe0', 380);
   G.combo = 0;
   addRage(TUNE.hitRage);
   fx.shake(0.6, 0.35);
@@ -422,6 +429,27 @@ function onPlayerHit(ev) {
   audio.play('bump');
   hud.popAt(player.mesh.position.clone().setY(2.4), ev.text || '으악!', 'bump');
   G.score = Math.max(0, G.score - 50);
+}
+
+// 콘·낙하물 날려버리기: 조각들이 하늘로 튀고(파편 물리는 boss.debris 재사용) 점수 소폭
+function onSmash(o) {
+  const r = traffic.smash(o);
+  if (!r) return;
+  for (const pc of r.pieces) {
+    scene.attach(pc.obj);
+    boss.debris.push({
+      obj: pc.obj, bounce: true, life: 2.2,
+      vel: new THREE.Vector3((Math.random() - 0.3) * 6, 6 + Math.random() * 6, -(player.v + 4 + Math.random() * 6)),
+      spin: new THREE.Vector3(Math.random() * 12, Math.random() * 8, Math.random() * 12),
+    });
+  }
+  scene.remove(r.group);
+  fx.debris(new THREE.Vector3(player.x, 0.6, -(player.s + player.len / 2)), o.kind === 'cones' ? [0xff7a1a, 0xffffff] : [0xc8955a, 0x24262a], 10);
+  fx.shake(0.25, 0.2);
+  audio.play('bump', { volume: 0.6 });
+  G.score += 50;
+  hud.popAt(player.mesh.position.clone().setY(2.4), o.kind === 'cones' ? '콘 날리기!' : '낙하물 치움!', 'score');
+  addRage(0.03);
 }
 
 function onBump(other) {
@@ -447,20 +475,25 @@ function autopilot(phase) {
   const out = { left: false, right: false, fire: false, super: false, brake: false, horn: false };
   if (G.realTime < autoNext) { out.fire = phase === 'boss'; return out; }
   if (phase === 'jam') {
+    // 전략: 갓길로 빠져서 달리고, 갓길이 막히면 경적 → 4차선으로 잠깐 끼었다가 다시 갓길
+    const SL = SHOULDER_LANE;
     const front = player.s + player.len / 2;
-    const gapIn = (l) => traffic.gapAhead(l, front - (l === player.lane ? 0 : player.len + 0.8), player).gap;
-    const cur = gapIn(player.lane);
-    let best = player.lane, bestGap = cur;
-    for (const d of [-1, 1]) {
-      const l = player.lane + d;
-      if (l < 0 || l >= NUM_LANES) continue;
-      if (traffic.laneBlocked(l, player.s - player.len / 2 - 0.6, player.s + player.len / 2 + 0.6, player)) continue;
-      const g = gapIn(l);
-      if (g > bestGap + 3) { bestGap = g; best = l; }
+    const free = (l) => l >= 0 && l <= SL && !traffic.canMergeInto(l, player, 0.5);
+    if (player.lane < SL) {
+      if (free(player.lane + 1)) { out.right = true; autoNext = G.realTime + 0.22; }
+      else { out.horn = true; autoNext = G.realTime + 0.3; }
+    } else {
+      const { gap, who } = traffic.gapAhead(SL, front, player);
+      if (who && gap < 16 && !who.smash) {
+        out.horn = true;
+        if (gap < 7 && !who.isCheater && free(SL - 1)) { out.left = true; autoNext = G.realTime + 0.3; }
+      }
     }
-    if (cur < 22 && best !== player.lane) { out[best < player.lane ? 'left' : 'right'] = true; autoNext = G.realTime + 0.2; }
-    else if (cur < 3 + player.v * 0.35) out.brake = true;
-    if (cur < 9) out.horn = true;
+    // 4차선으로 끼어 있는데 갓길이 비었으면 복귀
+    if (player.lane === SL - 1 && free(SL)) {
+      const { gap } = traffic.gapAhead(SL, player.s - player.len / 2 - 1, player);
+      if (gap > 8) { out.right = true; out.left = false; autoNext = G.realTime + 0.25; }
+    }
   } else if (phase === 'cruise') {
     const L = traffic.leaderOf(player);
     if (L && L.gap < 14) {
@@ -477,11 +510,11 @@ function autopilot(phase) {
     let want = player.lane;
     if (v) {
       const vl = Math.round(v.lanePos);
-      const pref = [vl + 1, vl - 1, vl, vl + 2, vl - 2].filter((l) => l >= 0 && l < NUM_LANES && !danger.has(l));
+      const pref = [vl + 1, vl - 1, vl, vl + 2, vl - 2].filter((l) => l >= 0 && l <= SHOULDER_LANE && !danger.has(l));
       if (pref.length) want = pref[0];
     }
     if (danger.has(player.lane)) {
-      const safe = [player.lane - 1, player.lane + 1].filter((l) => l >= 0 && l < NUM_LANES && !danger.has(l));
+      const safe = [player.lane - 1, player.lane + 1].filter((l) => l >= 0 && l <= SHOULDER_LANE && !danger.has(l));
       if (safe.length) want = safe[0];
     }
     if (want !== player.lane) { out[want < player.lane ? 'left' : 'right'] = true; autoNext = G.realTime + 0.25; }
@@ -545,10 +578,14 @@ function updateCamera(realDt) {
       chaseTarget(tPos, tLook);
       break;
     case 'boss': {
+      // 정면전 카메라: 빌런 줄 뒤·위에서 앞(플레이어)을 본다 → 빌런이 전경, 플레이어가 그 앞
       const ref = boss.alive[0] || boss.villains[0];
-      const mid = (player.s + ref.s) / 2;
-      tPos.set(player.x * 0.35 + (por ? 1.2 : 2.6), por ? 17 : 8.6, -player.s + (por ? 12 : 9.5));
-      tLook.set(player.x * 0.3 + ref.x * 0.45, 0.8, -(mid + 2));
+      const vs = ref.baseS ?? ref.s;
+      // 높고 가운데서: 키 큰 앞줄 화물차가 빌런을 가리지 않게
+      const cx = (ref.x + player.x) / 2;
+      // 빌런 = 화면 중하단, 플레이어(11m 앞) = 중상단 이 되도록 (H=19, 뒤 8m, 시선은 빌런 6m 앞)
+      tPos.set(cx + (por ? 0.6 : 1.4), por ? 27 : 19, -vs + (por ? 11 : 8));
+      tLook.set(cx * 0.9, 0.3, -(vs + 6));
       k = 4;
       break;
     }
@@ -649,8 +686,14 @@ function update(realDt) {
       if (r && r.car && r.car.mesh) {
         const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
         const key = 'h' + (r.car.id || 'v');
-        if (r.moved) bubble(key, pick(YIELD_LINES), 'thanks', 1.2, carTop(r.car, 0.8));
-        else if (!r.villain) { bubble(key, pick(NOWAY_LINES), 'angry', 1.1, carTop(r.car, 0.8)); addRage(TUNE.nowayRage); }
+        if (r.kind === 'cheater') {
+          bubble(key, pick(CHEATER_LINES), 'thanks', 1.4, carTop(r.car, 0.8));
+          G.score += 300; G.cheaters = (G.cheaters || 0) + 1;
+          hud.popAt(r.car.mesh.position.clone().setY(2.6), '얌체 참교육 +300', 'score');
+          audio.play('star', { pitch: 1.3 });
+        } else if (r.kind === 'yield') bubble(key, pick(YIELD_LINES), 'thanks', 1.2, carTop(r.car, 0.8));
+        else if (r.kind === 'letin') bubble(key, pick(LETIN_LINES), 'thanks', 1.2, carTop(r.car, 0.8));
+        else if (r.kind === 'noway') { bubble(key, pick(NOWAY_LINES), 'angry', 1.1, carTop(r.car, 0.8)); addRage(TUNE.nowayRage); }
       }
     }
   }
@@ -668,16 +711,19 @@ function update(realDt) {
     mode: pmode, traffic, brake: wantBrake, cruiseV,
     bossRefS: boss.refS(), bossRefV: boss.refV(),
   });
-  for (const e of pev) if (e.type === 'bump') onBump(e.other);
+  for (const e of pev) {
+    if (e.type === 'bump') onBump(e.other);
+    else if (e.type === 'smash') onSmash(e.other);
+  }
 
   // 교통
   traffic.update(dt, {
     dt, time: G.time, player, villains: boss.villains, phase: ph,
-    allowCutIn: ph === 'jam' && !G.auto, focusS: ph === 'release' ? G.killS : player.s,
+    allowEvents: ph === 'jam', focusS: ph === 'release' ? G.killS : player.s,
   });
 
   // 원흉
-  const bev = boss.update(dt, { time: G.time, phase: ph, player, hud });
+  const bev = boss.update(dt, { time: G.time, phase: ph, player, hud, night: world.night, laneFree: (lane) => !traffic.cars.some((c) => c.isWall && c.lane === lane) });
   for (const e of bev) if (e.type === 'playerHit') onPlayerHit(e);
 
   // 무기
@@ -692,13 +738,13 @@ function update(realDt) {
   // 막혀서 서 있으면 경적 힌트 (스테이지당 1회)
   if (ph === 'jam' && !G.stuckHinted) {
     G.stuckT = player.v < 2 ? (G.stuckT || 0) + dt : 0;
-    if (G.stuckT > 2.2) { G.stuckHinted = true; ui.hint?.('막혔다! 경적을 울리면 앞차가 비켜줘요 🚗💨', 2800); }
+    if (G.stuckT > 2.2) { G.stuckHinted = true; ui.hint?.(player.lane === SHOULDER_LANE ? '갓길 막힘! 경적 → 4차선이 끼워줘요' : '꽉 막혔다! 오른쪽 갓길로 빠지세요 →', 2800); }
   }
   // 분노: 정체 속에서 서 있으면 쌓인다
   if (ph === 'jam') addRage((TUNE.baseRage + (player.v < 5 ? TUNE.timeRage : 0)) * dt);
 
   // 페이즈 진행
-  if (ph === 'jam' && player.s > boss.refS() - traffic.arenaGap + 1) enterPhase('boss');
+  if (ph === 'jam' && player.s > boss.refS() + 3) enterPhase('boss');
   if (ph === 'release') {
     const waveDone = G.phaseT > (G.frontS - G.tailS) / TUNE.releaseWaveSpeed + 1.4;
     if (waveDone && G.phaseT > 4.2) enterPhase('cruise');
@@ -707,6 +753,16 @@ function update(realDt) {
   if (ph === 'kill' && G.releaseAt && G.realTime > G.releaseAt) { G.releaseAt = 0; enterPhase('release'); }
   if (ph === 'intro' && G.introStage === 1 && G.introT2 > 2.05) enterPhase('jam');
 
+  // 인과 연출: 빌런 바로 뒤 차들이 빌런한테 짜증 (경적 + 말풍선)
+  if ((ph === 'intro' || ph === 'jam' || ph === 'boss') && G.realTime > (G.nextFrontRage || 0)) {
+    G.nextFrontRage = G.realTime + 1.1 + Math.random() * 0.9;
+    const cs = traffic.carsBehindFront(8, 30);
+    if (cs.length) {
+      const c = cs[Math.floor(Math.random() * cs.length)];
+      bubble('fr' + c.id, FRONT_RAGE_LINES[Math.floor(Math.random() * FRONT_RAGE_LINES.length)], 'angry', 1.5, carTop(c, 0.8));
+      if (Math.random() < 0.5 && project(c.mesh.position)) audio.play('hornShort', { volume: 0.35, pan: Math.max(-1, Math.min(1, (c.x - player.x) / 10)) });
+    }
+  }
   // 원흉 도발 말풍선 (보일 때마다 분노 +)
   for (const v of boss.villains) {
     const key = 'v' + v.index;
@@ -721,7 +777,7 @@ function update(realDt) {
 
   // HUD
   if (['jam', 'boss', 'release', 'cruise'].includes(G.phase)) {
-    const distM = Math.max(0, boss.refS() - player.s - TUNE.bossFollowGap);
+    const distM = Math.max(0, boss.refS() - player.s);
     ui.setHUD({ phase: G.phase, speedKmh: Math.round(toKmh(Math.max(0, player.v))), distM: Math.round(distM), rage: G.rage, score: G.score, combo: G.combo });
     const span = Math.max(1, G.frontS - G.startS);
     let released = 0;
@@ -804,7 +860,8 @@ function debugSkip(to) {
   if (G.phase === 'intro') { G.introStage = 1; G.introT2 = 9; enterPhase('jam'); }
   if (to === 'jam') return;
   // 보스 앞까지 순간이동
-  player.s = boss.refS() - traffic.arenaGap + 2;
+  player.s = boss.refS() + 4;
+  player.lane = SHOULDER_LANE; player.x = laneX(SHOULDER_LANE);
   G.rage = 1;
   enterPhase('boss');
   if (to === 'boss') return;

@@ -32,8 +32,8 @@ export class Weapons {
     return o;
   }
 
-  // 지금 압정을 쏘면 맞을 대상
-  _muzzle(player, out) { return out.set(player.x, 1.95 + player.hop, -(player.s + 0.4)); }
+  // 정면 참교육: 지붕 압정포가 뒤(빌런 쪽)를 보고 있다 → 뒤로 던진다
+  _muzzle(player, out) { return out.set(player.x, 1.95 + player.hop, -(player.s - 0.6)); }
 
   fireTack(player, boss) {
     const target = boss.targetFor(player);
@@ -42,10 +42,11 @@ export class Weapons {
     const dur = 0.3;
     let to;
     if (target) {
-      const leadS = target.s + target.v * dur - target.len * 0.3;
-      to = new THREE.Vector3(target.x + (Math.random() - 0.5) * Math.min(1.2, target.w * 0.5), 0.6 + Math.random() * 0.7, -leadS);
+      // 빌런 앞바퀴 앞 노면 → 밟고 지나가며 펑크
+      const leadS = target.s + target.v * dur + target.len * 0.38;
+      to = new THREE.Vector3(target.x + (Math.random() - 0.5) * Math.min(1.4, target.w * 0.6), 0.25 + Math.random() * 0.4, -leadS);
     } else {
-      to = new THREE.Vector3(player.x + (Math.random() - 0.5) * 0.4, 0.05, -(player.s + 20));
+      to = new THREE.Vector3(player.x + (Math.random() - 0.5) * 0.6, 0.05, -(player.s - 9));
     }
     obj.position.copy(from);
     this.tacks.push({ obj, from, to, t: 0, dur, target, arc: target ? 2.2 : 3 });
@@ -92,7 +93,7 @@ export class Weapons {
       const p = Math.min(1, t.t / t.dur);
       // 목표가 움직이면 끝점 보정
       if (t.target && t.target.alive) {
-        t.to.z = -(t.target.s - t.target.len * 0.3);
+        t.to.z = -(t.target.s + t.target.len * 0.38);
         t.to.x += (t.target.x - t.to.x) * Math.min(1, dt * 10);
       }
       t.obj.position.lerpVectors(t.from, t.to, p);

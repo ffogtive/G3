@@ -146,7 +146,7 @@ export class World {
     try { this._overhead(this._add(SC.buildGantrySign(stage.signs || [['서울', '10km']], {}), 0, startS + 46)); } catch (e) { console.warn('gantry', e); }
     try { this._overhead(this._add(SC.buildGantrySign([...(stage.signs || [])].reverse(), {}), 0, frontS + 150)); } catch (e) { console.warn('gantry2', e); }
     try {
-      const v1 = SC.buildVMS(`앞쪽 정체 ${stage.displayKm}km`, {});
+      const v1 = SC.buildVMS(`앞쪽 정체 ${stage.displayKm}km\n원인: ${stage.cause || '저속차량'}`, {});
       this._add(v1, 0, startS + 105);
       const v2 = SC.buildVMS(stage.vms || '1차선은 추월차선입니다', {});
       this._add(v2, 0, frontS + 25);
