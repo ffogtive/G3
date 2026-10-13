@@ -14,6 +14,17 @@
 //  showAlbum(stages?, progress?, chapters?) / hideAlbum()  인자 없으면 마지막 showTitle 데이터 사용
 //  handlers.onAlbum?(open: boolean)  앨범 열림/닫힘 알림 (선택)
 //
+// v0.3 API (하위 호환) — 가설: 별 기준(미션 3개)이 미리 보이고, 포상금으로 사는 '차고'가 생기면 "퇴치 → 보상 → 성장" 루프가 닫힌다.
+//  showStageCard(stage, missions?)   missions = [{ label }] ×3 → 카드에 '★ 별 미션' 3칸 (별 i = 미션 i)
+//  showResult(r)  r.missions?: [{ label, done, value? }] ×3 → 별 3개가 각 미션 카드 머리에 붙어서 done 인 칸만 켜짐
+//  setHUD(s)      s.minis?: { done, total } → '잔챙이 1/3' 칩 (total 0/없음 = 숨김) · s.boostT?: 0..1 → 속도계 부스트 링
+//  setControls({ jump?: boolean, jumpCd?: 0..1 })  터치 '점프' 버튼 (onControl('jump', pressed)) · 쿨다운 부채꼴
+//  showTitle(stages, progress, chapters?, shop?)   shop = config SHOP → '차고' 버튼(살 수 있는 개수 배지) · ↑ 점프 키 힌트
+//  showShop(shop?, progress?, tab?) / hideShop() / refreshShop(progress?)   참교육 차고(휴게소 정비소) 오버레이
+//                 progress: { wallet, owned: [id], equip: { car, weapon, finish } }. 인자 없으면 마지막 showTitle 데이터
+//                 refreshShop: owned 에 새로 생긴 id → 구매 연출(코인 버스트 + '구매 완료!'), equip 변경 → '장착!' 범프
+//  handlers.onBuy?(id) · onEquip?(id) · onShop?(open: boolean)
+//
 // 규칙
 //  - #ui 루트 안에 전부 동적으로 생성. 클래스 접두사 'ui-'.
 //  - 매 프레임 호출(setHUD/setNav/showBoss/bubble/vignette)은 값이 바뀔 때만 DOM 을 건드린다.
@@ -129,6 +140,16 @@ const SVG = {
   heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.6S3 15 3 8.9A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 9 2.1c0 6.1-9 11.7-9 11.7z" fill="#ff3b30" stroke="#17202b" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   hazard: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="3" y="4" width="42" height="42" rx="11" fill="#9e1209"/><rect x="3" y="2" width="42" height="40" rx="11" fill="#ff3b30" stroke="#17202b" stroke-width="3"/><path d="M24 9.5L38 33.5H10z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round"/><path d="M24 18.5L31 30.5H17z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="M9 8.5q6-4 13-4" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2.4" stroke-linecap="round"/></svg>',
   medal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 2h4.2l2.6 6.5-3.6 2.4zM17.5 2h-4.2l-1.8 4.6 2.6 4.3z" fill="#2f6fd6" stroke="#17202b" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="15.4" r="6.6" fill="#ffc61a" stroke="#17202b" stroke-width="1.9"/><path d="M12 11.6l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z" fill="#fff" stroke="#c98a00" stroke-width=".8" stroke-linejoin="round"/></svg>',
+  // ── v0.3 미션 · 차고 · 점프
+  cross: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#9aa3ae" stroke="#17202b" stroke-width="2.2"/><path d="M8.2 8.2l7.6 7.6M15.8 8.2l-7.6 7.6" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
+  mini: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="12.6" r="8.8" fill="#ff8a1f" stroke="#17202b" stroke-width="2"/><path d="M6.6 9.8l3.1 1.4M15.4 9.8l-3.1 1.4" stroke="#17202b" stroke-width="2" stroke-linecap="round"/><circle cx="8.8" cy="12.9" r="1.2" fill="#17202b"/><circle cx="13.2" cy="12.9" r="1.2" fill="#17202b"/><path d="M8.6 17h4.4" stroke="#17202b" stroke-width="2" stroke-linecap="round"/><path d="M13.2 17h7" stroke="#17202b" stroke-width="3.6" stroke-linecap="round"/><path d="M13.6 17h5.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="20.4" cy="17" r="1.3" fill="#ff3b30"/></svg>',
+  garage: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.8 10.2L12 3l10.2 7.2V21.5H1.8z" fill="#ffb400" stroke="#17202b" stroke-width="1.8" stroke-linejoin="round"/><rect x="5.6" y="11.2" width="12.8" height="10.3" fill="#c9d0d8" stroke="#17202b" stroke-width="1.6"/><path d="M5.6 13.8h12.8M5.6 16.4h12.8M5.6 19h12.8" stroke="#6d7682" stroke-width="1.3"/><rect x="9.6" y="6.6" width="4.8" height="2.6" rx=".6" fill="#fff" stroke="#17202b" stroke-width="1.1"/></svg>',
+  jump: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 19.5Q6 7.5 15.5 6.5" fill="none" stroke="#17202b" stroke-width="5.4" stroke-linecap="round"/><path d="M3.5 19.5Q6 7.5 15.5 6.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M13.6 1.8l7.4 4.6-7 5.1z" fill="#fff" stroke="#17202b" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  rocket: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 12.2L5 17.6l3.6-1.2zM15.6 12.2L19 17.6l-3.6-1.2z" fill="#ff3b30" stroke="#17202b" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.6 16.2Q12 23.4 14.4 16.2z" fill="#ffb400" stroke="#17202b" stroke-width="1.2" stroke-linejoin="round"/><path d="M12 1.6c4 3.2 5 8.4 3.8 14.6H8.2C7 10 8 4.8 12 1.6z" fill="#fff" stroke="#17202b" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="9.4" r="2.1" fill="#6aa6ff" stroke="#17202b" stroke-width="1.3"/></svg>',
+  shieldOk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2l8.2 3.1v6.1c0 5.2-3.6 8.7-8.2 10.3-4.6-1.6-8.2-5.1-8.2-10.3V5.3z" fill="#fff" stroke="#17202b" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.2 11.8l2.6 2.6 5-5.2" fill="none" stroke="#17a466" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  wrench: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 3.2a5 5 0 0 0-4.5 6.6L3.4 16.5a2.1 2.1 0 0 0 3 3l6.7-6.7a5 5 0 0 0 6.6-4.5l-3 1.6-2.6-.6-.6-2.6z" fill="#fff"/></svg>',
+  fuel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5.2A2.2 2.2 0 0 1 6.2 3h6.6A2.2 2.2 0 0 1 15 5.2V21zM6.6 6v4.4h5.8V6z" fill="#fff" fill-rule="evenodd"/><path d="M15 9.2l2.6 1.6v6.6a1.5 1.5 0 0 0 3 0V8.6L18 6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.6 8h12.8l-1.6 12.4a1.6 1.6 0 0 1-1.6 1.4H8.8a1.6 1.6 0 0 1-1.6-1.4z" fill="#fff"/><rect x="4.4" y="5" width="15.2" height="3" rx="1" fill="#fff"/><path d="M9 3.6q-1.4-1.4 0-2.8M13 3.6q-1.4-1.4 0-2.8" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>',
 };
 
 // 블박 화면 대체 그림 (사진이 없을 때) / 미수집 실루엣. viewBox 16:9, 그라데이션 id 없이 단색만 (중복 삽입 안전)
@@ -160,6 +181,150 @@ function dashArt(color = '#d9c9a3', mode = 'photo', seed = 1) {
     ${sil ? '' : '<path d="M52 40h-6v6M108 40h6v6M52 84h-6v-6M108 84h6v-6" fill="none" stroke="#ff3b30" stroke-width="2"/>'}
   </svg>`;
 }
+// ───────────────────────────── 차고 아이템 그림 (인라인 SVG, 아이템마다 다른 그림 · id 없는 단색만 → 중복 삽입 안전)
+// viewBox 120×84, 바닥 그림자 y≈75. 잉크 외곽선 #17202b, 플랫 색 (Crossy 풍)
+const INK = '#17202b';
+const so = (w = 3) => `stroke="${INK}" stroke-width="${w}" stroke-linejoin="round"`;
+const wheel = (x, y, r = 10) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#2a2f38" ${so()}/><circle cx="${x}" cy="${y}" r="${(r * 0.42).toFixed(1)}" fill="#c9d0d8" ${so(1.6)}/>`;
+const shadow = (rx = 44, cx = 60, cy = 75) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="4.5" fill="#000" opacity=".2"/>`;
+const sparkle = (x, y, s = 1, c = '#fff') => `<path d="M${x} ${y - 8 * s}L${x + 2 * s} ${y - 2 * s}L${x + 8 * s} ${y}L${x + 2 * s} ${y + 2 * s}L${x} ${y + 8 * s}L${x - 2 * s} ${y + 2 * s}L${x - 8 * s} ${y}L${x - 2 * s} ${y - 2 * s}z" fill="${c}" ${so(1.5)}/>`;
+// 작은 차 (점프/피니시 그림용). (x,y) = 차체 중심, r = 기울기
+const miniCar = (x, y, r = 0, s = 1, col = '#ffc928') => `<g transform="translate(${x} ${y}) rotate(${r}) scale(${s})">`
+  + `<path d="M-13 -7L-9 -16H8L13 -7z" fill="${col}" ${so()}/><path d="M-8.4 -8.4L-6 -13.6H5.6L8.2 -8.4z" fill="#24366b"/>`
+  + `<rect x="-21" y="-8" width="42" height="14" rx="4" fill="${col}" ${so()}/><rect x="16" y="-4" width="5" height="4" rx="1" fill="#fff6c8"/>`
+  + `<circle cx="-11" cy="6" r="5.4" fill="#2a2f38" ${so(2.6)}/><circle cx="11" cy="6" r="5.4" fill="#2a2f38" ${so(2.6)}/></g>`;
+const ART = {
+  car_hatch: () => shadow(46)
+    + `<path d="M14 60V42L22 22Q23 19 27 19H72Q76 19 78 22L90 37L102 39Q108 40 108 46V58Q108 62 104 62H18Q14 62 14 60z" fill="#ffc928" ${so()}/>`
+    + `<path d="M27 24H47V36H22z" fill="#24366b" ${so(2.2)}/><path d="M52 24H71Q73 24 74 26L82 36H52z" fill="#24366b" ${so(2.2)}/>`
+    + '<path d="M22 44H100" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/><path d="M50 38V58" stroke="#17202b" stroke-opacity=".45" stroke-width="1.8"/>'
+    + `<rect x="101" y="42" width="7" height="5" rx="1.5" fill="#fff6c8" ${so(1.5)}/><rect x="13" y="43" width="5" height="7" rx="1" fill="#ff3b30" ${so(1.5)}/>`
+    + wheel(34, 62) + wheel(88, 62),
+  car_porter: () => shadow(48)
+    + `<rect x="10" y="50" width="98" height="9" rx="2" fill="#3a4352" ${so()}/>`
+    + `<rect x="16" y="22" width="22" height="16" rx="1.5" fill="#d99a4a" ${so(2.4)}/><path d="M27 22V38" stroke="#a8612a" stroke-width="2.4"/>`
+    + `<rect x="40" y="27" width="18" height="11" rx="1.5" fill="#f0bd73" ${so(2.4)}/>`
+    + `<rect x="10" y="36" width="66" height="15" rx="1.5" fill="#d4dae2" ${so()}/><path d="M27 36V51M44 36V51M61 36V51" stroke="#17202b" stroke-width="1.8"/>`
+    + `<path d="M76 61V22Q76 16 82 16H97Q104 16 105 22L108 37V58Q108 62 104 62H76z" fill="#2f6fd6" ${so()}/>`
+    + `<path d="M81 21H97Q100 21 100.6 23.6L102.6 34H81z" fill="#24366b" ${so(2.2)}/><path d="M80 42H104" stroke="#fff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>`
+    + `<rect x="101" y="44" width="7" height="6" rx="1.5" fill="#fff6c8" ${so(1.5)}/>`
+    + wheel(30, 62) + wheel(92, 62),
+  car_wrecker: () => shadow(48)
+    + `<rect x="10" y="50" width="98" height="9" rx="2" fill="#3a4352" ${so()}/>`
+    + `<rect x="12" y="38" width="62" height="14" rx="2" fill="#4a5466" ${so()}/>`
+    + `<rect x="12" y="38" width="16" height="14" fill="#ffd23f" ${so(2.4)}/><path d="M14 52L22 38M20 52L28 40M12 46L16 39" stroke="#17202b" stroke-width="3"/>`
+    + '<path d="M50 40L26 13" stroke="#17202b" stroke-width="10" stroke-linecap="round"/><path d="M50 40L26 13" stroke="#ffd23f" stroke-width="5" stroke-linecap="round"/>'
+    + `<circle cx="26" cy="13" r="4.4" fill="#c9d0d8" ${so(2.2)}/><path d="M23 16V33" stroke="#17202b" stroke-width="2"/>`
+    + '<path d="M23 33q-5.6 0-5.6 5.4t5.6 5.6q4.6 0 4.6-4.4" fill="none" stroke="#17202b" stroke-width="3.4" stroke-linecap="round"/>'
+    + `<path d="M74 61V24Q74 18 80 18H96Q103 18 104 24L108 38V58Q108 62 104 62H74z" fill="#ff8a1f" ${so()}/>`
+    + `<path d="M80 23H96Q99 23 99.6 25.6L101.6 35H80z" fill="#24366b" ${so(2.2)}/><path d="M78 43H104" stroke="#fff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>`
+    + `<rect x="83" y="11" width="14" height="7" rx="2.5" fill="#ffb400" ${so(2.4)}/><path d="M80 8l-4-4M100 8l4-4M90 6V1" stroke="#ffb400" stroke-width="2.6" stroke-linecap="round"/>`
+    + `<rect x="101" y="45" width="7" height="6" rx="1.5" fill="#fff6c8" ${so(1.5)}/>`
+    + wheel(30, 62) + wheel(92, 62),
+  car_patrol: () => shadow(48)
+    + `<path d="M10 60V48Q10 42 16 41L30 39L42 24Q44 21 48 21H74Q78 21 80 24L92 38L104 40Q110 41 110 47V58Q110 62 106 62H14Q10 62 10 60z" fill="#262b35" ${so()}/>`
+    + `<path d="M37 38L46 26H59V38z" fill="#6f8fc8" ${so(2.2)}/><path d="M63 26H74Q76 26 77 28L85 38H63z" fill="#6f8fc8" ${so(2.2)}/>`
+    + '<path d="M18 47H102" stroke="#fff" stroke-opacity=".3" stroke-width="3" stroke-linecap="round"/><path d="M61 39V58" stroke="#000" stroke-opacity=".5" stroke-width="1.8"/>'
+    + `<rect x="48" y="14" width="12" height="7" rx="2" fill="#ff3b30" ${so(2.2)}/><rect x="60" y="14" width="12" height="7" rx="2" fill="#2f6fd6" ${so(2.2)}/>`
+    + '<path d="M44 12l-6-5M76 12l6-5M60 9V3" stroke="#ffd23f" stroke-width="2.8" stroke-linecap="round"/>'
+    + `<rect x="103" y="44" width="7" height="5" rx="1.5" fill="#fff6c8" ${so(1.5)}/><rect x="9" y="45" width="5" height="6" rx="1" fill="#ff3b30" ${so(1.5)}/>`
+    + wheel(32, 62) + wheel(88, 62),
+  wpn_tack: () => shadow(34)
+    + `<path d="M84 63L92 46L98 63z" fill="#c9d0d8" ${so(2.4)}/><ellipse cx="91" cy="64" rx="11" ry="3.6" fill="#9aa3ae" ${so(2.2)}/>`
+    + `<path d="M30 60V65A30 8.5 0 0 0 90 65V60" fill="#8a929d" ${so()}/><ellipse cx="60" cy="60" rx="30" ry="8.5" fill="#e9ecef" ${so()}/>`
+    + `<path d="M53 60L60 12L67 60z" fill="#c9d0d8" ${so()}/><path d="M58.6 54L60.4 22" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`
+    + '<path d="M40 58q8-4 18-4" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>' + sparkle(76, 20, 1.1),
+  wpn_caltrop: () => {
+    const cal = (x, y, s) => {
+      const d = `M${x} ${y}L${x} ${y - 15 * s}M${x} ${y}L${x - 14 * s} ${y + 7 * s}M${x} ${y}L${x + 14 * s} ${y + 7 * s}M${x} ${y}L${x + 2 * s} ${y + 12 * s}`;
+      return `<path d="${d}" stroke="${INK}" stroke-width="${(8 * s).toFixed(1)}" stroke-linecap="round"/><path d="${d}" stroke="#9aa3ae" stroke-width="${(4 * s).toFixed(1)}" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r="${(3.2 * s).toFixed(1)}" fill="#c9d0d8" ${so(1.6)}/>`;
+    };
+    return shadow(42) + cal(34, 58, 0.95) + cal(84, 60, 0.95) + cal(59, 42, 1.15)
+      + `<circle cx="101" cy="17" r="12" fill="#ffb400" ${so()}/><text x="101" y="22.5" text-anchor="middle" font-family="Black Han Sans, Jua, sans-serif" font-size="15" fill="${INK}">×3</text>`;
+  },
+  wpn_water: () => shadow(32)
+    + `<path d="M60 20C74 20 92 38 92 53C92 68 77 75 60 75C43 75 28 68 28 53C28 38 46 20 60 20z" fill="#4fb3ff" ${so()}/>`
+    + `<path d="M54.5 21.4L60 11.5L65.5 21.4Q60 23.6 54.5 21.4z" fill="#2f7fd6" ${so(2.4)}/>`
+    + '<path d="M40 44Q43 32 53 27" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-opacity=".9"/><ellipse cx="72" cy="62" rx="7" ry="3.4" fill="#fff" opacity=".35"/>'
+    + `<path d="M100 26q5 7 0 10.6q-5-3.6 0-10.6z" fill="#8fd0ff" ${so(2)}/><path d="M18 34q4 6 0 9q-4-3 0-9z" fill="#8fd0ff" ${so(2)}/><path d="M104 50q3.6 5 0 7.6q-3.6-2.6 0-7.6z" fill="#8fd0ff" ${so(1.8)}/>`,
+  wpn_gum: () => shadow(34)
+    + `<path d="M36 62q-9 7-17 4" fill="none" stroke="${INK}" stroke-width="8" stroke-linecap="round"/><path d="M36 62q-9 7-17 4" fill="none" stroke="#ff7ab8" stroke-width="4" stroke-linecap="round"/>`
+    + `<circle cx="57" cy="50" r="24" fill="#ff7ab8" ${so()}/><circle cx="85" cy="40" r="10" fill="#ffb3d6" ${so(2.4)}/><circle cx="82" cy="37" r="2.6" fill="#fff" opacity=".8"/>`
+    + '<path d="M42 42q4-9 13-11" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-opacity=".85"/>'
+    + `<path d="M63 27Q68 13 80 14" fill="none" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/>` + sparkle(84, 13, 1, '#ffd23f')
+    + `<text x="57" y="58" text-anchor="middle" font-family="Black Han Sans, Jua, sans-serif" font-size="17" fill="#fff" stroke="${INK}" stroke-width="3" paint-order="stroke">껌</text>`,
+  mv_jump: () => shadow(26, 86) + shadow(20, 28)
+    + miniCar(86, 60, 0, 1, '#9aa1a9')
+    + '<path d="M14 70Q34 6 96 22" fill="none" stroke="#fff" stroke-width="3.2" stroke-dasharray="1 8" stroke-linecap="round"/>'
+    + '<path d="M22 46l-9-3M24 38l-9-5M28 30l-8-6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>'
+    + miniCar(58, 22, -14, 1.05) + sparkle(102, 44, 0.8, '#ffd23f'),
+  mv_drone: () => shadow(22, 60, 76)
+    + `<path d="M48 38L24 26M72 38L96 26" stroke="${INK}" stroke-width="5.4" stroke-linecap="round"/><path d="M48 38L24 26M72 38L96 26" stroke="#6d7682" stroke-width="2.2" stroke-linecap="round"/>`
+    + `<ellipse cx="24" cy="23" rx="17" ry="4" fill="#d6f0ff" ${so(2)}/><ellipse cx="96" cy="23" rx="17" ry="4" fill="#d6f0ff" ${so(2)}/>`
+    + `<rect x="21" y="22" width="6" height="6" rx="1.5" fill="#3a4352" ${so(1.6)}/><rect x="93" y="22" width="6" height="6" rx="1.5" fill="#3a4352" ${so(1.6)}/>`
+    + `<rect x="42" y="32" width="36" height="15" rx="6" fill="#3a4352" ${so()}/><path d="M48 36H72" stroke="#fff" stroke-opacity=".35" stroke-width="2.4" stroke-linecap="round"/>`
+    + `<rect x="51" y="46" width="18" height="11" rx="3.5" fill="#17202b" ${so(2)}/><circle cx="60" cy="51.5" r="3.6" fill="#6aa6ff" ${so(1.4)}/>`
+    + `<circle cx="73" cy="39.5" r="2.6" fill="#ff3b30" ${so(1.2)}/><path d="M48 62l-6 7M72 62l6 7M60 64v8" stroke="#fff" stroke-width="2" stroke-dasharray="2 3" stroke-linecap="round"/>`,
+  fin_rocket: () => `<g transform="rotate(38 60 44)">`
+    + `<path d="M51 55Q60 82 69 55z" fill="#ffb400" ${so(2.6)}/><path d="M55 55Q60 70 65 55z" fill="#fff3a8"/>`
+    + `<path d="M50 42L39 58L50 54zM70 42L81 58L70 54z" fill="#ff3b30" ${so(2.6)}/>`
+    + `<path d="M60 7C71 17 73 33 70.5 55H49.5C47 33 49 17 60 7z" fill="#fff" ${so()}/><path d="M60 7C66 12 69.5 19 70.6 26H49.4C50.5 19 54 12 60 7z" fill="#ff3b30" ${so()}/>`
+    + `<circle cx="60" cy="37" r="6.4" fill="#6aa6ff" ${so()}/><circle cx="58" cy="35" r="1.8" fill="#fff"/></g>`
+    + sparkle(100, 16, 1.1, '#ffd23f') + sparkle(16, 22, 0.7) + sparkle(98, 64, 0.6),
+  fin_balloon: () => shadow(18, 60, 77)
+    + '<path d="M38 36L57 58M60 30V58M82 38L63 58" stroke="#17202b" stroke-width="1.8"/>'
+    + `<ellipse cx="38" cy="23" rx="12" ry="14" fill="#ff3b30" ${so()}/><ellipse cx="82" cy="25" rx="12" ry="14" fill="#2f6fd6" ${so()}/><ellipse cx="60" cy="16" rx="13" ry="15" fill="#ffd23f" ${so()}/>`
+    + '<path d="M33 16q2-5 6-6M77 18q2-5 6-6M54 9q2-5 6-6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-opacity=".85"/>'
+    + miniCar(60, 66, 6, 0.82),
+  fin_heli: () => '<path d="M70 42V56" stroke="#17202b" stroke-width="1.8" stroke-dasharray="3 2"/>' + miniCar(70, 66, -6, 0.8, '#d9c9a3')
+    + `<path d="M48 26H14" stroke="${INK}" stroke-width="8" stroke-linecap="round"/><path d="M48 26H15" stroke="#17a466" stroke-width="3.6" stroke-linecap="round"/>`
+    + `<circle cx="13" cy="25" r="7" fill="none" stroke="${INK}" stroke-width="2.4" stroke-dasharray="4 3"/>`
+    + `<path d="M56 44H90M62 39V44M84 39V44" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`
+    + `<path d="M46 28Q46 16 60 16H76Q92 16 94 29Q94 40 80 40H54Q46 40 46 32z" fill="#17a466" ${so()}/>`
+    + `<path d="M77 20H85Q91 21 91.4 29H77z" fill="#9fe0ff" ${so(2.2)}/><path d="M52 24H70" stroke="#fff" stroke-opacity=".5" stroke-width="2.6" stroke-linecap="round"/>`
+    + `<path d="M70 10V16" stroke="${INK}" stroke-width="3"/><path d="M34 10H106" stroke="${INK}" stroke-width="4.4" stroke-linecap="round"/><path d="M36 10H104" stroke="#c9d0d8" stroke-width="1.6" stroke-linecap="round"/>`,
+  fin_ufo: () => '<path d="M46 40L26 80H94L74 40z" fill="#fff3a8" opacity=".75"/>'
+    + miniCar(60, 64, 16, 0.72, '#d9c9a3') + '<path d="M44 76l-3 3M78 72l3 3M70 52l4-2" stroke="#fff" stroke-width="2" stroke-linecap="round"/>'
+    + `<path d="M43 34Q45 14 60 14Q75 14 77 34z" fill="#7dffb0" ${so()}/><path d="M50 26q2-6 8-7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>`
+    + `<ellipse cx="60" cy="38" rx="35" ry="10" fill="#c9d0d8" ${so()}/><path d="M30 37Q60 45 90 37" fill="none" stroke="#8a929d" stroke-width="2"/>`
+    + ['36,40', '50,43.5', '70,43.5', '84,40'].map((p) => { const [x, y] = p.split(','); return `<circle cx="${x}" cy="${y}" r="2.6" fill="#ffd23f" ${so(1.3)}/>`; }).join('')
+    + sparkle(100, 14, 0.7) + sparkle(18, 20, 0.6),
+  pas_4k: () => shadow(36)
+    + `<path d="M50 23V12H70V23" fill="#3a4352" ${so(2.6)}/><rect x="24" y="22" width="70" height="42" rx="11" fill="#2a2f38" ${so()}/>`
+    + `<circle cx="50" cy="43" r="13" fill="#11161e" ${so()}/><circle cx="50" cy="43" r="6.4" fill="#6aa6ff" ${so(1.8)}/><circle cx="47.6" cy="40.4" r="2" fill="#fff"/>`
+    + `<circle cx="82" cy="31" r="3.2" fill="#ff3b30" ${so(1.4)}/><path d="M30 28H44" stroke="#fff" stroke-opacity=".3" stroke-width="2.4" stroke-linecap="round"/>`
+    + `<g transform="rotate(-8 86 54)"><rect x="70" y="45" width="34" height="19" rx="4" fill="#ffd23f" ${so()}/><text x="87" y="60" text-anchor="middle" font-family="Black Han Sans, Jua, sans-serif" font-size="15" fill="${INK}">4K</text></g>`,
+  pas_airbag: () => {
+    const cs = [[44, 47, 15], [60, 37, 18], [76, 47, 15], [60, 55, 15], [50, 34, 11], [71, 33, 11]];
+    return shadow(36)
+      + `<circle cx="60" cy="46" r="27" fill="none" stroke="${INK}" stroke-width="10"/><circle cx="60" cy="46" r="27" fill="none" stroke="#6d7682" stroke-width="5"/>`
+      + cs.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${INK}" stroke="${INK}" stroke-width="6"/>`).join('')
+      + cs.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/>`).join('')
+      + '<path d="M44 40q4-6 10-7M66 48q5 2 9 0" fill="none" stroke="#c9d0d8" stroke-width="2.6" stroke-linecap="round"/>'
+      + `<circle cx="54" cy="45" r="2.2" fill="${INK}"/><circle cx="66" cy="45" r="2.2" fill="${INK}"/><path d="M55 52q5 4 10 0" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>`;
+  },
+  pas_trot: () => shadow(32, 54)
+    + `<path d="M22 35H36L70 17V67L36 49H22z" fill="#ffd23f" ${so()}/><ellipse cx="70" cy="42" rx="6.4" ry="25" fill="#ffb400" ${so()}/>`
+    + '<path d="M28 40H38" stroke="#fff" stroke-opacity=".6" stroke-width="3" stroke-linecap="round"/>'
+    + `<path d="M93.5 30V12L103 14.5V22" fill="none" stroke="${INK}" stroke-width="2.8" stroke-linejoin="round"/><ellipse cx="89.5" cy="30" rx="5.2" ry="4.2" fill="#ff3b8a" ${so(2)}/><ellipse cx="99" cy="24" rx="4.4" ry="3.6" fill="#ff3b8a" ${so(2)}/>`
+    + `<path d="M104 58V44" stroke="${INK}" stroke-width="2.8"/><ellipse cx="100" cy="58" rx="5" ry="4" fill="#2f6fd6" ${so(2)}/>`
+    + '<path d="M80 34q4 8 0 16M86 30q6 12 0 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>',
+  pas_coffee: () => shadow(26)
+    + '<path d="M50 15q-5-5 0-10M60 13q-5-5 0-10M70 15q-5-5 0-10" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>'
+    + `<path d="M40 27H80L74.4 71Q73.8 75 69.8 75H50.2Q46.2 75 45.6 71z" fill="#fff" ${so()}/>`
+    + `<path d="M42.4 41H77.6L75.6 58H44.4z" fill="#c98a4a" ${so(2.4)}/><path d="M36 19H84Q86 19 86 21V27H34V21Q34 19 36 19z" fill="#8b5a3c" ${so()}/>`
+    + `<text x="60" y="54.5" text-anchor="middle" font-family="Black Han Sans, Jua, sans-serif" font-size="11" fill="#fff" stroke="${INK}" stroke-width="2.4" paint-order="stroke">쉼터</text>`
+    + '<path d="M47 32L50 66" stroke="#e3e6ea" stroke-width="3" stroke-linecap="round"/>',
+};
+// 모르는 id 는 분류별 대표 그림
+const ART_CAT = { car: 'car_hatch', weapon: 'wpn_tack', move: 'mv_jump', finish: 'fin_rocket', passive: 'pas_coffee' };
+function itemArt(it) {
+  const f = ART[it?.id] || ART[ART_CAT[it?.cat]] || ART.car_hatch;
+  let inner = '';
+  try { inner = f(); } catch { /* */ }
+  return `<svg class="ui-item__svg" viewBox="0 0 120 84" aria-hidden="true">${inner}</svg>`;
+}
+
 const hex = (c, d = '#d9c9a3') => (typeof c === 'number' && Number.isFinite(c) ? '#' + (c & 0xffffff).toString(16).padStart(6, '0') : typeof c === 'string' && /^#[0-9a-f]{3,8}$/i.test(c) ? c : d);
 const villainColor = (s) => hex(s && Array.isArray(s.villains) && s.villains[0] ? s.villains[0].color : null, ['#d9c9a3', '#2f6fd6', '#3a3f47', '#f4f4f2', '#7a8a4a'][Math.abs(num(s?.id, 1)) % 5]);
 // 사진 src 는 게임이 만든 것만 (data:image / blob / 상대·http 경로). DOM 속성으로만 넣는다.
@@ -242,8 +407,14 @@ function build() {
   // 상단 중앙 스택: 내비 → 원흉 거리 / 보스 바 → 힌트
   E.top = R.appendChild(el('div', 'ui-topstack'));
   buildNav();
-  E.dist = E.top.appendChild(el('div', 'ui-dist ui-hudpart', `<span class="ui-dist__ico">${SVG.angry}</span><span class="ui-dist__l">원흉까지</span><b class="ui-dist__n">0</b><span class="ui-dist__u">m</span>`));
+  // 원흉 거리 + 잔챙이 칩 (한 줄)
+  E.toprow = E.top.appendChild(el('div', 'ui-toprow'));
+  E.dist = E.toprow.appendChild(el('div', 'ui-dist ui-hudpart', `<span class="ui-dist__ico">${SVG.angry}</span><span class="ui-dist__l">원흉까지</span><b class="ui-dist__n">0</b><span class="ui-dist__u">m</span>`));
   E.distNum = E.dist.querySelector('.ui-dist__n');
+  E.minis = E.toprow.appendChild(el('div', 'ui-minis ui-hudpart',
+    `<span class="ui-minis__ico">${SVG.mini}</span><span class="ui-minis__ok">${SVG.check}</span><span class="ui-minis__l">잔챙이</span><b class="ui-minis__n">0</b><span class="ui-minis__t">/0</span>`));
+  E.minisN = E.minis.querySelector('.ui-minis__n');
+  E.minisT = E.minis.querySelector('.ui-minis__t');
   buildBoss();
   E.hint = E.top.appendChild(el('div', 'ui-hint', '<span class="ui-hint__ico">💡</span><span class="ui-hint__t"></span>'));
   E.hint.hidden = true;
@@ -281,6 +452,9 @@ function build() {
   E.album = R.appendChild(el('div', 'ui-screen ui-album'));
   E.album.hidden = true;
   E.album.addEventListener('click', () => hideAlbum());   // 책 바깥(배경) 탭 = 닫기
+  E.shop = R.appendChild(el('div', 'ui-screen ui-shop'));
+  E.shop.hidden = true;
+  E.shop.addEventListener('click', () => hideShop());     // 패널 바깥(배경) 탭 = 닫기
   buildPause();
   E.flash = R.appendChild(el('div', 'ui-flash'));
 
@@ -313,6 +487,7 @@ function resetCache() {
     score: -1, combo: -1, navP: -1, navR: -1, navDone: null, navFull: null,
     boss: false, bossName: null, hp: -1, lag: 1, lagShown: -1, lastHit: 0, lastBossT: 0, tires: -1,
     rel: null, relShown: 0, vig: -1, muted: null, touch: false, fireMode: null,
+    miT: -1, miD: -1, boost: -1, jump: false, jumpCd: -1,
   });
 }
 
@@ -394,6 +569,7 @@ function buildSpeedo() {
       <path d="${arc(A0 + span * 0.84, A1)}" fill="none" stroke="#ff3b30" stroke-width="5.5" stroke-linecap="round"/>
       ${ticks}
     </svg>
+    <div class="ui-speedo__boost"></div><span class="ui-speedo__btag">BOOST</span>
     <div class="ui-speedo__needle"></div><div class="ui-speedo__hub"></div>
     <div class="ui-speedo__read"><b class="ui-speedo__n">0</b><span class="ui-speedo__u">km/h</span></div>`));
   E.speedNum = E.speedo.querySelector('.ui-speedo__n');
@@ -403,9 +579,10 @@ function buildSpeedo() {
 function buildRage() {
   E.rageEl = R.appendChild(el('div', 'ui-rage ui-hudpart',
     `<span class="ui-rage__ico">${SVG.flame}</span>`
-    + '<div class="ui-rage__main"><span class="ui-rage__l">분노<em class="ui-rage__key">R 발동!</em></span><div class="ui-rage__segs">'
+    + '<div class="ui-rage__main"><span class="ui-rage__l">분노<em class="ui-rage__key">R 분노의 경적!</em></span><div class="ui-rage__segs">'
     + '<span class="ui-rage__seg"><i></i></span>'.repeat(RAGE_SEGS)
     + '</div></div><b class="ui-rage__max">MAX</b>'));
+  E.rageKey = E.rageEl.querySelector('.ui-rage__key');
   E.segs = [...E.rageEl.querySelectorAll('.ui-rage__seg')];
   E.segFill = E.segs.map((s) => s.firstElementChild);
 }
@@ -448,10 +625,36 @@ function buildTouch() {
   E.tFire = mk('fire', 'ui-tbtn--fire', `<span class="ui-tbtn__ico">${SVG.horn}</span><span class="ui-tbtn__t">경적</span>`, '발사 / 경적');
   E.tFireIco = E.tFire.querySelector('.ui-tbtn__ico');
   E.tFireTxt = E.tFire.querySelector('.ui-tbtn__t');
+  // 참교육 점프 (차고에서 구매 시 setControls({ jump: true }))
+  E.tJump = mk('jump', 'ui-tbtn--jump', `<span class="ui-tbtn__ico">${SVG.jump}</span><span class="ui-tbtn__t">점프</span>`, '점프');
 }
-function releaseTouch() {
+function releaseTouch(only) {
   for (const t of touchBtns) {
+    if (only && t.name !== only) continue;
     if (t.st.ids.size) { t.st.ids.clear(); t.b.classList.remove('is-down'); call('onControl', t.name, false); }
+  }
+}
+// 추가 터치 버튼 on/off. c = { jump?: boolean, jumpCd?: 0..1 (남은 쿨다운 비율, 0 = 준비) }
+function setControls(c) {
+  c = c && typeof c === 'object' ? c : {};
+  if ('jump' in c) {
+    const on = !!c.jump;
+    if (on !== C.jump) {
+      C.jump = on;
+      if (!on) releaseTouch('jump');
+      E.touch.classList.toggle('has-jump', on);
+      R.classList.toggle('ui-root--jump', on);
+    }
+  }
+  if ('jumpCd' in c) {
+    const cd = q(clamp(num(c.jumpCd), 0, 1), 40);
+    if (cd !== C.jumpCd) {
+      const was = C.jumpCd;
+      C.jumpCd = cd;
+      E.tJump.style.setProperty('--cd', cd);
+      E.tJump.classList.toggle('is-cd', cd > 0);
+      if (cd === 0 && was > 0) bump(E.tJump, 'jumpReady', 0, KF.bump, 260);
+    }
   }
 }
 
@@ -497,6 +700,36 @@ function setHUD(s) {
     C.phase = phase;
     R.dataset.phase = phase;
     setFireMode(phase === 'jam' ? 'horn' : 'fire');
+    // 분노 1칸 = 정체: 분노의 경적 / 보스전: 분노 폭탄
+    E.rageKey.textContent = phase === 'boss' ? 'R 분노 폭탄!' : 'R 분노의 경적!';
+    E.tSuper.setAttribute('aria-label', phase === 'boss' ? '분노 폭탄' : '분노의 경적');
+  }
+  // 부스트 링 (분노의 경적 직후 가속) 0..1
+  const bt = q(clamp(num(s.boostT), 0, 1), 20);
+  if (bt !== C.boost) {
+    const was = C.boost;
+    C.boost = bt;
+    E.speedo.style.setProperty('--boost', bt);
+    E.speedo.classList.toggle('is-boost', bt > 0);
+    if (bt > 0 && !(was > 0)) bump(E.speedo, 'boost', 0, KF.bigBump, 300);
+  }
+  // 잔챙이 빌런 칩
+  const mi = s.minis && typeof s.minis === 'object' ? s.minis : null;
+  const mt = mi ? Math.max(0, Math.round(num(mi.total))) : 0;
+  const md = mt ? clamp(Math.round(num(mi.done)), 0, mt) : 0;
+  if (mt !== C.miT || md !== C.miD) {
+    const up = mt > 0 && mt === C.miT && md > C.miD;
+    C.miT = mt; C.miD = md;
+    const on = mt > 0;
+    E.toprow.classList.toggle('has-minis', on);
+    E.minis.classList.toggle('is-on', on);
+    if (on) {
+      E.minisN.textContent = md;
+      E.minisT.textContent = '/' + mt;
+      const done = md >= mt;
+      E.minis.classList.toggle('is-done', done);
+      if (up) bump(E.minis, 'minis', 0, done ? KF.segPulse : KF.bigBump, done ? 460 : 260);
+    }
   }
   // 속도계
   const sp = Math.max(0, Math.round(num(s.speedKmh)));
@@ -872,13 +1105,18 @@ function hint(text, ms = 2600) {
 
 // ───────────────────────────── 타이틀 (챕터 × 스테이지, 지갑/구독자 칩, 제보 앨범)
 // 가설: 100 스테이지도 "챕터 탭 + 현재 챕터 10칸"만 그리면 한눈에 들어오고 빠르다.
-const TS = { stages: [], progress: null, chapters: null, P: null, groups: [], unlocked: 1, startIdx: 0, grid: false, multi: false, active: -1, list: null, head: null, tabs: null };
+const TS = { stages: [], progress: null, chapters: null, shop: null, P: null, groups: [], unlocked: 1, startIdx: 0, grid: false, multi: false, active: -1, list: null, head: null, tabs: null };
 
 function readProgress(progress) {
   const pr = progress && typeof progress === 'object' ? progress : {};
   const obj = (o) => (o && typeof o === 'object' ? o : {});
-  return { pr, stars: obj(pr.stars), best: obj(pr.best), album: obj(pr.album), wallet: Math.max(0, num(pr.wallet)), subs: Math.max(0, num(pr.subs)) };
+  return {
+    pr, stars: obj(pr.stars), best: obj(pr.best), album: obj(pr.album), wallet: Math.max(0, num(pr.wallet)), subs: Math.max(0, num(pr.subs)),
+    owned: Array.isArray(pr.owned) ? pr.owned.map(String) : [], equip: obj(pr.equip),
+  };
 }
+// 메뉴가 떠 있는 동안 (앨범·차고 위에서는 스테이지 시작 금지)
+const overlayOpen = () => isShown(E.album) || isShown(E.shop);
 const starsOf = (P, s) => clamp(Math.round(num(P.stars[s?.id])), 0, 3);
 
 // stages[].chapter (1..) 로 묶음. chapter 가 없으면 앞 스테이지의 챕터(첫 스테이지는 1)를 따른다 → 전부 없으면 한 챕터.
@@ -1040,7 +1278,7 @@ function albumGot(P, s) {
   return starsOf(P, s) > 0; // 앨범 도입 전 세이브: 클리어 = 수집
 }
 
-function showTitle(stages, progress, chapters) {
+function showTitle(stages, progress, chapters, shop) {
   stages = Array.isArray(stages) ? stages : [];
   const P = readProgress(progress);
   const n = stages.length;
@@ -1055,12 +1293,15 @@ function showTitle(stages, progress, chapters) {
   setPausedVisible(false);
   setShown(E.result, false);
   hideAlbum();
+  hideShop();
   setReleaseCounter(null);
   C.phase = null; delete R.dataset.phase;
 
   const groups = groupChapters(stages, chapters);
   const multi = groups.length > 1;
-  Object.assign(TS, { stages, progress, chapters: Array.isArray(chapters) ? chapters : null, P, groups, unlocked, startIdx, multi, grid: multi || n > 6, active: -1, list: null, head: null, tabs: null });
+  const shopList = Array.isArray(shop) ? shop : null;
+  Object.assign(TS, { stages, progress, chapters: Array.isArray(chapters) ? chapters : null, shop: shopList, P, groups, unlocked, startIdx, multi, grid: multi || n > 6, active: -1, list: null, head: null, tabs: null });
+  if (shopList) { SH.src = shopList; SH.progress = progress; }
 
   const T = E.title;
   T.textContent = '';
@@ -1070,7 +1311,7 @@ function showTitle(stages, progress, chapters) {
   top.appendChild(makeMuteBtn('ui-title__mute'));
 
   // 지갑 · 구독자 칩
-  T.appendChild(el('div', 'ui-purse',
+  E.tPurse = T.appendChild(el('div', 'ui-purse',
     `<span class="ui-purse__chip ui-purse__chip--won"><span class="ui-purse__ico">${SVG.coin}</span><span class="ui-purse__txt"><small>포상금</small><b>${won(P.wallet)}</b></span></span>`
     + `<span class="ui-purse__chip ui-purse__chip--subs"><span class="ui-purse__ico">${SVG.chan}</span><span class="ui-purse__txt"><small>구독자</small><b>${kor(P.subs)}</b></span></span>`));
 
@@ -1102,7 +1343,7 @@ function showTitle(stages, progress, chapters) {
     const i = Math.round(num(card.dataset.i, -1));
     if (i < 0 || i >= TS.stages.length) return;
     if (i >= TS.unlocked) { anim(card, KF.shake, { duration: 320 }); return; }
-    if (!isShown(E.title) || isShown(E.album)) return;
+    if (!isShown(E.title) || overlayOpen()) return;
     call('onStartStage', i);
   });
 
@@ -1112,20 +1353,66 @@ function showTitle(stages, progress, chapters) {
   const go = wrap.appendChild(el('div', 'ui-title__go'));
   go.appendChild(btn('ui-btn--yellow ui-btn--xl ui-title__start',
     `<span class="ui-btn__main">START <span class="ui-btn__arrow">▶</span></span><span class="ui-btn__sub">${s0 ? `STAGE ${multi ? `${g0.no}-${k0 + 1}` : startIdx + 1} · ${esc(stageTitle(s0))}` : ''}</span>`,
-    () => { if (isShown(E.title) && !isShown(E.album)) call('onStartStage', startIdx); }));
+    () => { if (isShown(E.title) && !overlayOpen()) call('onStartStage', startIdx); }));
   const got = stages.filter((s) => albumGot(P, s)).length;
   go.appendChild(btn('ui-btn--blue ui-title__album',
     `<span class="ui-title__albumico">${SVG.album}</span><span class="ui-title__albumtxt"><span>제보 앨범</span><small><b>${got}</b>/${n}</small></span>`,
     () => { if (isShown(E.title)) showAlbum(); }, '제보 앨범'));
-  wrap.appendChild(el('div', 'ui-help',
-    '<span class="ui-help__row"><b>PC</b><kbd>←</kbd><kbd>→</kbd> 차선 · <kbd>Space</kbd> 발사/경적 · <kbd>R</kbd> 분노 미사일</span>'
-    + '<span class="ui-help__row"><b>모바일</b> 버튼 · 스와이프</span>'));
+  // 차고 (shop 을 넘겨준 경우만)
+  E.tGarage = null;
+  if (shopList && shopList.length) {
+    E.tGarage = go.appendChild(btn('ui-btn--green ui-title__album ui-title__garage',
+      `<span class="ui-title__albumico">${SVG.garage}</span><span class="ui-title__albumtxt"><span>차고</span><small></small></span><span class="ui-title__badge" hidden></span>`,
+      () => { if (isShown(E.title) && !isShown(E.album)) showShop(); }, '참교육 차고'));
+  }
+  E.tHelp = wrap.appendChild(el('div', 'ui-help'));
+  updateTitleShop(P, false);
 
   setShown(T, true);
   renderChapter(g0 ? g0.no : 1, false);
   try { T.scrollTop = 0; } catch { /* */ }
 }
-function hideTitle() { hideAlbum(); setShown(E.title, false, 320); }
+function hideTitle() { hideAlbum(); hideShop(); setShown(E.title, false, 320); }
+
+// 타이틀의 차고 관련 조각 (지갑 칩 · 차고 버튼 배지 · 점프 키 힌트) — showTitle / refreshShop 공용
+function updateTitleShop(P, animate) {
+  if (!E.tHelp || !E.tHelp.isConnected) return;
+  const jump = P.owned.includes('mv_jump');
+  E.tHelp.innerHTML = `<span class="ui-help__row"><b>PC</b><kbd>←</kbd><kbd>→</kbd> 차선 · <kbd>Space</kbd> 발사/경적 · <kbd>R</kbd> 분노의 경적·폭탄${jump ? ' · <kbd>↑</kbd> 점프' : ''}</span>`
+    + '<span class="ui-help__row"><b>모바일</b> 버튼 · 스와이프</span>';
+  const wb = E.tPurse && E.tPurse.querySelector('.ui-purse__chip--won b');
+  if (wb) {
+    const prev = num(wb.dataset.v, P.wallet);
+    wb.dataset.v = P.wallet;
+    if (animate && prev !== P.wallet) countTo(wb, prev, P.wallet, 600, 'tw');
+    else wb.textContent = won(P.wallet);
+  }
+  if (!E.tGarage || !TS.shop) return;
+  const items = normItems(TS.shop);
+  const st = shopState(items, P.pr);
+  const owned = items.filter((it) => st.owned.has(it.id)).length;
+  const can = items.filter((it) => !st.owned.has(it.id) && num(it.price) <= st.wallet).length;
+  E.tGarage.querySelector('.ui-title__albumtxt small').innerHTML = `<b>${owned}</b>/${items.length}`;
+  const bd = E.tGarage.querySelector('.ui-title__badge');
+  bd.hidden = can <= 0;
+  bd.textContent = can > 9 ? '9+' : String(can);
+  E.tGarage.setAttribute('aria-label', can > 0 ? `참교육 차고 (살 수 있는 것 ${can}개)` : '참교육 차고');
+}
+// 숫자 카운트 (차고 지갑 · 타이틀 지갑). 노드별 rAF 하나
+function countTo(node, from, to, ms, key) {
+  if (!node) return;
+  const st = node._ct || (node._ct = { raf: 0 });
+  cancelAnimationFrame(st.raf);
+  if (reduceMotion || ms <= 0) { node.textContent = won(to); return; }
+  const t0 = now();
+  const step = () => {
+    const k = clamp((now() - t0) / ms, 0, 1);
+    node.textContent = won(from + (to - from) * easeOut(k));
+    if (k < 1) st.raf = requestAnimationFrame(step);
+    else bump(node, key, 0, KF.bigBump, 240);
+  };
+  st.raf = requestAnimationFrame(step);
+}
 
 // ───────────────────────────── 제보 앨범 (도감)
 // 가설: 블박 캡처가 "카드 한 장"으로 쌓이고, ★ 등급별 테두리(동·은·금)가 다시 플레이할 이유가 된다.
@@ -1222,6 +1509,319 @@ function hideAlbum() {
   call('onAlbum', false);
 }
 
+// ───────────────────────────── 참교육 차고 (고속도로 휴게소 정비소)
+// 가설: 포상금으로 차·무기·날아가는 것·피니시를 사는 차고가 생기면 '퇴치 → 보상 → 성장' 루프가 닫힌다. (docs/SHOP.md)
+//  - 차/무기/피니시 = 하나만 장착(slot), 날아가는 것/패시브 = 보유하면 항상 적용
+//  - price 0 아이템은 항상 보유. equip 이 비어 있으면 그 분류의 기본(price 0) 아이템이 장착된 것으로 본다.
+const SHOP_CATS = [
+  { id: 'car', label: '차', ico: SVG.car, slot: true },
+  { id: 'weapon', label: '무기', ico: SVG.tack, slot: true },
+  { id: 'move', label: '날아가는 것', ico: SVG.jump, slot: false },
+  { id: 'finish', label: '피니시', ico: SVG.rocket, slot: true },
+  { id: 'passive', label: '패시브', ico: SVG.shieldOk, slot: false },
+];
+const SLOT_CATS = SHOP_CATS.filter((c) => c.slot).map((c) => c.id);
+const SH = { src: null, progress: null, items: [], cats: [], tab: 'car', owned: new Set(), equip: {}, wallet: 0, busy: null, busyT: 0, el: {}, onKey: null };
+
+function normItems(shop) {
+  if (!Array.isArray(shop)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const it of shop) {
+    if (!it || typeof it !== 'object' || typeof it.id !== 'string' || !it.id || seen.has(it.id)) continue;
+    seen.add(it.id);
+    out.push({ ...it, cat: typeof it.cat === 'string' && it.cat ? it.cat : 'etc' });
+  }
+  return out;
+}
+function shopState(items, progress) {
+  const pr = progress && typeof progress === 'object' ? progress : {};
+  const owned = new Set((Array.isArray(pr.owned) ? pr.owned : []).map(String));
+  for (const it of items) if (num(it.price) <= 0) owned.add(it.id);
+  const eq = pr.equip && typeof pr.equip === 'object' ? pr.equip : {};
+  const equip = {};
+  for (const c of SLOT_CATS) {
+    const want = items.find((x) => x.id === eq[c] && x.cat === c && owned.has(x.id));
+    const def = want || items.find((x) => x.cat === c && num(x.price) <= 0) || items.find((x) => x.cat === c && owned.has(x.id));
+    equip[c] = def ? def.id : null;
+  }
+  return { owned, equip, wallet: Math.max(0, Math.round(num(pr.wallet))) };
+}
+function catsOf(items) {
+  const cats = SHOP_CATS.filter((c) => items.some((it) => it.cat === c.id));
+  for (const it of items) {
+    if (!cats.some((c) => c.id === it.cat)) cats.push({ id: it.cat, label: it.cat === 'etc' ? '기타' : it.cat, ico: SVG.garage, slot: false });
+  }
+  return cats;
+}
+function itemStatus(it) {
+  if (SH.owned.has(it.id)) return SLOT_CATS.includes(it.cat) ? (SH.equip[it.cat] === it.id ? 'equipped' : 'owned') : 'active';
+  return num(it.price) <= SH.wallet ? 'buy' : 'poor';
+}
+// 스펙 칩 (데이터에 있는 것만)
+function itemSpecs(it) {
+  const out = [];
+  const st = it.stats && typeof it.stats === 'object' ? it.stats : null;
+  if (it.cat === 'car' && st) {
+    const sp = num(st.speed, 1);
+    out.push(Math.abs(sp - 1) < 0.005 ? ['속도 기본', ''] : [`최고속 ${sp > 1 ? '+' : '−'}${Math.round(Math.abs(sp - 1) * 100)}%`, sp > 1 ? 'up' : 'down']);
+    if (num(st.armor) > 0) out.push([`추돌 무시 ${Math.round(num(st.armor))}회`, 'up']);
+    if (st.tow) out.push(['고장차 견인', 'up']);
+    if (st.siren) out.push(['사이렌', 'up']);
+  } else if (it.cat === 'weapon' && it.dmg != null) {
+    const dps = num(it.dmg) * num(it.rate, 1) * Math.max(1, num(it.spread, 1));
+    out.push([`초당 피해 ${Math.round(dps)}`, '']);
+    if (num(it.spread) > 1) out.push([`${Math.round(num(it.spread))}발 동시`, 'up']);
+    if (it.slow) out.push(['공격 느려짐', 'up']);
+  }
+  return out;
+}
+function itemCardHTML(it, k) {
+  const s = itemStatus(it);
+  const price = Math.max(0, Math.round(num(it.price)));
+  const id = esc(it.id);
+  const specs = itemSpecs(it).map(([t, c]) => `<i${c ? ` class="is-${c}"` : ''}>${esc(t)}</i>`).join('');
+  let act = '';
+  if (s === 'equipped') act = `<span class="ui-item__state ui-item__state--on">${SVG.check}<span>장착 중</span></span>`;
+  else if (s === 'owned') act = `<button type="button" class="ui-btn ui-btn--blue ui-item__btn" data-act="equip" data-id="${id}">장착</button>`;
+  else if (s === 'active') act = `<span class="ui-item__state ui-item__state--have">${SVG.check}<span>${it.cat === 'move' ? '보유 · 사용 가능' : '보유 · 항상 적용'}</span></span>`;
+  else if (s === 'buy') act = `<button type="button" class="ui-btn ui-btn--yellow ui-item__btn" data-act="buy" data-id="${id}"><span class="ui-btn__ico">${SVG.coin}</span>구매</button>`;
+  else act = `<span class="ui-item__need">${won(price - SH.wallet)} 더 모으면!</span><button type="button" class="ui-btn ui-btn--grey ui-item__btn is-poor" data-act="poor" data-id="${id}" aria-disabled="true">포상금 부족</button>`;
+  const rib = s === 'equipped' ? '<span class="ui-item__rib">장착 중</span>' : (s === 'owned' || s === 'active') ? '<span class="ui-item__rib ui-item__rib--have">보유</span>' : '';
+  const tag = price > 0 ? (s === 'buy' || s === 'poor' ? `<span class="ui-item__price">${won(price)}</span>` : '') : '<span class="ui-item__price ui-item__price--free">기본</span>';
+  return `<div class="ui-item ui-item--${esc(it.cat)} is-${s}" data-id="${id}" style="--i:${k}">
+    <div class="ui-item__show">${itemArt(it)}${rib}${tag}</div>
+    <div class="ui-item__body">
+      <b class="ui-item__name">${esc(it.name || it.id)}</b>
+      <span class="ui-item__desc">${esc(it.desc || '')}</span>
+      ${specs ? `<span class="ui-item__specs">${specs}</span>` : ''}
+    </div>
+    <div class="ui-item__foot">${act}</div>
+  </div>`;
+}
+
+function showShop(shop, progress, tab) {
+  if (!Array.isArray(shop)) shop = SH.src || TS.shop;
+  if (!progress || typeof progress !== 'object') progress = SH.progress || TS.progress;
+  SH.src = Array.isArray(shop) ? shop : null;
+  SH.progress = progress && typeof progress === 'object' ? progress : null;
+  SH.items = normItems(SH.src);
+  Object.assign(SH, shopState(SH.items, SH.progress));
+  SH.cats = catsOf(SH.items);
+  if (typeof tab === 'string' && SH.cats.some((c) => c.id === tab)) SH.tab = tab;
+  else if (!SH.cats.some((c) => c.id === SH.tab)) SH.tab = SH.cats[0] ? SH.cats[0].id : 'car';
+  SH.busy = null;
+  clearTimeout(SH.busyT);
+
+  const S = E.shop;
+  S.textContent = '';
+  const panel = S.appendChild(el('div', 'ui-shop__panel'));
+  panel.addEventListener('click', (e) => e.stopPropagation());
+  const head = panel.appendChild(el('div', 'ui-shop__head',
+    `<span class="ui-shop__logo">${SVG.garage}</span>
+     <span class="ui-shop__title"><small><span class="ui-shop__picto">${SVG.fuel}${SVG.cup}${SVG.wrench}</span>휴게소 정비소</small><b>참교육 차고</b></span>
+     <span class="ui-shop__wallet"><span class="ui-shop__coin">${SVG.coin}</span><span class="ui-shop__wtxt"><small>포상금</small><b>${won(SH.wallet)}</b></span></span>`));
+  head.appendChild(btn('ui-btn--round ui-btn--red ui-shop__close', SVG.close, () => hideShop(), '닫기'));
+  panel.appendChild(el('div', 'ui-shop__awning'));
+  const tabs = panel.appendChild(el('div', 'ui-shop__tabs'));
+  const load = panel.appendChild(el('div', 'ui-shop__load'));
+  const shelf = panel.appendChild(el('div', 'ui-shop__shelf'));
+  const grid = shelf.appendChild(el('div', 'ui-shop__grid'));
+  SH.el = { panel, tabs, load, shelf, grid, wallet: head.querySelector('.ui-shop__wtxt b'), walletChip: head.querySelector('.ui-shop__wallet') };
+
+  const pick = (e, sel) => {
+    const t = e.target.closest && e.target.closest(sel);
+    if (!t) return null;
+    e.stopPropagation();
+    try { t.blur(); } catch { /* */ }
+    return t;
+  };
+  const noFocus = (e) => { if (e.target.closest && e.target.closest('button')) e.preventDefault(); };
+  for (const n of [tabs, load, grid]) n.addEventListener('mousedown', noFocus);
+  const goTab = (c) => { if (c && c !== SH.tab && SH.cats.some((x) => x.id === c)) { SH.tab = c; renderShopTabs(); renderShopGrid(true); } };
+  tabs.addEventListener('click', (e) => { const t = pick(e, '.ui-shoptab'); if (t) goTab(t.dataset.cat); });
+  load.addEventListener('click', (e) => { const t = pick(e, '.ui-load__slot'); if (t) goTab(t.dataset.cat); });
+  grid.addEventListener('click', onShopClick);
+
+  renderShopTabs();
+  renderLoadout();
+  renderShopGrid(true);
+  setShown(S, true);
+  if (!SH.onKey) {
+    SH.onKey = (e) => { if (e.key === 'Escape' && isShown(E.shop)) hideShop(); };
+    addEventListener('keydown', SH.onKey);
+  }
+  call('onShop', true);
+}
+
+function renderShopTabs() {
+  const t = SH.el.tabs;
+  if (!t) return;
+  t.innerHTML = SH.cats.map((c, k) => {
+    const its = SH.items.filter((it) => it.cat === c.id);
+    const own = its.filter((it) => SH.owned.has(it.id)).length;
+    const can = its.some((it) => !SH.owned.has(it.id) && num(it.price) <= SH.wallet);
+    const on = c.id === SH.tab;
+    return `<button type="button" class="ui-shoptab ui-shoptab--${esc(c.id)}${on ? ' is-active' : ''}" data-cat="${esc(c.id)}" style="--i:${k}" aria-pressed="${on}">`
+      + `<span class="ui-shoptab__ico">${c.ico}</span><span class="ui-shoptab__l">${esc(c.label)}</span><span class="ui-shoptab__n">${own}/${its.length}</span>`
+      + `${can ? '<i class="ui-shoptab__dot" title="살 수 있는 아이템"></i>' : ''}</button>`;
+  }).join('');
+}
+function renderLoadout(changed = []) {
+  const L = SH.el.load;
+  if (!L) return;
+  const slots = SHOP_CATS.filter((c) => c.slot && SH.cats.some((x) => x.id === c.id));
+  const extras = SH.items.filter((it) => !SLOT_CATS.includes(it.cat) && SH.owned.has(it.id));
+  L.innerHTML = '<span class="ui-load__lbl">장착</span>'
+    + slots.map((c) => {
+      const it = SH.items.find((x) => x.id === SH.equip[c.id]);
+      return `<button type="button" class="ui-load__slot" data-cat="${c.id}" aria-label="${esc(c.label)}: ${esc(it ? it.name : '없음')}"><span class="ui-load__ico">${it ? itemArt(it) : ''}</span><span class="ui-load__txt"><small>${esc(c.label)}</small><b>${esc(it ? it.name : '—')}</b></span></button>`;
+    }).join('')
+    + `<span class="ui-load__extra"><small>보유 능력</small><b>${extras.length ? extras.map((x) => esc(x.name)).join(' · ') : '아직 없음'}</b></span>`;
+  for (const c of changed) {
+    const s = L.querySelector(`.ui-load__slot[data-cat="${c}"]`);
+    if (s) anim(s, KF.segPulse, { duration: 460, easing: 'cubic-bezier(.3,1.6,.5,1)' });
+  }
+}
+function renderShopGrid(animate) {
+  const g = SH.el.grid;
+  if (!g) return;
+  const its = SH.items.filter((it) => it.cat === SH.tab);
+  g.classList.toggle('is-static', !animate);
+  g.innerHTML = its.length ? its.map((it, k) => itemCardHTML(it, k)).join('') : '<div class="ui-shop__empty">상품 준비 중…</div>';
+  if (animate) try { SH.el.shelf.scrollTop = 0; } catch { /* */ }
+}
+const cardOf = (id) => (SH.el.grid ? [...SH.el.grid.children].find((c) => c.dataset && c.dataset.id === id) : null);
+
+function onShopClick(e) {
+  const b = e.target.closest && e.target.closest('[data-act]');
+  if (!b || !SH.el.grid.contains(b)) return;
+  e.stopPropagation();
+  try { b.blur(); } catch { /* */ }
+  const id = b.dataset.id, act = b.dataset.act;
+  const it = SH.items.find((x) => x.id === id);
+  if (!it) return;
+  if (act === 'poor') {
+    anim(b.closest('.ui-item'), KF.shake, { duration: 320 });
+    anim(SH.el.walletChip, KF.shake, { duration: 320 });
+    shopFloat(b, `${won(num(it.price) - SH.wallet)} 부족!`, 'warn');
+    return;
+  }
+  if (SH.busy === id) return;
+  SH.busy = id;
+  b.classList.add('is-busy');
+  clearTimeout(SH.busyT);
+  SH.busyT = setTimeout(() => { SH.busy = null; b.classList.remove('is-busy'); }, 1200);
+  call(act === 'buy' ? 'onBuy' : 'onEquip', id);
+}
+// 패널 기준 떠오르는 글자 (부족 · 지출 · 장착)
+function shopFloat(anchor, text, kind = 'warn') {
+  const P = SH.el.panel;
+  if (!P || !anchor || !anchor.getBoundingClientRect) return;
+  const a = anchor.getBoundingClientRect(), p = P.getBoundingClientRect();
+  const f = P.appendChild(el('span', `ui-shopfloat ui-shopfloat--${kind}`));
+  f.textContent = text;
+  f.style.left = `${Math.round(a.left - p.left + a.width / 2)}px`;
+  f.style.top = `${Math.round(a.top - p.top + (kind === 'spend' ? a.height + 6 : -4))}px`;
+  setTimeout(() => f.remove(), reduceMotion ? 700 : 1200);
+}
+// 구매 성공: 코인 버스트 + '구매 완료!' 도장
+function celebrate(id) {
+  const card = cardOf(id);
+  if (!card) return;
+  card.classList.add('is-bought');
+  const fx = card.appendChild(el('div', 'ui-coinfx'));
+  let h = '';
+  const N = reduceMotion ? 0 : 14;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + Math.random() * 0.35;
+    const d = 70 + Math.random() * 60;
+    h += `<i style="--dx:${(Math.cos(a) * d).toFixed(0)}px;--dy:${(Math.sin(a) * d * 0.75 - 40).toFixed(0)}px;--r:${Math.round(Math.random() * 720 - 360)}deg;--dl:${Math.round(Math.random() * 140)}ms">${SVG.coin}</i>`;
+  }
+  fx.innerHTML = h;
+  card.querySelector('.ui-item__show')?.appendChild(el('div', 'ui-item__stamp', '<span>구매 완료!</span>'));
+  anim(card, KF.bigBump, { duration: 440, easing: 'cubic-bezier(.3,1.7,.5,1)' });
+  setTimeout(() => fx.remove(), 1500);
+  try { card.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' }); } catch { /* */ }
+}
+function equipPop(id) {
+  const card = cardOf(id);
+  if (!card) return;
+  anim(card, KF.bump, { duration: 300, easing: 'cubic-bezier(.3,1.7,.5,1)' });
+  const st = card.querySelector('.ui-item__state--on') || card;
+  shopFloat(st, '장착!', 'equip');
+}
+
+function refreshShop(progress) {
+  if (progress && typeof progress === 'object') SH.progress = progress;
+  const pr = SH.progress;
+  // 타이틀 지갑/배지/점프 힌트
+  if (pr && E.tHelp && E.tHelp.isConnected) {
+    TS.progress = pr;
+    TS.P = readProgress(pr);
+    updateTitleShop(TS.P, true);
+  }
+  if (!SH.items.length && Array.isArray(SH.src || TS.shop)) { SH.items = normItems(SH.src || TS.shop); SH.cats = catsOf(SH.items); }
+  if (!isShown(E.shop) || !SH.el.grid || !SH.el.grid.isConnected) { Object.assign(SH, shopState(SH.items, pr)); return; }
+  const prev = { owned: SH.owned, equip: { ...SH.equip }, wallet: SH.wallet };
+  Object.assign(SH, shopState(SH.items, pr));
+  SH.busy = null;
+  clearTimeout(SH.busyT);
+  const bought = SH.items.filter((it) => SH.owned.has(it.id) && !prev.owned.has(it.id));
+  const changed = SLOT_CATS.filter((c) => SH.equip[c] !== prev.equip[c]);
+  if (bought.length && !bought.some((it) => it.cat === SH.tab)) SH.tab = bought[0].cat;
+  renderShopTabs();
+  renderLoadout(changed);
+  renderShopGrid(false);
+  if (SH.wallet !== prev.wallet) {
+    countTo(SH.el.wallet, prev.wallet, SH.wallet, 700, 'shopw');
+    if (SH.wallet < prev.wallet) shopFloat(SH.el.walletChip, '−' + won(prev.wallet - SH.wallet), 'spend');
+  }
+  for (const it of bought) celebrate(it.id);
+  for (const c of changed) if (!bought.some((it) => it.id === SH.equip[c])) equipPop(SH.equip[c]);
+}
+
+function hideShop() {
+  if (!E.shop || !isShown(E.shop)) return;
+  setShown(E.shop, false, 240);
+  SH.busy = null;
+  clearTimeout(SH.busyT);
+  call('onShop', false);
+}
+
+// ───────────────────────────── 별 미션 (스테이지 카드 미리보기 · 결과 체크리스트 공용)
+// 별 i = 미션 i. 카드에서는 빈 별 + 번호, 결과에서는 done 인 칸의 별만 금색으로 터진다.
+function normMissions(ms) {
+  if (!Array.isArray(ms)) return null;
+  const out = [];
+  for (const m of ms) {
+    if (out.length >= 3) break;
+    if (typeof m === 'string') out.push({ label: m, done: false, value: '' });
+    else if (m && typeof m === 'object') out.push({ label: String(m.label ?? ''), done: !!m.done, value: m.value != null && m.value !== '' ? String(m.value) : '' });
+  }
+  return out.length ? out : null;
+}
+function missionsHTML(ms, mode) {
+  const items = ms.map((m, i) => `<li class="ui-mis__item" style="--i:${i}">
+      <span class="ui-mis__star"><span class="ui-star">${SVG.star}</span><b class="ui-mis__n">${i + 1}</b></span>
+      <span class="ui-mis__t">${esc(m.label)}${m.value ? ` <em>${esc(m.value)}</em>` : ''}</span>
+      ${mode === 'result' ? `<span class="ui-mis__mark ui-mis__mark--ok">${SVG.check}</span><span class="ui-mis__mark ui-mis__mark--no">${SVG.cross}</span>` : ''}
+    </li>`).join('');
+  return `<ol class="ui-mis ui-mis--${mode}" style="--n:${ms.length}" aria-label="별 미션">${items}</ol>`;
+}
+// 결과: main.js 효과음 타이밍(700 + i*380ms)에 맞춰 칸 i 를 판정 (done → 별 팡 + ✔, 아니면 ✖ + 흔들)
+function popMissions(panel, ms) {
+  panel.querySelectorAll('.ui-mis--result .ui-mis__item').forEach((it, i) => {
+    const m = ms[i];
+    if (!m) return;
+    it.setAttribute('aria-label', `${i + 1}번 별: ${m.label} — ${m.done ? '달성' : '실패'}`);
+    later(700 + i * 380, () => {
+      it.classList.add(m.done ? 'is-done' : 'is-miss');
+      if (!m.done) anim(it, KF.shake, { duration: 360 });
+    });
+  });
+}
+
 // ───────────────────────────── 스테이지 카드
 let cardState = null;
 function finishCard() {
@@ -1235,17 +1835,21 @@ function finishCard() {
   setShown(E.card, false, 320);
   try { st.resolve(); } catch { /* */ }
 }
-function showStageCard(stage) {
+function showStageCard(stage, missions) {
   finishCard();
   const s = stage || {};
   setStage(stage);
   setHudOn(false);
   hideAlbum();
+  hideShop();
   setShown(E.title, false, 320);
   setShown(E.result, false);
   const idx = Number.isFinite(+s.id) ? +s.id : '';
+  const ms = normMissions(missions);
+  // 미션이 있으면 읽을 시간을 조금 더 (탭/키로 바로 스킵 가능)
+  const dur = ms ? 3400 : 2600;
   E.card.innerHTML = `
-    <div class="ui-card__panel${isFinalBoss(s) ? ' is-final' : ''}">
+    <div class="ui-card__panel${isFinalBoss(s) ? ' is-final' : ''}${ms ? ' has-mis' : ''}" style="--card-ms:${dur}ms">
       <div class="ui-sign ui-sign--card">${shieldHTML(s.route, 'ui-shield--big')}<span class="ui-sign__txt"><b>${esc(s.highway)}</b><span>${esc(s.direction)} <i class="ui-sign__dirarrow">▶</i></span></span></div>
       <div class="ui-card__body">
         <div class="ui-card__no">STAGE ${esc(idx)}${isFinalBoss(s) ? ' · <em>최종보스</em>' : ''} <span class="ui-card__tag">${SVG.angry}오늘의 빌런</span></div>
@@ -1254,6 +1858,7 @@ function showStageCard(stage) {
         <div class="ui-card__blurb">${esc(s.blurb)}</div>
         <div class="ui-card__jam"><span class="ui-card__jamtag">정체</span><b>${esc(s.displayKm ?? '?')}km</b>${s.villainSpeedLabel ? `<span class="ui-card__spd">원흉 ${esc(s.villainSpeedLabel)}</span>` : ''}</div>
       </div>
+      ${ms ? `<div class="ui-card__mis"><div class="ui-card__mishead"><span class="ui-card__mistag"><span class="ui-star is-on">${SVG.star}</span>별 미션</span><span class="ui-card__missub">하나 달성할 때마다 ★ 1개</span></div>${missionsHTML(ms, 'card')}</div>` : ''}
       <div class="ui-card__tap">탭하여 바로 시작</div>
       <div class="ui-card__timer"><i></i></div>
     </div>`;
@@ -1263,7 +1868,7 @@ function showStageCard(stage) {
     st.onKey = (e) => { if (!e.repeat) finishCard(); };
     st.onTap = (e) => { e.preventDefault(); finishCard(); };
     cardState = st;
-    st.timer = setTimeout(finishCard, 2600);
+    st.timer = setTimeout(finishCard, dur);
     // 시작 버튼을 누른 그 입력이 바로 스킵으로 먹히지 않게 잠깐 유예
     st.arm = setTimeout(() => {
       if (cardState !== st) return;
@@ -1288,11 +1893,13 @@ function showResult(r) {
   clearBubbles();
   setPausedVisible(false);
   hideAlbum();
+  hideShop();
   clearResultTimers();
   if (r.reward && typeof r.reward === 'object') { showRewardResult(r, r.reward); return; }
   const stars = clamp(Math.round(num(r.stars)), 0, 3);
   const score = Math.max(0, Math.round(num(r.score)));
   const stats = Array.isArray(r.stats) ? r.stats : [];
+  const ms = normMissions(r.missions);
   const S = C.stage;
   const P = E.result;
   P.textContent = '';
@@ -1302,7 +1909,7 @@ function showResult(r) {
     <div class="ui-result__body">
       <div class="ui-result__who"><span class="ui-result__lbl">참교육 대상</span><span class="ui-result__villain"><span>${esc(r.villainName)}</span></span></div>
       <div class="ui-stamp"><span>참교육 완료!</span></div>
-      <div class="ui-result__stars">${[0, 1, 2].map((k) => `<span class="ui-star ui-star--big ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`).join('')}</div>
+      ${ms ? missionsHTML(ms, 'result') : `<div class="ui-result__stars">${[0, 1, 2].map((k) => `<span class="ui-star ui-star--big ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`).join('')}</div>`}
       <div class="ui-result__score"><span>SCORE</span><b>0</b></div>
       ${r.isLast ? '<div class="ui-result__final">🎉 전 구간 소통 원활! 모든 빌런 참교육 완료 🎉</div>' : ''}
       <div class="ui-stats"></div>
@@ -1321,7 +1928,7 @@ function showResult(r) {
 
   setShown(P, true);
   try { P.scrollTop = 0; } catch { /* */ }
-  popStars(panel, stars);
+  if (ms) popMissions(panel, ms); else popStars(panel, stars);
   countScore(panel.querySelector('.ui-result__score b'), score);
 }
 function resultButtons(bw, r) {
@@ -1382,6 +1989,7 @@ function showRewardResult(r, w) {
   const rest = hero ? stats.slice(1) : stats;
   const seed = Math.abs(sid) * 7 + (views % 13);
   const art = dashArt(villainColor(S), 'photo', sid);
+  const ms = normMissions(r.missions);
 
   const Pn = E.result;
   Pn.textContent = '';
@@ -1433,8 +2041,8 @@ function showRewardResult(r, w) {
           ${rest.length ? '<div class="ui-stats ui-stats--mini"></div>' : ''}
         </div>
         <div class="ui-rw__col ui-rw__col--r">
-          <section class="ui-rate">
-            <div class="ui-result__stars">${starsHTML}</div>
+          <section class="ui-rate${ms ? ' ui-rate--mis' : ''}">
+            ${ms ? missionsHTML(ms, 'result') : `<div class="ui-result__stars">${starsHTML}</div>`}
             <div class="ui-rate__side">
               <div class="ui-rate__score"><span>SCORE</span><b>0</b></div>
               ${hero ? `<div class="ui-rate__hero"><span class="ui-rate__hl">${esc(hero.label)}</span><b>${esc(hero.value)}</b><span class="ui-stat__bar"><i style="--w:${heroW}"></i></span></div>` : ''}
@@ -1510,7 +2118,7 @@ function showRewardResult(r, w) {
   const sc = panel.querySelector('.ui-result__scroll');
   try { Pn.scrollTop = 0; sc.scrollTop = 0; } catch { /* */ }
 
-  popStars(panel, stars);
+  if (ms) popMissions(panel, ms); else popStars(panel, stars);
   countScore(panel.querySelector('.ui-rate__score b'), score);
   const payEl = panel.querySelector('.ui-money__pay');
   const totEl = panel.querySelector('.ui-money__total');
@@ -1582,7 +2190,7 @@ export function initUI(handlers) {
 export const ui = {
   showTitle: guard(showTitle),
   hideTitle: guard(hideTitle),
-  showStageCard: guard((s) => showStageCard(s), () => Promise.resolve()),
+  showStageCard: guard((s, m) => showStageCard(s, m), () => Promise.resolve()),
   setHUD: guard(setHUD),
   setNav: guard(setNav),
   showBoss: guard(showBoss),
@@ -1603,4 +2211,9 @@ export const ui = {
   vignette: guard(vignette),
   setPausedVisible: guard(setPausedVisible),
   hint: guard(hint),
+  // v0.3
+  setControls: guard(setControls),
+  showShop: guard(showShop),
+  hideShop: guard(hideShop),
+  refreshShop: guard(refreshShop),
 };

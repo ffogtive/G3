@@ -161,14 +161,15 @@ class GB {
     if (r1 > 0 && !o.noB) { const cb = P(0, 0, h); for (let i = 0; i < n; i++) this.tri(cb, B[i], B[(i + 1) % n], o.capB ?? col, ctr); }
     return this;
   }
-  // 위경도 타원체. colFn(iLon, iLat) → hex
-  sphere(rx, ry, rz, nLon, nLat, cx, cy, cz, colFn) {
+  // 위경도 타원체. colFn(iLon, iLat) → hex. o: { th0, th1 (경도 범위), ph0, ph1 (위도 범위, 0 = +Y 극) } → 반구/돔
+  sphere(rx, ry, rz, nLon, nLat, cx, cy, cz, colFn, o = {}) {
     const ctr = this._x(cx, cy, cz);
+    const th0 = o.th0 ?? 0, th1 = o.th1 ?? Math.PI * 2, ph0 = o.ph0 ?? 0, ph1 = o.ph1 ?? Math.PI;
     const V = [];
     for (let j = 0; j <= nLat; j++) {
-      const ph = (j / nLat) * Math.PI, row = [];
+      const ph = ph0 + (j / nLat) * (ph1 - ph0), row = [];
       for (let i = 0; i <= nLon; i++) {
-        const th = (i / nLon) * Math.PI * 2;
+        const th = th0 + (i / nLon) * (th1 - th0);
         row.push(this._x(cx + Math.sin(ph) * Math.cos(th) * rx, cy + Math.cos(ph) * ry, cz + Math.sin(ph) * Math.sin(th) * rz));
       }
       V.push(row);
@@ -241,6 +242,50 @@ function pixelArt(g, rows, face, cx, cy, cz, px, col) {
     }
   }
 }
+// 면 위 평면 다각형 (u,v: 면 중심 기준 좌표, 매핑은 pixelArt 와 동일) → 삼각형 팬
+const FACE_N = { K: [0, 0, 1], F: [0, 0, -1], L: [-1, 0, 0], R: [1, 0, 0], U: [0, 1, 0] };
+function faceMap(face, cx, cy, cz) {
+  switch (face) {
+    case 'K': return (u, v) => [cx + u, cy + v, cz];
+    case 'F': return (u, v) => [cx - u, cy + v, cz];
+    case 'L': return (u, v) => [cx, cy + v, cz + u];
+    case 'R': return (u, v) => [cx, cy + v, cz - u];
+    default: return (u, v) => [cx + u, cy, cz - v];
+  }
+}
+function facePoly(g, face, cx, cy, cz, pts, col) {
+  if (pts.length < 3) return;
+  const m = faceMap(face, cx, cy, cz), n = FACE_N[face];
+  const ctr = g._x(cx - n[0], cy - n[1], cz - n[2]);
+  const P = pts.map(([u, v]) => g._x(...m(u, v)));
+  for (let i = 1; i < P.length - 1; i++) g.tri(P[0], P[i], P[i + 1], col, ctr);
+}
+function clipU(poly, lim, s) { // s=+1: u >= lim 만 남김, s=-1: u <= lim
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const A = poly[i], B = poly[(i + 1) % poly.length];
+    const ia = (A[0] - lim) * s >= 0, ib = (B[0] - lim) * s >= 0;
+    if (ia) out.push(A);
+    if (ia !== ib) { const t = (lim - A[0]) / (B[0] - A[0]); out.push([lim, A[1] + (B[1] - A[1]) * t]); }
+  }
+  return out;
+}
+// 사선(45°) 경고 줄무늬 데칼: 면 위 w×h 영역에 폭 sw 띠를 col 로 (바탕색은 호출자가 그린 면). 면에서 4mm 띄워 호출할 것
+function hazardStripes(g, face, cx, cy, cz, w, h, sw, col, dir = 1) {
+  const u0 = -w / 2, u1 = w / 2, v0 = -h / 2, v1 = h / 2;
+  for (let a = u0 - h - sw; a < u1 + sw; a += sw * 2) {
+    let poly = dir > 0 ? [[a, v0], [a + sw, v0], [a + sw + h, v1], [a + h, v1]] : [[a + h, v0], [a + h + sw, v0], [a + sw, v1], [a, v1]];
+    poly = clipU(clipU(poly, u0, 1), u1, -1);
+    facePoly(g, face, cx, cy, cz, poly, col);
+  }
+}
+// 점멸 램프(스트로브) 박스: 테두리색 + 앞/뒤/윗면으로 솟은 밝은 코어 → 켜지면 "번쩍" 으로 읽힘
+function strobeBox(G, x0, x1, y0, y1, z0, z1, rim, core) {
+  const e = 0.008, p = 0.006;
+  G.box(x0 - e, x1 + e, y0 - e, y1 + e, z0 - e, z1 + e, rim);
+  const ix = Math.min(0.08, (x1 - x0) * 0.22), iy = Math.min(0.05, (y1 - y0) * 0.25);
+  G.box(x0 + ix, x1 - ix, y0 + iy, y1 + e + p, z0 - e - p, z1 + e + p, core);
+}
 
 // ────────────────────────────────────────────────────────────────────────
 // 빌드 컨텍스트 / 공용 파츠
@@ -251,6 +296,8 @@ function newCtx(detailed, variant, color) {
     body: new GB(), brake: new GB(), hazard: new GB(), head: new GB(), glow: new GB(), glass: new GB(),
     sirenR: null, sirenB: null, driver: null, driverPos: null, driverTop: 0.44,
     cannon: null, wheels: [], signs: [], info: {},
+    // 확장 파츠: [{ key, idx?, gb, mat: 'body'|MAT 키, pos?, name, visible? }] → body 자식 메시, userData[key] (idx 있으면 배열)
+    extra: [], points: {}, ud: {},   // points: { name: [x,y,z] } → body 자식 Object3D. ud: userData 에 그대로 복사할 값
   };
 }
 // 라이트: 발광 메시엔 전체 박스, 차체엔 1cm 안쪽으로 "꺼진 색" 구워넣기 (켜지면 발광 박스가 덮음 → z-fight 없음)
@@ -361,7 +408,7 @@ function face2(g, skin, eyeY = 0.2) {
 }
 const HEADS = {
   npc(g, o) { face2(g, o.skin ?? C.skin); g.box(-0.18, 0.18, 0.3, 0.4, -0.12, 0.18, o.hair ?? C.hair); g.box(-0.18, 0.18, 0.12, 0.3, 0.08, 0.18, o.hair ?? C.hair); return 0.4; },
-  hero(g) { // 참교육 머신 기사: 삐죽머리 + 빨간 머리띠(꼬리 휘날림) + 결의의 눈썹
+  hero(g, o = {}) { // 참교육 머신 기사: 삐죽머리 + 빨간 머리띠(꼬리 휘날림) + 결의의 눈썹 (o.shades: 암행 선글라스)
     face2(g, C.skin);
     const hr = 0x22201f, band = 0xe2231a;
     g.box(-0.18, 0.18, 0.29, 0.39, -0.13, 0.18, hr);
@@ -371,6 +418,11 @@ const HEADS = {
     g.box(0.02, 0.075, 0.12, 0.28, 0.188, 0.34, band); g.box(0.085, 0.13, 0.06, 0.25, 0.188, 0.3, band);
     g.box(-0.13, -0.035, 0.235, 0.26, -0.176, -0.16, EYE); g.box(0.035, 0.13, 0.235, 0.26, -0.176, -0.16, EYE); // 눈썹
     g.box(-0.06, 0.06, 0.075, 0.105, -0.172, -0.16, 0x9a3b2b);
+    if (o.shades) { // 검은 선글라스 (눈썹은 위로 보이게 → 결의 유지)
+      g.box(-0.168, 0.168, 0.16, 0.24, -0.186, -0.16, 0x0b0b0d);
+      g.box(-0.19, -0.168, 0.2, 0.232, -0.175, 0.07, 0x0b0b0d); g.box(0.168, 0.19, 0.2, 0.232, -0.175, 0.07, 0x0b0b0d);
+      g.box(-0.135, -0.085, 0.205, 0.228, -0.191, -0.186, 0x7b8798); g.box(0.035, 0.085, 0.205, 0.228, -0.191, -0.186, 0x7b8798);
+    }
     return 0.5;
   },
   boss(g) { // 정속주행 김사장: 흰 골프캡 + 검은 선글라스 + 콧수염 + 비릿한 미소
@@ -673,21 +725,37 @@ function buildPlayer(c, p) {
   // 쌍 머플러 (크롬)
   for (const s of SIDES) B.prism(8, 0.08, 0.08, 0.2, 'z', s * 0.5, r.yb + 0.02, r.hl + 0.03, C.chrome, { capB: 0x111114 });
   // 확성기 (선거유세차 st.) — 지붕 왼쪽 앞, 앞을 향함
-  const my = r.roofTop + 0.24, mz = r.F.t[2] + 0.16, mx = -0.58;
-  B.box(mx - 0.03, mx + 0.03, r.roofTop, my - 0.05, mz + 0.02, mz + 0.08, C.dark);
+  megaphone(B, -0.58, r.roofTop, r.F.t[2] + 0.16);
+  // 압정 캐논 (별도 오브젝트: 조준/반동용). 피벗 = 지붕 중앙, 총구 ≈ (0, 1.95, -0.4)
+  const cz = (r.F.t[2] + r.F.t[3]) / 2 + 0.05;
+  mountCannon(c, r.roofTop, cz, 1.95, -0.4);
+  c.ud.beaconPos = [-0.55, r.roofTop + 0.14, r.F.t[3] - 0.3];
+  return { L: P.L, W: P.W, r, exhaust: [0.5, P.yb + 0.02, r.hl + 0.14] };
+}
+// 확성기 (선거유세차 st.): (mx, roofTop, mz) 에 앞(-Z)을 향해
+function megaphone(B, mx, roofTop, mz) {
+  const my = roofTop + 0.24;
+  B.box(mx - 0.03, mx + 0.03, roofTop, my - 0.05, mz + 0.02, mz + 0.08, C.dark);
   B.prism(8, 0.19, 0.065, 0.38, 'z', mx, my, mz - 0.02, 0xf4f4f2, { capA: 0x3a3d44, a0: Math.PI / 8 });
   B.prism(8, 0.198, 0.198, 0.04, 'z', mx, my, mz - 0.2, 0xe2231a, { a0: Math.PI / 8, noA: true, noB: true });
   B.box(mx - 0.07, mx + 0.07, my - 0.07, my + 0.07, mz + 0.17, mz + 0.27, 0x9aa3ad);
-  // 압정 캐논 (별도 오브젝트: 조준/반동용). 피벗 = 지붕 중앙, 총구 ≈ (0, 1.95, -0.4)
-  const cz = (r.F.t[2] + r.F.t[3]) / 2 + 0.05;
-  c.cannon = buildCannon(1.95 - r.roofTop, -0.4 - cz);
-  c.cannonPos = [0, r.roofTop, cz];
-  c.muzzle = [0, 1.95 - r.roofTop, -0.4 - cz - 0.02];
-  return { L: P.L, W: P.W, r, exhaust: [0.5, P.yb + 0.02, r.hl + 0.14] };
 }
-// 캐논 로컬: 원점 = 지붕 위 피벗, 앞 = -Z. barrelY/muzzleZ: 총구 위치
-function buildCannon(barrelY, muzzleZ) {
-  const g = new GB(), chrome = 0xd7dde5, ring = 0x5b626c, red = 0xe2231a;
+// 지붕 캐논 장착: 피벗 (0, roofTop, cz), 총구 월드(차량 로컬) 위치 (0, muzzleY, muzzleZ). o: buildCannon 옵션
+function mountCannon(c, roofTop, cz, muzzleY, muzzleZ, o) {
+  c.cannon = buildCannon(muzzleY - roofTop, muzzleZ - cz, o);
+  c.cannonPos = [0, roofTop, cz];
+  c.muzzle = [0, muzzleY - roofTop, muzzleZ - cz - 0.02];
+}
+// 캐논 로컬: 원점 = 지붕 위 피벗, 앞 = -Z. barrelY/muzzleZ: 총구 위치. o.scale: 포탑·드럼 크기 (총구 위치는 그대로)
+function buildCannon(barrelY, muzzleZ, o = {}) {
+  const s = o.scale ?? 1;
+  if (s === 1) return cannonParts(new GB(), barrelY, muzzleZ, o);
+  const g = new GB();
+  g.with(_m4().makeScale(s, s, s), (q) => cannonParts(q, barrelY / s, muzzleZ / s, o));
+  return g;
+}
+function cannonParts(g, barrelY, muzzleZ, o) {
+  const chrome = 0xd7dde5, ring = 0x5b626c, red = o.drum ?? 0xe2231a;
   g.prism(8, 0.3, 0.27, 0.08, 'y', 0, 0.04, 0, 0x34373d, { a0: Math.PI / 8 });           // 회전 링
   g.box(-0.24, 0.24, 0.08, barrelY + 0.13, -0.26, 0.26, chrome, '', { U: 0xeef1f5 });     // 포탑
   g.box(-0.25, 0.25, barrelY - 0.05, barrelY + 0.02, -0.27, 0.27, ring);                   // 띠
@@ -842,7 +910,8 @@ function porterCab(c, col, hl, hw, opts = {}) {
   const zF = -hl, zB = -hl + 1.62, yb = 0.7, belt = 1.14, roofY = 1.9;
   const wzF = -hl + 0.82;
   // 하부 (앞바퀴 휠하우스 포함)
-  skirt(B, -hw, hw, 0.38, yb, zF + 0.06, zB, [wzF], 0.33, col);
+  const wr = opts.wr ?? 0.33, ww = opts.ww ?? 0.28; // 바퀴 (플레이어 변형은 더 큼직하게)
+  skirt(B, -hw, hw, 0.38, yb, zF + 0.06, zB, [wzF], wr, col);
   B.box(-hw, hw, yb, belt, zF + 0.06, zB, col, 'D');
   // 범퍼 + 그릴 + 헤드라이트 (포터 얼굴: 아래 모서리 큰 사각 라이트 + 검은 그릴 띠)
   B.box(-hw - 0.02, hw + 0.02, 0.32, 0.56, zF - 0.04, zF + 0.3, C.dark, 'D');
@@ -876,7 +945,7 @@ function porterCab(c, col, hl, hw, opts = {}) {
     c.driverPos = [dx, dy, dz];
     B.box(dx - 0.2, dx + 0.2, belt - 0.02, dy + 0.02, dz - 0.1, dz + 0.13, opts.driver.shirt ?? 0x4a6fa5);
   }
-  addWheel(c, -(hw - 0.12), wzF, 0.33, 0.28); addWheel(c, hw - 0.12, wzF, 0.33, 0.28);
+  addWheel(c, -(hw - 0.12), wzF, wr, ww, opts.wo); addWheel(c, hw - 0.12, wzF, wr, ww, opts.wo);
   return zB;
 }
 function buildPorter(c, p) {
