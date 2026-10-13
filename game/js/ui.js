@@ -18,6 +18,10 @@
 //  showStageCard(stage, missions?)   missions = [{ label }] ×3 → 카드에 '★ 별 미션' 3칸 (별 i = 미션 i)
 //  showResult(r)  r.missions?: [{ label, done, value? }] ×3 → 별 3개가 각 미션 카드 머리에 붙어서 done 인 칸만 켜짐
 //  setHUD(s)      s.minis?: { done, total } → '잔챙이 1/3' 칩 (total 0/없음 = 숨김) · s.boostT?: 0..1 → 속도계 부스트 링
+//                 s.rageMode?: 'horn'|'bomb'|'siren' → 분노 키 안내 ('R 분노의 경적!' / 'R 분노 폭탄!' / 'R 사이렌 대경적!'), 없으면 phase 로 추정
+//  카탈로그 필드: stage.title 접두사 [최종보스]/[보스]/[엘리트]/[보너스] → 배지 (제목에서 뗌) · stage.boss/elite 플래그
+//                 stage.card | reward.card: '고지서'|'형사'|'표창'|'계도' → 카드 디자인 · fine(실제 금액) ≠ payout(받는 포상금)
+//                 stage.honkOnly → 스테이지 카드 '구조 상황 · 압정 금지 · 경적으로 깨우기' 태그
 //  setControls({ jump?: boolean, jumpCd?: 0..1 })  터치 '점프' 버튼 (onControl('jump', pressed)) · 쿨다운 부채꼴
 //  showTitle(stages, progress, chapters?, shop?)   shop = config SHOP → '차고' 버튼(살 수 있는 개수 배지) · ↑ 점프 키 힌트
 //  showShop(shop?, progress?, tab?) / hideShop() / refreshShop(progress?)   참교육 차고(휴게소 정비소) 오버레이
@@ -519,7 +523,7 @@ function resetCache() {
     score: -1, combo: -1, navP: -1, navR: -1, navDone: null, navFull: null,
     boss: false, bossName: null, hp: -1, lag: 1, lagShown: -1, lastHit: 0, lastBossT: 0, tires: -1,
     rel: null, relShown: 0, vig: -1, muted: null, touch: false, fireMode: null,
-    miT: -1, miD: -1, boost: -1, jump: false, jumpCd: -1,
+    miT: -1, miD: -1, boost: -1, jump: false, jumpCd: -1, rageMode: null,
   });
 }
 
@@ -722,6 +726,7 @@ function setFireMode(mode) {
   E.tFire.classList.toggle('is-horn', horn);
 }
 
+const RAGE_KEY = { horn: ['R 분노의 경적!', '분노의 경적'], bomb: ['R 분노 폭탄!', '분노 폭탄'], siren: ['R 사이렌 대경적!', '사이렌 대경적'] };
 function setHUD(s) {
   s = s || {};
   if (isShown(E.card)) finishCard();
@@ -731,9 +736,14 @@ function setHUD(s) {
     C.phase = phase;
     R.dataset.phase = phase;
     setFireMode(phase === 'jam' ? 'horn' : 'fire');
-    // 분노 1칸 = 정체: 분노의 경적 / 보스전: 분노 폭탄
-    E.rageKey.textContent = phase === 'boss' ? 'R 분노 폭탄!' : 'R 분노의 경적!';
-    E.tSuper.setAttribute('aria-label', phase === 'boss' ? '분노 폭탄' : '분노의 경적');
+  }
+  // 분노 1칸 안내: core 가 넘기는 rageMode 우선 (원흉 뒤 갓길에선 boss 단계여도 아직 '분노의 경적'), 없으면 단계로 추정
+  const rm = ['horn', 'bomb', 'siren'].includes(s.rageMode) ? s.rageMode : (phase === 'boss' ? 'bomb' : 'horn');
+  if (rm !== C.rageMode) {
+    C.rageMode = rm;
+    E.rageKey.textContent = RAGE_KEY[rm][0];
+    E.tSuper.setAttribute('aria-label', RAGE_KEY[rm][1]);
+    E.rageEl.dataset.mode = rm;
   }
   // 부스트 링 (분노의 경적 직후 가속) 0..1
   const bt = q(clamp(num(s.boostT), 0, 1), 20);
@@ -1506,12 +1516,14 @@ function albumCardHTML(s, i, k, label, P) {
     ? (okSrc(a.photo) ? `<img class="ui-acard__img" src="${esc(a.photo)}" alt="" loading="lazy" decoding="async">` : dashArt(villainColor(s), 'photo', num(s?.id, i)))
     : dashArt('', 'silhouette');
   const vname = Array.isArray(s?.villains) ? s.villains.map((v) => v && v.name).filter(Boolean).join(' & ') : '';
-  return `<div class="ui-acard ui-acard--r${rar}${has ? ' is-got' : ''}" style="--i:${k}">
-    <div class="ui-acard__top"><span class="ui-acard__no">${label}</span><span class="ui-stars">${st}</span></div>
+  const kd = stageKind(s), ck = caseKind(s?.card);
+  const amt = ck === 'rescue' ? '구조 표창' : ck === 'warn' ? '계도' : ck === 'crime' ? bigWon(fine) : won(fine);
+  return `<div class="ui-acard ui-acard--r${rar}${has ? ' is-got' : ''} is-case-${ck}" style="--i:${k}">
+    <div class="ui-acard__top"><span class="ui-acard__no">${label}${kindBadge(kd, 'ui-kindb--xs')}</span><span class="ui-stars">${st}</span></div>
     <div class="ui-acard__pic">${pic}${has ? '<span class="ui-acard__rec"><i></i>REC</span>' : '<span class="ui-acard__q">?</span><span class="ui-acard__wait">제보 대기 중</span>'}</div>
     <div class="ui-acard__name">${esc(stageTitle(s))}</div>
     <div class="ui-acard__who">${has && vname ? esc(vname) : (s?.highway ? esc(s.highway) : '&nbsp;')}</div>
-    <div class="ui-acard__meta"><span class="ui-acard__fine">${has ? won(fine) : '₩ ?'}</span><span class="ui-acard__cnt">${has ? `×${fmt(count)} 참교육` : '미검거'}</span></div>
+    <div class="ui-acard__meta"><span class="ui-acard__fine">${has ? amt : '₩ ?'}</span><span class="ui-acard__cnt">${has ? `×${fmt(count)} ${ck === 'rescue' ? '구조' : '참교육'}` : (ck === 'rescue' ? '구조 대기' : '미검거')}</span></div>
     ${rar >= 3 ? '<i class="ui-acard__holo"></i>' : ''}
   </div>`;
 }
@@ -1881,17 +1893,20 @@ function showStageCard(stage, missions) {
   setShown(E.result, false);
   const idx = Number.isFinite(+s.id) ? +s.id : '';
   const ms = normMissions(missions);
+  const kd = stageKind(s), ck = caseKind(s.card);
+  const honk = s.honkOnly ? `<div class="ui-card__honk"><span class="ui-card__honkico">${SVG.horn}</span><b>구조 상황</b><i>·</i><span>압정 금지</span><i>·</i><span>경적으로 깨우기</span></div>` : '';
   // 미션이 있으면 읽을 시간을 조금 더 (탭/키로 바로 스킵 가능)
   const dur = ms ? 3400 : 2600;
   E.card.innerHTML = `
-    <div class="ui-card__panel${isFinalBoss(s) ? ' is-final' : ''}${ms ? ' has-mis' : ''}" style="--card-ms:${dur}ms">
+    <div class="ui-card__panel${kd ? ` is-${kd}` : ''} is-case-${ck}${ms ? ' has-mis' : ''}${honk ? ' has-honk' : ''}" style="--card-ms:${dur}ms">
       <div class="ui-sign ui-sign--card">${shieldHTML(s.route, 'ui-shield--big')}<span class="ui-sign__txt"><b>${esc(s.highway)}</b><span>${esc(s.direction)} <i class="ui-sign__dirarrow">▶</i></span></span></div>
       <div class="ui-card__body">
-        <div class="ui-card__no">STAGE ${esc(idx)}${isFinalBoss(s) ? ' · <em>최종보스</em>' : ''} <span class="ui-card__tag">${SVG.angry}오늘의 빌런</span></div>
+        <div class="ui-card__no">STAGE ${esc(idx)}${kindBadge(kd)}<span class="ui-card__tag ui-card__tag--${ck}">${ck === 'rescue' ? SVG.horn : SVG.angry}${CASE[ck].tag}</span></div>
         <div class="ui-card__title">${esc(stageTitle(s))}</div>
         <div class="ui-card__line">${esc(String(s.villainLine || '').replace(/^"|"$/g, ''))}</div>
         <div class="ui-card__blurb">${esc(s.blurb)}</div>
         <div class="ui-card__jam"><span class="ui-card__jamtag">정체</span><b>${esc(s.displayKm ?? '?')}km</b>${s.villainSpeedLabel ? `<span class="ui-card__spd">원흉 ${esc(s.villainSpeedLabel)}</span>` : ''}</div>
+        ${honk}
       </div>
       ${ms ? `<div class="ui-card__mis"><div class="ui-card__mishead"><span class="ui-card__mistag"><span class="ui-star is-on">${SVG.star}</span>별 미션</span><span class="ui-card__missub">하나 달성할 때마다 ★ 1개</span></div>${missionsHTML(ms, 'card')}</div>` : ''}
       <div class="ui-card__tap">탭하여 바로 시작</div>
@@ -1936,14 +1951,15 @@ function showResult(r) {
   const stats = Array.isArray(r.stats) ? r.stats : [];
   const ms = normMissions(r.missions);
   const S = C.stage;
+  const ck = caseKind((r.reward && r.reward.card) ?? r.card ?? S?.card);
   const P = E.result;
   P.textContent = '';
   const panel = P.appendChild(el('div', 'ui-result__panel'));
   panel.innerHTML = `
-    <div class="ui-sign ui-sign--result">${S ? shieldHTML(S.route, 'ui-shield--chip') : ''}<span class="ui-sign__txt"><b>${esc(r.stageName)}</b></span></div>
+    <div class="ui-sign ui-sign--result">${S ? shieldHTML(S.route, 'ui-shield--chip') : ''}<span class="ui-sign__txt"><b>${esc(r.stageName)}</b></span>${kindBadge(stageKind(S), 'ui-kindb--sign')}</div>
     <div class="ui-result__body">
-      <div class="ui-result__who"><span class="ui-result__lbl">참교육 대상</span><span class="ui-result__villain"><span>${esc(r.villainName)}</span></span></div>
-      <div class="ui-stamp"><span>참교육 완료!</span></div>
+      <div class="ui-result__who"><span class="ui-result__lbl">${ck === 'rescue' ? '구조 대상' : '참교육 대상'}</span><span class="ui-result__villain${ck === 'rescue' ? ' is-rescue' : ''}"><span>${esc(r.villainName)}</span></span></div>
+      <div class="ui-stamp ui-stamp--${ck}"><span>${CASE[ck].done}!</span></div>
       ${ms ? missionsHTML(ms, 'result') : `<div class="ui-result__stars">${[0, 1, 2].map((k) => `<span class="ui-star ui-star--big ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`).join('')}</div>`}
       <div class="ui-result__score"><span>SCORE</span><b>0</b></div>
       ${r.isLast ? '<div class="ui-result__final">🎉 전 구간 소통 원활! 모든 빌런 참교육 완료 🎉</div>' : ''}
@@ -2009,8 +2025,17 @@ function showRewardResult(r, w) {
   const milestone = w.milestone ? String(w.milestone) : '';
   const sid = Math.round(num(w.stageId, num(S?.id, 1)));
   const comments = (Array.isArray(w.comments) ? w.comments : []).map((c) => String(c ?? '').trim()).filter(Boolean).slice(0, 3);
-  const mult = fine > 0 ? (payout - bonus) / fine : 0;
-  const multTxt = mult > 0 && Number.isFinite(mult) ? '×' + (Math.round(mult * 10) / 10) : '';
+  // 처분 카드 종류 · 등급. 범칙금/벌금(fine, 실제 금액) ≠ 포상금(payout, 받는 돈)
+  const ck = caseKind(w.card ?? S?.card);
+  const CK = CASE[ck];
+  const kd = stageKind(S);
+  const starMult = [1, 1, 1.5, 2][stars] || 1;
+  const multTxt = '×' + starMult;
+  const base = Math.max(0, num(w.base, num(S?.payout, fine)));
+  const extra = base > 0 ? payout / (base * starMult + bonus) : 1;   // 블박 4K 등 추가 배율
+  const extraPct = Number.isFinite(extra) && extra > 1.08 ? Math.round((extra - 1) * 100) : 0;
+  const fineTxt = ck === 'crime' ? bigWon(fine) : won(fine);
+  const caseNote = { crime: '벌금은 국고로 · 포상금은 제보 기준액 × ★', rescue: '범칙금 대신 구조 포상금 × ★', warn: '계도라 범칙금 0원 · 기본 포상금 × ★' }[ck] || '';
   const photo = okSrc(w.photo) ? w.photo : null;
   const d = new Date();
   const p2 = (v) => String(v).padStart(2, '0');
@@ -2046,12 +2071,12 @@ function showRewardResult(r, w) {
   });
 
   panel.innerHTML = `
-    <div class="ui-sign ui-sign--result">${S ? shieldHTML(S.route, 'ui-shield--chip') : ''}<span class="ui-sign__txt"><b>${esc(r.stageName)}</b></span></div>
+    <div class="ui-sign ui-sign--result">${S ? shieldHTML(S.route, 'ui-shield--chip') : ''}<span class="ui-sign__txt"><b>${esc(r.stageName)}</b></span>${kindBadge(kd, 'ui-kindb--sign')}</div>
     <div class="ui-result__scroll">
       <div class="ui-rw${ms ? ' ui-rw--mis' : ''}">
         <div class="ui-rw__col ui-rw__col--l">
           <section class="ui-dash">
-            <div class="ui-dash__head"><span class="ui-dash__ico">${SVG.cam}</span><b>블박 제보 접수</b><span class="ui-dash__no">No.${no}</span></div>
+            <div class="ui-dash__head"><span class="ui-dash__ico">${SVG.cam}</span><b>${ck === 'rescue' ? '블박 구조 기록' : '블박 제보 접수'}</b><span class="ui-dash__no">No.${no}</span></div>
             <div class="ui-dash__cam"><div class="ui-dash__screen">
               ${photo ? '' : art}
               <div class="ui-dash__scan"></div>
@@ -2061,16 +2086,16 @@ function showRewardResult(r, w) {
               <div class="ui-dash__shutter"></div>
             </div></div>
             <div class="ui-dash__foot">
-              <span class="ui-dash__lbl">위반 차량</span>
-              <b class="ui-dash__villain"><span>${esc(vName)}</span></b>
-              ${cause ? `<span class="ui-dash__cause">제보 사유 · ${esc(cause)}</span>` : ''}
-              <span class="ui-dash__done">${SVG.check}<span>처리 결과: 참교육 완료</span></span>
+              <span class="ui-dash__lbl">${ck === 'rescue' ? '구조 차량' : '위반 차량'}</span>
+              <b class="ui-dash__villain${ck === 'rescue' ? ' is-rescue' : ''}"><span>${esc(vName)}</span></b>
+              ${cause ? `<span class="ui-dash__cause">${ck === 'rescue' ? '구조 사유' : '제보 사유'} · ${esc(cause)}</span>` : ''}
+              <span class="ui-dash__done">${SVG.check}<span>처리 결과: ${CK.done}</span></span>
             </div>
-            <div class="ui-fine" style="--d:${TL.stamp}ms">
-              <span class="ui-fine__t">과태료 고지서</span>
-              <span class="ui-fine__v">${esc(violation)}</span>
-              <span class="ui-fine__amt">범칙금 <b>${won(fine)}</b></span>
-              <span class="ui-fine__seal"><span>참교</span><span>육청</span></span>
+            <div class="ui-fine ui-fine--${ck}" style="--d:${TL.stamp}ms">
+              <span class="ui-fine__t">${CK.stamp}</span>
+              <span class="ui-fine__v">${ck === 'rescue' ? '잠든·고장난 운전자를 경적으로 깨워 갓길로 안전 유도' : esc(violation)}</span>
+              <span class="ui-fine__amt">${ck === 'rescue' ? '<b>시민 구조 유공</b>' : ck === 'warn' ? '범칙금 없음 · <b>계도</b>' : `${CK.amt} <b>${fineTxt}</b>${ck === 'crime' ? '<small>(실제)</small>' : ''}`}</span>
+              <span class="ui-fine__seal"><span>${CK.seal[0]}</span><span>${CK.seal[1]}</span></span>
             </div>
           </section>
           ${rest.length ? '<div class="ui-stats ui-stats--mini"></div>' : ''}
@@ -2086,11 +2111,15 @@ function showRewardResult(r, w) {
           </section>
           <section class="ui-money" style="--d:${TL.money}ms">
             <div class="ui-money__flow">
-              <span class="ui-money__box ui-money__box--fine"><small>범칙금 · 빌런 부담</small><b>${won(fine)}</b></span>
-              <span class="ui-money__arrow">${ARROW}${multTxt ? `<em>★${esc(multTxt)}</em>` : ''}</span>
-              <span class="ui-money__box ui-money__box--pay"><small>포상금 · 내 몫</small><b class="ui-money__pay">+${won(0)}</b></span>
+              <span class="ui-money__box ui-money__box--fine ui-money__box--${ck}">${
+  ck === 'rescue' ? '<small>구조 표창 · 시민 유공</small><b>표창장</b>'
+    : ck === 'warn' ? `<small>계도 · 범칙금 없음</small><b>${won(0)}</b>`
+      : `<small>${CK.amt} (실제) · 빌런 부담</small><b>${fineTxt}</b>`}</span>
+              <span class="ui-money__arrow">${ARROW}<em>★${esc(multTxt)}</em></span>
+              <span class="ui-money__box ui-money__box--pay"><small>포상금 · 내가 받는 돈</small><b class="ui-money__pay">+${won(0)}</b></span>
             </div>
-            ${bonus ? `<div class="ui-money__bonus">+ 갓길 얌체 신고 보너스 <b>${won(bonus)}</b> 포함</div>` : ''}
+            ${caseNote ? `<div class="ui-money__note">${caseNote}</div>` : ''}
+            ${bonus || extraPct ? `<div class="ui-money__bonus">${bonus ? `+ 잔챙이·얌체 신고 보너스 <b>${won(bonus)}</b>` : ''}${bonus && extraPct ? ' · ' : ''}${extraPct ? `블박 4K <b>+${extraPct}%</b>` : ''} 포함</div>` : ''}
             <div class="ui-money__wallet"><span class="ui-money__coin">${SVG.coin}</span><span class="ui-money__wl">보유 포상금</span><b class="ui-money__total">${won(wallet - payout)}</b></div>
           </section>
           <section class="ui-chan" style="--d:${TL.chan}ms">
@@ -2101,7 +2130,7 @@ function showRewardResult(r, w) {
             </div>
             <div class="ui-chan__video">
               <span class="ui-chan__thumb">${photo ? '' : art}<span class="ui-chan__dur">0:${p2(30 + (Math.abs(seed) % 29))}</span></span>
-              <span class="ui-chan__vt"><b>[블박] ${esc(vName || '빌런')} 참교육 현장 (사이다 주의)</b>
+              <span class="ui-chan__vt"><b>[블박] ${esc(vName || '빌런')} ${ck === 'rescue' ? '구조 현장 (경적 주의)' : ck === 'crime' ? '형사 입건 현장 (사이다 주의)' : '참교육 현장 (사이다 주의)'}</b>
                 <span class="ui-chan__stats">조회수 <b class="ui-chan__views">0</b><i>·</i>구독자 <b class="ui-chan__gain">+0</b> <span class="ui-chan__tot">(총 ${kor(subs)})</span></span></span>
             </div>
             ${cmts ? `<ul class="ui-chan__cmts">${cmts}</ul>` : ''}
