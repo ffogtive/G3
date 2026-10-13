@@ -5,6 +5,9 @@
 한국 고속도로가 꽉 막혔다. 맨 앞에 가보니 1차선에서 혼자 정속주행 중인 한 놈 때문이었다.
 타이어를 펑크 내 하늘로 날려 보내면, 뒤로 수 km 막혔던 도로가 한 번에 뚫린다.
 
+## 바로 플레이
+- Artifact(비공개, 소유자 전용): https://claude.ai/artifact/XMH9x12fPh1n4fmjrJtKxk
+
 ## 실행
 ```bash
 npm install
