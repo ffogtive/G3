@@ -321,7 +321,8 @@ export class Traffic {
       m.position.x = c.x;
       m.position.z = -c.s;
       m.rotation.y = c.yaw;
-      if (m.userData.body) m.userData.body.rotation.x = -c.bumpJolt * 0.12 + Math.max(-0.05, Math.min(0.05, -acc * 0.006));
+      // +rotation.x = 코 들림. 감속(acc<0)이면 코가 숙여지도록 +acc
+      if (m.userData.body) m.userData.body.rotation.x = -c.bumpJolt * 0.12 + Math.max(-0.05, Math.min(0.05, acc * 0.006));
 
       // 브레이크등: 정체 중엔 대부분 켜짐 (빨간 바다)
       const wantBrake = !c.released && (acc < -0.25 || c.v < 1.6 || c.brakeT > 0 || Math.sin(t * 1.3 + c.phase) > 0.2);

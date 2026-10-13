@@ -165,7 +165,7 @@ export class BossManager {
     v.sparkCorners.push(idx);
     // 차체가 펑크난 쪽으로 기움
     v.tiltZ += (idx % 2 === 0 ? 1 : -1) * 0.07;
-    v.tiltX += (idx < 2 ? 1 : -1) * 0.05;
+    v.tiltX += (idx < 2 ? -1 : 1) * 0.05; // +rotation.x = 코가 들림 → 앞바퀴 펑크면 코가 숙여져야 함
     this.fx.sparks(p, { count: 26, speed: 10 });
     this.fx.smokePuff(p, { count: 8, color: 0xdddddd });
     this.fx.shake(0.35, 0.25);
@@ -296,7 +296,7 @@ export class BossManager {
     const rolling = kind === 'watermelon' || kind === 'hay';
     const dur = 0.85;
     const landS = rolling ? player.s + 11 + Math.random() * 4 : player.s + Math.max(0, player.v) * dur + 0.4;
-    const to = new THREE.Vector3(laneX(lane), kind === 'hay' ? 0.6 : 0.45, -landS);
+    const to = new THREE.Vector3(laneX(lane), kind === 'hay' ? 0.37 : 0.45, -landS);
     const marker = this._getMarker();
     marker.position.set(to.x, 0.04, to.z);
     marker.userData.setProgress?.(0);
@@ -428,11 +428,11 @@ export class BossManager {
       m.rotation.set(0, v.yaw, 0);
       const body = m.userData.body;
       if (body) {
-        body.rotation.x = v.tiltX + v.nose * 0.09 + Math.sin(this.time * 18) * 0.004 * v.sparkCorners.length;
+        body.rotation.x = v.tiltX - v.nose * 0.09 + Math.sin(this.time * 18) * 0.004 * v.sparkCorners.length;
         body.rotation.z = v.tiltZ + (v.flash > 0.5 ? (Math.random() - 0.5) * 0.04 : 0);
       }
-      const r = m.userData.wheelRadius || 0.42;
-      for (const w of m.userData.wheels || []) if (w.parent === m) w.rotation.x -= (v.v * dt) / r;
+      const r = m.userData.wheelRadius || 0.42, radii = m.userData.wheelRadii;
+      (m.userData.wheels || []).forEach((w, i) => { if (w.parent === m) w.rotation.x -= (v.v * dt) / (radii?.[i] || r); });
     }
 
     // 공격 스케줄

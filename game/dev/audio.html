@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>audio 하네스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
+<style>
+  :root { --bg: #14161b; --panel: #1f232b; --line: #2e3440; --ink: #f2f2f2; --dim: #9aa3b2; --green: #0b7a4b; --blue: #1f4fa3; --amber: #ffb400; --red: #ff3b30; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Jua", system-ui, sans-serif; }
+  body { padding: 12px 16px 40px; max-width: 1100px; margin: 0 auto; }
+  h1 { font-family: "Black Han Sans", "Jua", sans-serif; font-weight: 400; font-size: 26px; margin: 4px 0 2px; letter-spacing: .5px; }
+  .sub { color: var(--dim); font-size: 14px; margin-bottom: 10px; }
+  section { background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px 12px; margin: 10px 0; }
+  section h2 { font-size: 17px; margin: 0 0 8px; font-weight: 400; color: var(--amber); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+  button { font: inherit; font-size: 14px; color: var(--ink); background: #2b313c; border: 2px solid #3b4352; border-bottom-width: 4px; border-radius: 10px; padding: 7px 8px; cursor: pointer; text-align: left; line-height: 1.15; }
+  button:active, button.held { transform: translateY(2px); border-bottom-width: 2px; }
+  button small { display: block; color: var(--dim); font-family: ui-monospace, monospace; font-size: 11px; }
+  button.big { font-size: 20px; padding: 12px 16px; background: var(--green); border-color: #0e9c60; text-align: center; }
+  button.blue { background: var(--blue); border-color: #2c63c4; }
+  button.red { background: #8a1d17; border-color: var(--red); }
+  button.on { outline: 3px solid var(--amber); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  label { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 14px; }
+  input[type=range] { width: 150px; }
+  #status { font: 12px/1.45 ui-monospace, monospace; color: var(--dim); white-space: pre-wrap; }
+  #meter { width: 100%; height: 26px; display: block; border-radius: 6px; background: #0d0f13; margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; font: 12px ui-monospace, monospace; }
+  th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  td canvas { display: block; width: 220px; height: 34px; }
+  .bad { color: var(--red); } .ok { color: #3dff7f; }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 520px) { body { padding: 10px 16px 30px; } .grid { grid-template-columns: repeat(2, 1fr); } input[type=range] { width: 110px; } td canvas { width: 120px; } }
+</style>
+</head>
+<body>
+<h1>audio 하네스 — 1차선 참교육</h1>
+<div class="sub">WebAudio 순수 합성 (외부 파일 0). 아무 데나 누르면 init. <code>game/js/audio.js</code></div>
+
+<section>
+  <div class="row">
+    <button id="bInit" class="big">오디오 켜기 (init)</button>
+    <button id="bMute" class="big blue">음소거: OFF</button>
+    <label>volume <input id="oVol" type="range" min="0" max="1.5" step="0.05" value="1"><span id="vVol">1</span></label>
+    <label>pitch <input id="oPitch" type="range" min="0.5" max="2" step="0.05" value="1"><span id="vPitch">1</span></label>
+    <label>pan <input id="oPan" type="range" min="-1" max="1" step="0.1" value="0"><span id="vPan">0</span></label>
+  </div>
+  <canvas id="meter" width="1000" height="26"></canvas>
+  <div id="status">-</div>
+</section>
+
+<section>
+  <h2>해방의 순간</h2>
+  <div class="row">
+    <button id="bCheer" class="big">대~한민국! 짝짝 짝짝짝 (cheerHorns)</button>
+    <button id="bSeq" class="big blue">킬→해방 시퀀스 (core 흉내)</button>
+    <button id="bDeath" class="red">원흉 사망 프레임 (pop×4 + explosion)</button>
+  </div>
+</section>
+
+<section>
+  <h2>SFX — play(name, {volume, pitch, pan})</h2>
+  <div class="grid" id="sfx"></div>
+  <div class="row" style="margin-top:8px">
+    <button id="bFire" class="red">연사 홀드 (tack 7/s + hit 4/s)</button>
+    <button id="bStars">★★★ 결과 (stageClear + star×3)</button>
+    <button id="bBurst">tack ×50 동시 (보이스 제한 확인)</button>
+  </div>
+</section>
+
+<section>
+  <h2>음악 — startMusic / stopMusic / duck</h2>
+  <div class="row" id="music"></div>
+</section>
+
+<section>
+  <h2>환경음 — startAmbience</h2>
+  <div class="row" id="amb"></div>
+</section>
+
+<section>
+  <h2>엔진 — setEngine(speedMs, throttle01) 매 프레임</h2>
+  <div class="row">
+    <button id="bEng">엔진 프레임 루프: OFF</button>
+    <button id="bAuto">자동 가감속: OFF</button>
+    <label>speed <input id="eSpd" type="range" min="0" max="40" step="0.5" value="0"><span id="vSpd">0</span> m/s</label>
+    <label>throttle <input id="eTh" type="range" min="0" max="1" step="0.05" value="1"><span id="vTh">1</span></label>
+  </div>
+</section>
+
+<section>
+  <h2>오프라인 측정 — init({ context: OfflineAudioContext })</h2>
+  <div class="row">
+    <button id="bOff" class="big blue">렌더 & 측정 (핵심 5종)</button>
+    <button id="bOffAll">전체 SFX 측정</button>
+  </div>
+  <div class="scroll"><table id="offTable"><thead><tr><th>항목</th><th>길이 s</th><th>peak</th><th>peak dBFS</th><th>RMS(활성)</th><th>RMS dBFS</th><th>최대 50ms RMS</th><th>파형</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<script type="module">
+import { audio, __audioDebug } from '../js/audio.js';
+
+const $ = (id) => document.getElementById(id);
+const LABELS = {
+  horn: '경적 빵', hornShort: '짧은 빵', hornTruck: '트럭 에어혼', hornAngry: '빵빵빵 (화남)', tack: '압정 발사', hit: '압정 명중',
+  crit: '크리티컬 캉!', pop: '타이어 펑크', explosion: '폭발', whoosh: '휙', bump: '추돌 쿵', laneChange: '차선 변경',
+  ui: 'UI 클릭', uiConfirm: 'UI 확인', rageFull: '분노 충전', super: '미사일 발사', superHit: '미사일 명중 / 킬', brakeScreech: '급브레이크 끼익',
+  warn: '경고 삐뽀', throw: '투척 휙', splat: '수박/커피 철퍽', launch: '하늘로 피유웅', twinkle: '반짝★', stageClear: '스테이지 클리어',
+  star: '별 띠링', cutin: '칼치기 당함', blink: '비상등 딸깍', tauntBlip: '빌런 말풍선', chicken: '닭 꼬꼬댁', go: '출발 징글',
+};
+const NAMES = Object.keys(LABELS);
+const opts = () => ({ volume: +$('oVol').value, pitch: +$('oPitch').value, pan: +$('oPan').value });
+for (const [id, v] of [['oVol', 'vVol'], ['oPitch', 'vPitch'], ['oPan', 'vPan'], ['eSpd', 'vSpd'], ['eTh', 'vTh']]) $(id).addEventListener('input', () => { $(v).textContent = $(id).value; });
+
+// 게임과 동일하게: 모든 pointerdown/keydown 에서 init
+window.addEventListener('pointerdown', () => audio.init(), true);
+window.addEventListener('keydown', () => audio.init(), true);
+$('bInit').onclick = () => audio.init();
+const syncMute = () => { $('bMute').textContent = '음소거: ' + (audio.isMuted() ? 'ON' : 'OFF'); $('bMute').classList.toggle('on', audio.isMuted()); };
+$('bMute').onclick = () => { audio.init(); audio.setMuted(!audio.isMuted()); syncMute(); };
+window.addEventListener('keydown', (e) => { if (e.key === 'm' || e.key === 'M') { audio.setMuted(!audio.isMuted()); syncMute(); } });
+
+// SFX 버튼
+for (const n of NAMES) {
+  const b = document.createElement('button'); b.innerHTML = `${LABELS[n]}<small>${n}</small>`; b.dataset.name = n;
+  b.onclick = () => audio.play(n, opts()); $('sfx').appendChild(b);
+}
+
+// 해방
+$('bCheer').onclick = () => audio.cheerHorns();
+$('bSeq').onclick = () => {
+  // main.js 흐름: boss 음악 → kill(duck + superHit) → ~2s → release(cheerHorns, ambience null, 600ms 뒤 release 음악) → cruise(바람)
+  audio.startMusic('boss'); audio.startAmbience('jam');
+  setTimeout(() => { audio.duck(0.75, 2.6); audio.play('superHit'); }, 1200);
+  setTimeout(() => { audio.play('pop'); audio.play('pop'); audio.play('pop'); audio.play('pop'); audio.play('explosion'); }, 1500);
+  setTimeout(() => audio.play('launch'), 2350);
+  setTimeout(() => audio.play('twinkle'), 3300);
+  setTimeout(() => { audio.cheerHorns(); audio.startAmbience(null); setTimeout(() => audio.startMusic('release'), 600); }, 3600);
+  setTimeout(() => audio.startAmbience('free'), 3600 + 5000);
+};
+$('bDeath').onclick = () => { for (let i = 0; i < 4; i++) audio.play('pop'); audio.play('explosion'); };
+
+// 연사 홀드
+let fireT = 0, fireN = 0;
+const fireOn = (on) => {
+  $('bFire').classList.toggle('held', on);
+  clearInterval(fireT); fireT = 0;
+  if (on) fireT = setInterval(() => { fireN++; audio.play('tack', { pitch: 0.9 + Math.random() * 0.25, volume: 0.6 }); if (fireN % 2 === 0) audio.play('hit', { volume: 0.55, pitch: 0.9 + Math.random() * 0.3 }); }, 1000 / 7);
+};
+$('bFire').addEventListener('pointerdown', () => fireOn(true));
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) $('bFire').addEventListener(ev, () => fireOn(false));
+$('bStars').onclick = () => { audio.play('stageClear'); for (let i = 0; i < 3; i++) setTimeout(() => audio.play('star', { pitch: 1 + i * 0.25 }), 700 + i * 380); };
+$('bBurst').onclick = () => { for (let i = 0; i < 50; i++) audio.play('tack'); };
+
+// 음악
+for (const [k, label] of [['menu', '메뉴 (칩튠)'], ['jam', '정체 (통화대기음)'], ['boss', '보스 (긴박)'], ['release', '해방 (휴게소 뽕짝)']]) {
+  const b = document.createElement('button'); b.innerHTML = `${label}<small>startMusic('${k}')</small>`; b.onclick = () => audio.startMusic(k); $('music').appendChild(b);
+}
+{ const b = document.createElement('button'); b.className = 'red'; b.innerHTML = '정지<small>stopMusic()</small>'; b.onclick = () => audio.stopMusic(); $('music').appendChild(b); }
+{ const b = document.createElement('button'); b.innerHTML = '킬캠 감쇄<small>duck(0.75, 2.6)</small>'; b.onclick = () => audio.duck(0.75, 2.6); $('music').appendChild(b); }
+
+// 환경음
+for (const [k, label] of [['jam', '정체 (멀리서 빵빵 + 웅성)'], ['free', '뻥 뚫림 (바람)'], [null, '끄기']]) {
+  const b = document.createElement('button'); b.innerHTML = `${label}<small>startAmbience(${k ? `'${k}'` : 'null'})</small>`; b.onclick = () => audio.startAmbience(k); $('amb').appendChild(b);
+}
+
+// 엔진 (매 프레임 setEngine — 게임과 동일)
+let engOn = false, autoOn = false, autoT = 0;
+$('bEng').onclick = () => { engOn = !engOn; $('bEng').textContent = '엔진 프레임 루프: ' + (engOn ? 'ON' : 'OFF'); $('bEng').classList.toggle('on', engOn); };
+$('bAuto').onclick = () => { autoOn = !autoOn; if (autoOn && !engOn) $('bEng').click(); $('bAuto').textContent = '자동 가감속: ' + (autoOn ? 'ON' : 'OFF'); $('bAuto').classList.toggle('on', autoOn); };
+let last = performance.now();
+const meter = $('meter'), mctx = meter.getContext('2d');
+let buf = null, peakHold = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (autoOn) { autoT += dt; const s = 20 + 20 * Math.sin(autoT * 0.35 - Math.PI / 2); $('eSpd').value = s.toFixed(1); $('vSpd').textContent = s.toFixed(1); $('eTh').value = Math.cos(autoT * 0.35 - Math.PI / 2) > 0 ? 1 : 0.3; $('vTh').textContent = $('eTh').value; }
+  if (engOn) audio.setEngine(+$('eSpd').value, +$('eTh').value);
+  // 상태 + 레벨미터
+  const d = __audioDebug();
+  $('status').textContent = `ctx=${d.state}  muted=${d.muted}  music=${d.music}(want ${d.wantMusic})  ambience=${d.ambience}  engine=${d.engine}  liveSFX=${d.live}\nvoices ${JSON.stringify(d.voices)}`;
+  const an = d.analyser();
+  mctx.fillStyle = '#0d0f13'; mctx.fillRect(0, 0, meter.width, meter.height);
+  if (an) {
+    if (!buf || buf.length !== an.fftSize) buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    let pk = 0, s = 0; for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > pk) pk = a; s += buf[i] * buf[i]; }
+    const rms = Math.sqrt(s / buf.length); peakHold = Math.max(pk, peakHold * 0.97);
+    const x = (v) => Math.max(0, Math.min(1, (20 * Math.log10(v + 1e-9) + 60) / 60)) * meter.width;
+    mctx.fillStyle = '#0b7a4b'; mctx.fillRect(0, 4, x(rms), 18);
+    mctx.fillStyle = peakHold > 0.9 ? '#ff3b30' : '#ffb400'; mctx.fillRect(x(peakHold) - 3, 0, 3, 26);
+    mctx.fillStyle = '#9aa3b2'; mctx.font = '12px monospace'; mctx.fillText(`RMS ${(20 * Math.log10(rms + 1e-9)).toFixed(1)} dB  peak ${peakHold.toFixed(3)}`, 8, 17);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ───────── 오프라인 측정 (모듈 인스턴스를 쿼리스트링으로 분리 → 라이브 하네스와 독립)
+let modN = 0;
+async function renderOffline(job, seconds, o = {}) {
+  const sr = 44100;
+  const ctx = new OfflineAudioContext(2, Math.ceil(sr * seconds), sr);
+  const mod = await import(`../js/audio.js?offline=${++modN}`);
+  const errors = [];
+  mod.audio.init({ context: ctx, noLimiter: !!o.noLimiter });
+  try { job(mod.audio); } catch (e) { errors.push(String(e)); }
+  const b = await ctx.startRendering();
+  return { ...analyze(b), buffer: b, errors };
+}
+function analyze(b) {
+  const L = b.getChannelData(0), R = b.getChannelData(1), n = L.length, sr = b.sampleRate;
+  let peak = 0, sum = 0, first = -1, lastI = -1;
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(Math.abs(L[i]), Math.abs(R[i]));
+    if (a > peak) peak = a;
+    sum += L[i] * L[i] + R[i] * R[i];
+    if (a > 0.001) { if (first < 0) first = i; lastI = i; }
+  }
+  let act = 0; for (let i = Math.max(0, first); i <= lastI; i++) act += L[i] * L[i] + R[i] * R[i];
+  const W = Math.floor(sr * 0.05); let maxWin = 0;
+  for (let s0 = 0; s0 + W <= n; s0 += W) { let w = 0; for (let i = s0; i < s0 + W; i++) w += L[i] * L[i] + R[i] * R[i]; maxWin = Math.max(maxWin, Math.sqrt(w / (2 * W))); }
+  const len = first < 0 ? 0 : lastI - first + 1;
+  const rmsAct = len ? Math.sqrt(act / (2 * len)) : 0;
+  return { peak, rms: Math.sqrt(sum / (2 * n)), rmsActive: rmsAct, maxWinRms: maxWin, onset: first / sr, dur: len / sr, nan: !isFinite(sum) };
+}
+const db = (v) => (v > 0 ? 20 * Math.log10(v) : -Infinity);
+function drawWave(b) {
+  const c = document.createElement('canvas'); c.width = 220; c.height = 34; const g = c.getContext('2d');
+  g.fillStyle = '#0d0f13'; g.fillRect(0, 0, 220, 34); g.strokeStyle = '#ffb400'; g.beginPath();
+  const L = b.getChannelData(0), per = Math.max(1, Math.floor(L.length / 220));
+  for (let x = 0; x < 220; x++) { let mn = 1, mx = -1; for (let i = x * per; i < (x + 1) * per && i < L.length; i++) { if (L[i] < mn) mn = L[i]; if (L[i] > mx) mx = L[i]; } g.moveTo(x + 0.5, 17 - mx * 16); g.lineTo(x + 0.5, 17 - mn * 16); }
+  g.stroke(); return c;
+}
+function addRow(name, r) {
+  const tr = document.createElement('tr');
+  const cls = r.peak >= 1 || r.nan ? 'bad' : 'ok';
+  tr.innerHTML = `<td>${name}</td><td>${r.dur.toFixed(2)}</td><td class="${cls}">${r.peak.toFixed(3)}</td><td>${db(r.peak).toFixed(1)}</td><td>${r.rmsActive.toFixed(4)}</td><td>${db(r.rmsActive).toFixed(1)}</td><td>${r.maxWinRms.toFixed(4)}</td><td></td>`;
+  tr.lastChild.appendChild(drawWave(r.buffer)); $('offTable').querySelector('tbody').appendChild(tr);
+}
+const CORE_JOBS = [
+  ['horn', (a) => a.play('horn'), 1],
+  ['pop', (a) => a.play('pop'), 1.5],
+  ['explosion', (a) => a.play('explosion'), 2.5],
+  ['cheerHorns', (a) => a.cheerHorns(), 5],
+  ['music:release 4s', (a) => a.startMusic('release'), 4],
+];
+async function runJobs(jobs, o) {
+  const out = {};
+  for (const [name, job, sec] of jobs) { const r = await renderOffline(job, sec, o); addRow(name + (o && o.noLimiter ? ' (no clip)' : ''), r); const { buffer, ...rest } = r; out[name] = rest; }
+  return out;
+}
+const ALL_JOBS = () => NAMES.map((n) => [n, (a) => a.play(n), n === 'superHit' ? 3 : n === 'explosion' ? 2.5 : 2]);
+$('bOff').onclick = () => runJobs(CORE_JOBS);
+$('bOffAll').onclick = () => runJobs(ALL_JOBS());
+// 자동 테스트용 훅
+window.__audioHarness = { audio, debug: __audioDebug, renderOffline, analyze, runJobs, CORE_JOBS, ALL_JOBS, NAMES };
+</script>
+</body>
+</html>
