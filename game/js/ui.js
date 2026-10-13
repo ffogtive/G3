@@ -953,6 +953,7 @@ function chapTabs(groups, activeNo, stat, onPick) {
 }
 
 function stageCardHTML(s, i, label, P, opts) {
+  if (opts.compact) return stageTileHTML(s, i, label, P, opts);
   const locked = i >= TS.unlocked;
   const stars = starsOf(P, s);
   const best = Math.round(num(P.best[s?.id]));
@@ -973,6 +974,26 @@ function stageCardHTML(s, i, label, P, opts) {
     </button>`;
 }
 
+// 챕터 모드 타일: 머리(방패 + 노선명 + 번호) / 제목 2줄 / ★ — 10칸이 한 화면에 들어가는 크기
+function stageTileHTML(s, i, label, P, opts) {
+  const locked = i >= TS.unlocked;
+  const stars = starsOf(P, s);
+  const best = Math.round(num(P.best[s?.id]));
+  const fin = isFinalBoss(s);
+  let st = '';
+  for (let k = 0; k < 3; k++) st += `<span class="ui-star ${k < stars ? 'is-on' : ''}">${SVG.star}</span>`;
+  const cls = `ui-stagecard ui-stagecard--sm${locked ? ' is-locked' : ''}${i === TS.startIdx ? ' is-next' : ''}${stars > 0 ? ' is-cleared' : ''}${fin ? ' is-final' : ''}`;
+  return `<button type="button" class="${cls}" data-i="${i}" style="--i:${opts.k}" aria-label="${esc(label + ' ' + stageTitle(s))}">
+      <span class="ui-stagecard__head">${shieldHTML(s?.route, 'ui-shield--card')}<span class="ui-stagecard__hw"><b>${esc(s?.highway)}</b></span><span class="ui-stagecard__num">${esc(label)}${fin ? '<em>BOSS</em>' : ''}</span></span>
+      <span class="ui-stagecard__body">
+        <span class="ui-stagecard__title">${esc(stageTitle(s))}</span>
+        <span class="ui-stagecard__meta"><span class="ui-stars">${st}</span>${locked ? '' : `<span class="ui-stagecard__best">${best > 0 ? 'BEST ' + fmt(best) : ''}</span>`}</span>
+      </span>
+      ${locked ? `<span class="ui-stagecard__lock"><span class="ui-stagecard__lockico">${SVG.lock}</span><span>잠김</span></span>` : ''}
+      ${i === TS.startIdx && !locked ? '<span class="ui-stagecard__tag">NEXT</span>' : ''}
+    </button>`;
+}
+
 function renderChapter(no, smooth) {
   const g = TS.groups.find((x) => x.no === no) || TS.groups[0];
   if (!g || !TS.list) return;
@@ -981,7 +1002,7 @@ function renderChapter(no, smooth) {
   const stages = TS.stages;
   let html = '';
   g.idx.forEach((i, k) => {
-    const label = TS.multi ? `STAGE ${g.no}-${k + 1}` : `STAGE ${i + 1}`;
+    const label = TS.grid ? (TS.multi ? `${g.no}-${k + 1}` : `${i + 1}`) : `STAGE ${i + 1}`;
     html += stageCardHTML(stages[i], i, label, P, { compact: TS.grid, k: smooth ? k * 0.45 : k });
   });
   TS.list.innerHTML = html;
@@ -993,7 +1014,7 @@ function renderChapter(no, smooth) {
     const cleared = g.idx.filter((i) => starsOf(P, stages[i]) > 0).length;
     const setting = g.meta && g.meta.setting ? `<span class="ui-chaphead__set">${esc(g.meta.setting)}</span>` : '';
     TS.head.innerHTML = `<span class="ui-chaphead__no">CHAPTER ${esc(g.no)}</span><span class="ui-chaphead__txt"><b>${esc(chName(g))}</b>${setting}</span>`
-      + `<span class="ui-chaphead__stat"><span class="ui-star is-on">${SVG.star}</span><b>${got}</b>/${g.idx.length * 3}<i>·</i>${cleared}/${g.idx.length} 클리어</span>`;
+      + `<span class="ui-chaphead__stat"><span class="ui-chaphead__s1"><span class="ui-star is-on">${SVG.star}</span><b>${got}</b>/${g.idx.length * 3}</span><span class="ui-chaphead__s2"><b>${cleared}</b>/${g.idx.length} 클리어</span></span>`;
     if (smooth) anim(TS.head, KF.bump, { duration: 260, easing: 'cubic-bezier(.3,1.7,.5,1)' });
   }
   if (TS.tabs && TS.tabs._setActive) TS.tabs._setActive(g.no, smooth);
@@ -1175,8 +1196,8 @@ function renderAlbumPage(no, smooth) {
   const acc = chapterAccent(g.meta);
   AS.head.style.setProperty('--ch', acc || '');
   AS.head.innerHTML = multi
-    ? `<span class="ui-chaphead__no">CHAPTER ${esc(g.no)}</span><span class="ui-chaphead__txt"><b>${esc(chName(g))}</b>${g.meta?.setting ? `<span class="ui-chaphead__set">${esc(g.meta.setting)}</span>` : ''}</span><span class="ui-chaphead__stat"><b>${c}</b>/${g.idx.length} 수집${c === g.idx.length && c > 0 ? ' · <em>챕터 완성!</em>' : ''}</span>`
-    : `<span class="ui-chaphead__txt"><b>참교육 기록</b><span class="ui-chaphead__set">빌런을 퇴치하면 블박 캡처 카드가 한 장씩 쌓입니다</span></span><span class="ui-chaphead__stat"><b>${c}</b>/${g.idx.length} 수집</span>`;
+    ? `<span class="ui-chaphead__no">CHAPTER ${esc(g.no)}</span><span class="ui-chaphead__txt"><b>${esc(chName(g))}</b>${g.meta?.setting ? `<span class="ui-chaphead__set">${esc(g.meta.setting)}</span>` : ''}</span><span class="ui-chaphead__stat"><span class="ui-chaphead__s1"><b>${c}</b>/${g.idx.length} 수집</span>${c === g.idx.length && c > 0 ? '<span class="ui-chaphead__s2"><em>챕터 완성!</em></span>' : ''}</span>`
+    : `<span class="ui-chaphead__txt"><b>참교육 기록</b><span class="ui-chaphead__set">빌런을 퇴치하면 블박 캡처 카드가 한 장씩 쌓입니다</span></span><span class="ui-chaphead__stat"><span class="ui-chaphead__s1"><b>${c}</b>/${g.idx.length} 수집</span></span>`;
   if (AS.tabs && AS.tabs._setActive) AS.tabs._setActive(g.no, smooth);
   try { AS.page.scrollTop = 0; } catch { /* */ }
 }
@@ -1360,9 +1381,8 @@ function showRewardResult(r, w) {
     cmts += `<li class="ui-cmt" style="--d:${TL.cmt + k * 150}ms">
       <span class="ui-cmt__av" style="--c:${AV_COLORS[(seed + k * 3) % AV_COLORS.length]}">${esc(Array.from(nick)[0] || '?')}</span>
       <span class="ui-cmt__body">
-        <span class="ui-cmt__meta"><b>@${esc(nick)}</b><span>${['방금 전', '1분 전', '2분 전'][k]}</span></span>
+        <span class="ui-cmt__meta"><b>@${esc(nick)}</b><span>${['방금 전', '1분 전', '2분 전'][k]}</span><span class="ui-cmt__act">${k === 0 ? `<span class="ui-cmt__heart" title="채널 주인이 좋아함">${SVG.heart}</span>` : ''}<span class="ui-cmt__like">${SVG.thumb}<b>${kor(likes)}</b></span></span></span>
         <span class="ui-cmt__t">${esc(c)}</span>
-        <span class="ui-cmt__act"><span class="ui-cmt__like">${SVG.thumb}<b>${kor(likes)}</b></span>${k === 0 ? `<span class="ui-cmt__heart">${SVG.heart}<small>채널 주인</small></span>` : ''}</span>
       </span>
     </li>`;
   });
@@ -1378,9 +1398,8 @@ function showRewardResult(r, w) {
               ${photo ? '' : art}
               <div class="ui-dash__scan"></div>
               <div class="ui-dash__osd ui-dash__osd--tl"><span class="ui-dash__rec"><i></i>REC</span><span>${clock(d)}</span></div>
-              <div class="ui-dash__osd ui-dash__osd--tr">CH1 FRONT</div>
+              <div class="ui-dash__osd ui-dash__osd--tr"><span class="ui-dash__ch">FRONT</span><span class="ui-dash__evt">충격감지</span></div>
               <div class="ui-dash__osd ui-dash__osd--bl"><span class="ui-dash__spd">${spd}<small>km/h</small></span><span class="ui-dash__lane">${lane}차로</span></div>
-              <div class="ui-dash__osd ui-dash__osd--br"><span class="ui-dash__evt">충격감지</span></div>
               <div class="ui-dash__shutter"></div>
             </div></div>
             <div class="ui-dash__foot">

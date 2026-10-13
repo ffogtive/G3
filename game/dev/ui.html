@@ -20,7 +20,10 @@
 <div id="ui"></div>
 <div class="dev-bar" id="devbar"></div>
 <script type="module">
-// UI 하네스: ?screen=title|card|hud|boss|release|result|pause|boot|none  &stage=1..5  &touch=0|1  &shot=1(개발바 숨김)  &noinit=1
+// UI 하네스: ?screen=title|card|hud|boss|release|result|album|pause|boot|none  &stage=1..5  &touch=0|1  &shot=1(개발바 숨김)  &noinit=1
+//   title  : &n=100 → 가짜 100 스테이지(10 챕터) + 챕터 메타 / 기본은 실제 STAGES 5개
+//   result : 보상 포함(블박 사진=캔버스 생성). &reward=0(구 결과) &photo=0(대체 그림) &milestone=silver|gold|bronze|none &bonus=0 &stars=1..3
+//   album  : &n=100(기본) | &n=5 (실제 STAGES)
 import { initUI, ui } from '../js/ui.js';
 import { STAGES, THANKS_LINES } from '../js/config.js';
 
@@ -38,7 +41,7 @@ window.ui = ui; window.STAGES = STAGES;
 
 // 개발 바
 const bar = document.getElementById('devbar');
-for (const s of ['title', 'card', 'hud', 'boss', 'release', 'result', 'pause', 'boot']) {
+for (const s of ['title', 'card', 'hud', 'boss', 'release', 'result', 'album', 'pause', 'boot']) {
   const a = document.createElement('a');
   const q = new URLSearchParams(P); q.set('screen', s); a.href = '?' + q; a.textContent = s; bar.appendChild(a);
 }
@@ -136,7 +139,85 @@ if (screen === 'boot') {
 }
 
 function onLoad(fn) { if (document.readyState === 'complete') fn(); else addEventListener('load', fn, { once: true }); }
-const progress = { unlocked: 3, stars: { 1: 3, 2: 2 }, best: { 1: 48210, 2: 35120 } };
+
+// ───────── 샘플 블박 사진 (256×144 JPEG, main.js captureDashcam 과 같은 크기) — 폭발 순간 원흉 뒷모습
+function makePhoto(seed = 1, skyKey = 'day', villain = '#d9c9a3') {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 144;
+  const x = c.getContext('2d');
+  let r = seed * 7919 % 233280 || 1; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  const sk = SKIES[skyKey] || SKIES.day, nt = skyKey === 'night';
+  const hz = 58;
+  let gr = x.createLinearGradient(0, 0, 0, hz); gr.addColorStop(0, sk[0]); gr.addColorStop(1, sk[1]); x.fillStyle = gr; x.fillRect(0, 0, 256, hz + 1);
+  x.fillStyle = nt ? '#141a33' : '#6f9d8a'; x.beginPath(); x.moveTo(0, hz); for (let i = 0; i <= 256; i += 16) x.lineTo(i, hz - 6 - 10 * Math.abs(Math.sin(i * 0.02 + seed))); x.lineTo(256, hz); x.fill();
+  x.fillStyle = sk[2]; x.fillRect(0, hz, 256, 144 - hz);
+  x.fillStyle = nt ? '#2a2d34' : '#62666d'; x.beginPath(); x.moveTo(104, hz); x.lineTo(152, hz); x.lineTo(300, 144); x.lineTo(-44, 144); x.fill();
+  x.strokeStyle = '#ffcf33'; x.lineWidth = 2; x.beginPath(); x.moveTo(105, hz); x.lineTo(-30, 144); x.stroke();
+  x.strokeStyle = '#eee'; x.lineWidth = 1.6; x.setLineDash([7, 9]);
+  for (const t of [0.33, 0.66]) { x.beginPath(); x.moveTo(104 + 48 * t, hz); x.lineTo(-44 + 344 * t, 144); x.stroke(); }
+  x.setLineDash([]);
+  const car = (cx, cy, w, col, lights = '#ff2a1a') => {
+    const h = w * 0.62; x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(cx - w * 0.55, cy + h * 0.42, w * 1.1, h * 0.14);
+    x.fillStyle = col; x.strokeStyle = '#17202b'; x.lineWidth = Math.max(1, w * 0.05);
+    x.beginPath(); x.roundRect(cx - w / 2, cy - h * 0.1, w, h * 0.55, w * 0.1); x.fill(); x.stroke();
+    x.beginPath(); x.roundRect(cx - w * 0.38, cy - h * 0.5, w * 0.76, h * 0.45, w * 0.1); x.fill(); x.stroke();
+    x.fillStyle = '#24366b'; x.fillRect(cx - w * 0.3, cy - h * 0.42, w * 0.6, h * 0.26);
+    x.fillStyle = lights; x.fillRect(cx - w * 0.46, cy + h * 0.02, w * 0.18, h * 0.1); x.fillRect(cx + w * 0.28, cy + h * 0.02, w * 0.18, h * 0.1);
+  };
+  for (let i = 0; i < 7; i++) { const l = Math.floor(rnd() * 4), d = 0.15 + rnd() * 0.4; car(128 + (l - 1.5) * 60 * d * 1.8, hz + 70 * d, 64 * d, ['#f4f4f2', '#2b2d31', '#9aa1a9', '#c3c8ce'][i % 4]); }
+  // 원흉 + 폭발
+  const vx = 78 + rnd() * 30, vy = 92;
+  x.save(); x.translate(vx, vy); x.rotate(-0.35); car(0, 0, 58, villain); x.restore();
+  const g2 = x.createRadialGradient(vx + 6, vy - 4, 2, vx + 6, vy - 4, 46); g2.addColorStop(0, 'rgba(255,255,220,.95)'); g2.addColorStop(0.3, 'rgba(255,200,60,.85)'); g2.addColorStop(0.65, 'rgba(255,90,20,.55)'); g2.addColorStop(1, 'rgba(255,60,0,0)');
+  x.fillStyle = g2; x.beginPath(); x.arc(vx + 6, vy - 4, 46, 0, Math.PI * 2); x.fill();
+  for (let i = 0; i < 18; i++) { x.fillStyle = ['#ffd23f', '#ff8a1f', '#17202b', '#ffffff'][i % 4]; const a = rnd() * 6.28, d = 14 + rnd() * 40, s = 2 + rnd() * 5; x.fillRect(vx + Math.cos(a) * d, vy - 6 + Math.sin(a) * d * 0.7, s, s); }
+  // 날아가는 바퀴
+  x.fillStyle = '#17202b'; x.beginPath(); x.arc(vx + 44, vy - 34, 6, 0, 6.28); x.fill(); x.fillStyle = '#9aa1a9'; x.beginPath(); x.arc(vx + 44, vy - 34, 2.5, 0, 6.28); x.fill();
+  if (nt) { x.fillStyle = 'rgba(10,14,40,.25)'; x.fillRect(0, 0, 256, 144); }
+  return c.toDataURL('image/jpeg', 0.62);
+}
+
+// ───────── 가짜 100 스테이지 / 10 챕터
+const CHAPTERS = [
+  { no: 1, name: '출근길 정체', setting: '경부고속도로 · 서울→대전', theme: 'day' },
+  { no: 2, name: '노을 화물 벽', setting: '영동고속도로 · 강릉 방향', theme: 'sunset' },
+  { no: 3, name: '안개 주의보', setting: '서해안고속도로 · 목포 방향', theme: 'fog' },
+  { no: 4, name: '야간 폰좀비', setting: '중부고속도로 · 밤', theme: 'night' },
+  { no: 5, name: '시골길 경운기', setting: '남해고속도로 · 순천 방향', theme: 'mountain' },
+  { no: 6, name: '대관령 눈길', setting: '영동고속도로 · 대관령', theme: 'snow' },
+  { no: 7, name: '장마철 외곽순환', setting: '수도권제1순환 · 빗길', theme: 'rain' },
+  { no: 8, name: '휴가철 동해안', setting: '동해고속도로 · 양양 방향', theme: 'coast' },
+  { no: 9, name: '명절 귀성길', setting: '호남고속도로 · 광주 방향', theme: 'dusk' },
+  { no: 10, name: '빌런 연합 총궐기', setting: '전국 고속도로 · 최종장', theme: 'boss' },
+];
+const HW = [['경부고속도로', 1, '부산 방향'], ['영동고속도로', 50, '강릉 방향'], ['서해안고속도로', 15, '목포 방향'], ['중부고속도로', 35, '통영 방향'], ['남해고속도로', 10, '순천 방향'], ['영동고속도로', 50, '강릉 방향'], ['수도권제1순환', 100, '일산 방향'], ['동해고속도로', 65, '속초 방향'], ['호남고속도로', 25, '광주 방향'], ['중앙고속도로', 55, '대구 방향']];
+const VILL = [['1차선 정속주행러', '정속주행 김사장', '지정차로 위반 (1차로 저속 점유)', 40000], ['화물차 나란히 주행', '형님 & 아우', '지정차로 위반 (화물차 1·2차로 병렬)', 50000], ['차선 물고 가는 SUV', '걸침 SUV', '차로 통행방법 위반 (두 차로 걸침)', 30000], ['폰 보며 지그재그', '폰좀비', '운전 중 휴대전화 사용', 60000], ['1차선 경운기', '경운기 할배', '고속도로 통행금지 위반 (농기계)', 30000], ['깜빡이 실종 칼치기', '칼치기 BMW', '진로변경 방법 위반 (신호 불이행)', 30000], ['상향등 테러범', '눈뽕 SUV', '등화 점등·조작 불이행', 20000], ['갓길 얌체 질주', '갓길 얌체', '갓길 통행 위반', 60000], ['급정거 보복운전', '브레이크 체크남', '안전거리 미확보 · 보복운전', 40000], ['톨게이트 끼어들기', '새치기 세단', '끼어들기 금지 위반', 30000]];
+function makeStages(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const ch = Math.floor(i / 10) + 1, k = i % 10, t = STAGES[i % STAGES.length], hw = HW[(ch - 1) % HW.length], v = VILL[(i * 3 + ch) % VILL.length];
+    out.push({ ...t, id: i + 1, chapter: ch, highway: hw[0], route: hw[1], direction: hw[2], title: k === 9 ? `${v[0]} (최종보스)` : v[0], violation: v[2], fine: v[3],
+      villains: [{ ...t.villains[0], name: v[1], color: [0xd9c9a3, 0x2f6fd6, 0x3a3f47, 0xf4f4f2, 0x7a8a4a, 0xd8342c][i % 6] }], displayKm: +(2 + (i % 10) * 1.3).toFixed(1) });
+  }
+  return out;
+}
+const N = Math.max(1, Math.min(200, +(P.get('n') || (screen === 'album' ? 100 : 0)) || 0));
+const BIG = N > STAGES.length;
+const STAGES_X = BIG ? makeStages(N) : STAGES;
+const PHOTOS = BIG || screen === 'album' || screen === 'result' ? ['day', 'sunset', 'morning', 'night'].map((k, i) => makePhoto(i + 3, k, ['#d9c9a3', '#2f6fd6', '#d8342c', '#f4f4f2'][i])) : [];
+function makeProgress(stages, unlocked) {
+  const p = { unlocked, stars: {}, best: {}, wallet: 1234500, subs: 31240, album: {} };
+  let r = 11; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  stages.forEach((s, i) => {
+    if (i >= unlocked - 1) return;
+    if (rnd() < 0.12) return;                 // 깼지만 앨범 도입 전(또는 스킵) → 일부 미수집
+    const st = 1 + Math.floor(rnd() * 3);
+    p.stars[s.id] = st; p.best[s.id] = 20000 + Math.floor(rnd() * 40000);
+    p.album[s.id] = { stars: st, fine: s.fine || 40000, photo: rnd() < 0.85 ? PHOTOS[i % PHOTOS.length] : null, count: 1 + Math.floor(rnd() * rnd() * 9), at: Date.now() };
+  });
+  return p;
+}
+const progress = BIG ? makeProgress(STAGES_X, 27) : { unlocked: 3, stars: { 1: 3, 2: 2 }, best: { 1: 48210, 2: 35120 }, wallet: 123400, subs: 31240, album: { 1: { stars: 3, fine: 40000, photo: PHOTOS[0] || null, count: 4 }, 2: { stars: 2, fine: 50000, photo: PHOTOS[1] || null, count: 1 } } };
+window.makePhoto = makePhoto; window.makeStages = makeStages; window.CHAPTERS = CHAPTERS; window.progress = progress; window.STAGES_X = STAGES_X;
 let frame = null;
 function every(fn) { const f = (t) => { fn(t); requestAnimationFrame(f); }; requestAnimationFrame(f); }
 
@@ -158,7 +239,12 @@ function playHUD(phase, opts = {}) {
 
 switch (screen) {
   case 'title':
-    ui.showTitle(STAGES, progress);
+    if (BIG) ui.showTitle(STAGES_X, progress, CHAPTERS);
+    else ui.showTitle(STAGES, progress);
+    break;
+  case 'album':
+    if (BIG) { ui.showTitle(STAGES_X, progress, CHAPTERS); ui.showAlbum(STAGES_X, progress, CHAPTERS); }
+    else { ui.showTitle(STAGES, progress); ui.showAlbum(STAGES, progress); }
     break;
   case 'card':
     onLoad(() => ui.showStageCard(stage).then(() => console.log('card resolved')));
@@ -209,6 +295,19 @@ switch (screen) {
       stageName: `${stage.highway} · ${stage.direction}`,
       villainName: stage.villains.map((v) => v.name).join(' & '),
       stars: +(P.get('stars') ?? 3), score: 58730, isLast: si === STAGES.length - 1,
+      reward: P.get('reward') === '0' ? undefined : (() => {
+        const st = +(P.get('stars') ?? 3), fine = stage.fine || 40000, bonus = P.get('bonus') === '0' ? 0 : 10000;
+        const payout = Math.round((fine * [1, 1, 1.5, 2][st] + bonus) / 100) * 100;
+        const ms = P.get('milestone') || 'silver';
+        return {
+          photo: P.get('photo') === '0' ? null : makePhoto(si + 3, stage.sky, '#' + (stage.villains[0].color >>> 0).toString(16).padStart(6, '0')),
+          villainName: stage.villains.map((v) => v.name).join(' & '), violation: stage.violation || '지정차로 위반', fine, payout, bonus, stars: st,
+          wallet: 123400, views: 123456, subsGain: 1204, subs: ms === 'gold' ? 1000400 : ms === 'silver' ? 100400 : 31204,
+          comments: ['사이다 ㅋㅋㅋㅋㅋ', '이분 국가유공자 지정해라', `${stage.villains[0].name} 보고 혈압 올랐는데 덕분에 내려감`],
+          milestone: ms === 'none' ? null : ms === 'gold' ? '골드 참교육 버튼 획득!' : ms === 'bronze' ? '구독자 1만 돌파!' : '실버 참교육 버튼 획득!',
+          stageId: stage.id, cause: stage.cause,
+        };
+      })(),
       stats: [
         { label: '속시원함 지수', value: '94%' },
         { label: '해방된 차량', value: '1,506대' },
