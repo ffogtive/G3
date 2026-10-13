@@ -13,8 +13,10 @@ render_mode diffuse_lambert, specular_disabled, cull_back;
 // 0 = static scenery (every lamp part is an always-on glow), 1 = NPC MultiMesh (INSTANCE_CUSTOM = sRGB paint.rgb
 // or r < 0 for no tint, a = lamp bits), 2 = hero MeshInstance3D (instance uniforms below).
 uniform int source = 0;
-uniform float ao_strength : hint_range(0.0, 1.0) = 0.55;
-uniform float ao_light_affect : hint_range(0.0, 1.0) = 0.0;  // AO darkens ambient only (palette under sun kept)
+uniform float ao_strength : hint_range(0.0, 1.0) = 0.6;
+// 0.35: creases darken under the sun too (0.0 was invisible at phone size, art review); flat faces have AO ≈ 1, so
+// the 16 palette patches moved ≤ 3.9 RGB (A/B 2026-10-13, acceptance ±4).
+uniform float ao_light_affect : hint_range(0.0, 1.0) = 0.35;
 // lit-lamp HDR multipliers (Mobile HDR buffer saturates at 2.0; glow_hdr_threshold = 1.0)
 uniform float brake_energy = 2.2;
 uniform float blink_energy = 2.4;
@@ -103,8 +105,13 @@ void fragment() {
 	}
 	vec3 albedo = srgb_to_linear(srgb) * hao;
 	if (v_emit > 0.0) {
+		// hue-preserving HDR boost: only the channels near the lamp's max channel are pushed past 1.0 (glow input),
+		// so a red lamp core stays the web's red instead of clipping to pink-white
+		vec3 base = albedo * v_emit_mul;
+		float m = max(max(base.r, base.g), max(base.b, 1e-4));
+		vec3 w = pow(base / m, vec3(4.0));
 		ALBEDO = vec3(0.0);
-		EMISSION = albedo * v_emit_mul * v_emit;
+		EMISSION = base + base * w * max(v_emit - 1.0, 0.0);
 	} else {
 		float ao = mix(1.0, v_c0.x, ao_strength);
 		ALBEDO = albedo;

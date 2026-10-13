@@ -184,7 +184,7 @@ func step(dt: float, player_state: Dictionary) -> void:
 			c["lc_t"] = minf(1.0, float(c["lc_t"]) + dt / float(c["lc_dur"]))
 			var e: float = float(c["lc_t"]) * float(c["lc_t"]) * (3.0 - 2.0 * float(c["lc_t"]))
 			var nx: float = lerpf(RoadGraph.lane_x(float(c["lane_from"])), RoadGraph.lane_x(float(c["lane_to"])), e)
-			c["yaw"] = -atan2((nx - float(c["x"])) / maxf(dt, 1e-4), maxf(2.0, v)) * 0.8
+			c["yaw"] = clampf(-atan2((nx - float(c["x"])) / maxf(dt, 1e-4), maxf(2.0, v)) * 0.8, -0.35, 0.35)
 			c["x"] = nx
 			if float(c["lc_t"]) >= 1.0:
 				c["lane"] = c["lane_to"]
@@ -209,11 +209,11 @@ func _scripted_lane_change(ps: float, plane: int) -> void:
 		if ds < 6.0 or ds > 30.0 or float(c["lc_t"]) < 1.0 or bool(c["front"]) or bool(c["parked"]) or bool(c["villain"]):
 			continue
 		var lane: int = int(c["lane"])
-		if lane < 4 and absi(lane - plane) == 1 and _lane_free(plane, float(c["s"]), float(c["len"]), c, -0.4) and absf(float(c["s"]) - ps) > (float(c["len"]) + 4.2) * 0.5 + 1.0:
+		if lane < 4 and absi(lane - plane) == 1 and _lane_free(plane, float(c["s"]), float(c["len"]), c, 0.4) and absf(float(c["s"]) - ps) > (float(c["len"]) + 4.2) * 0.5 + 1.0:
 			into.append(c)
 		elif lane == plane:
 			for to: int in [plane - 1, plane + 1]:
-				if to >= 0 and to <= 3 and _lane_free(to, float(c["s"]), float(c["len"]), c, -0.4):
+				if to >= 0 and to <= 3 and _lane_free(to, float(c["s"]), float(c["len"]), c, 0.4):
 					away.append({"car": c, "to": to})
 					break
 	var c: Dictionary
@@ -386,3 +386,31 @@ func set_car_state(id: int, st: Dictionary) -> void:
 func set_opp_state(index: int, s: float) -> void:
 	if index >= 0 and index < _opp.size():
 		_opp[index]["s"] = s
+
+
+## Review shots only (shot_jam --demo-signals): the dense 1-1 jam has no physical room for the scripted cut-ins,
+## so force one signalled and one unsignalled cut-in from the next lane and a brake check right ahead of the player.
+func demo_signals(ps: float, plane: int) -> void:
+	var side: int = plane - 1 if plane > 0 else plane + 1
+	var picked: Array[Dictionary] = []
+	for c: Dictionary in _cars:
+		var ds: float = float(c["s"]) - ps
+		if int(c["lane"]) == side and ds > 5.0 and ds < 34.0 and not bool(c["front"]) and not bool(c["villain"]):
+			picked.append(c)
+	picked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["s"]) < float(b["s"]))
+	for i: int in mini(2, picked.size()):
+		var c: Dictionary = picked[i * (picked.size() - 1)] if picked.size() > 1 else picked[0]
+		var signal_on: bool = i == 0
+		c["lane_from"] = side
+		c["lane_to"] = plane
+		c["lc_t"] = 0.0
+		c["lc_dur"] = 1.6 if signal_on else 0.9
+		c["blink"] = (BIT_BLINK_R if plane > side else BIT_BLINK_L) if signal_on else 0
+		_events.append({"type": "cutin", "id": int(c["id"]), "data": {"blinker": signal_on, "from": side, "to": plane}})
+	var ahead: Dictionary = {}
+	for c: Dictionary in _cars:
+		var ds: float = float(c["s"]) - ps
+		if int(c["lane"]) == plane and ds > 0.0 and (ahead.is_empty() or ds < float(ahead["s"]) - ps):
+			ahead = c
+	if not ahead.is_empty():
+		ahead["brake_t"] = 2.0

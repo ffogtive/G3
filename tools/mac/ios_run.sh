@@ -21,7 +21,7 @@
 # ~/.lane1/deploy.env (chmod 600). A Team ID chosen interactively is cached there.
 # Outputs: <repo>/.local/ (gitignored): iphone-deploy/ (DerivedData), ios-export/, deploy-runs/<ts>-<pid>/
 #          (build.log, install.json, launch.json, exit-code, receipt.txt, ...), iphone-deploy.lock (while running).
-# Exit: 0 launched | 2 usage | 3 environment | 4 build/export | 5 device | 6 install | 7 launch | 9 locked.
+# Exit: 0 launched and still running after 8 s | 2 usage | 3 environment | 4 build/export | 5 device | 6 install | 7 launch | 9 locked.
 set -euo pipefail
 # Not `umask 077` for the whole run (guide §5 does that): build outputs keep normal modes so the app bundle's
 # files stay readable after install; the run logs live in a 700 directory and ~/.lane1/deploy.env is chmod 600.
@@ -94,15 +94,16 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 printf 'pid=%s started=%s run=%s\n' "$$" "$(date '+%Y-%m-%d %H:%M:%S')" "$RUN_DIR" >"$LOCK/owner"
 
-BUILD_RESULT="not run" INSTALL_RESULT="not run" LAUNCH_RESULT="not run"
+BUILD_RESULT="not run" INSTALL_RESULT="not run" LAUNCH_RESULT="not run" EXT_RESULT="not run"
 finish_deploy() {
   local rc=$?
   printf '%s\n' "$rc" >"$RUN_DIR/exit-code"
   rm -f "$LOCK/owner"
   rmdir "$LOCK" 2>/dev/null || true
   {
-    printf 'exit=%s\nconfig=%s\nbuild=%s\ninstall=%s\nlaunch=%s\nstages=%s\n' "$rc" "$CONFIG" "$BUILD_RESULT" \
-      "$INSTALL_RESULT" "$LAUNCH_RESULT" "$LANE1_STAGE_TIMES"
+    printf 'exit=%s\nconfig=%s\nbuild=%s\ninstall=%s\nlaunch=%s\nrunning=%s\nnative=%s\nextensions=%s\nstages=%s\n' \
+      "$rc" "$CONFIG" "$BUILD_RESULT" "$INSTALL_RESULT" "$LAUNCH_RESULT" "${RUNNING:-not checked}" "${NATIVE:-?}" \
+      "${EXT_RESULT:-not run}" "$LANE1_STAGE_TIMES"
     printf 'git=%s%s\nbundle=%s\n' "$(git -C "$LANE1_ROOT" rev-parse --short HEAD 2>/dev/null || echo '?')" \
       "$(git -C "$LANE1_ROOT" diff --quiet HEAD 2>/dev/null || echo '+dirty')" "$BUNDLE_ID"
   } >"$RUN_DIR/receipt.txt" 2>/dev/null || true
@@ -176,6 +177,10 @@ check_xcode() {
   fi
   xcrun --sdk iphoneos --show-sdk-path >/dev/null 2>&1 || die 3 "iOS platform support is not installed:" \
     "xcodebuild -downloadPlatform iOS   (or Xcode > Settings > Components > iOS > Get)"
+  if ! xcrun --sdk iphoneos --find metal >/dev/null 2>&1; then
+    warn "Metal toolchain missing (separate download since Xcode 26): shaders would compile on the iPhone at runtime."
+    hint "xcodebuild -downloadComponent MetalToolchain   (then re-run; Godot's shader baker uses xcrun metal)"
+  fi
   xcrun --find devicectl >/dev/null 2>&1 || die 3 "xcrun devicectl is unavailable (needs Xcode 15+; selected: $dev)"
   have python3 || die 3 "python3 not found (it ships with Xcode's command-line tools: xcode-select --install)"
   ok "Xcode $ver ($dev)"
@@ -464,8 +469,10 @@ resolve_device() {
 }
 
 # ---------------------------------------------------------------------------------------------------------------
+LAUNCH_EPOCH=0
 launch_app() {
   LAUNCH_RESULT="failed"
+  LAUNCH_EPOCH=$(date +%s)
   if xcrun devicectl device process launch --device "$DEVICE_ID" --terminate-existing "$BUNDLE_ID" \
     --json-output "$RUN_DIR/launch.json" >"$RUN_DIR/launch.log" 2>&1; then
     LAUNCH_RESULT="ok"
@@ -485,10 +492,65 @@ launch_app() {
   return 1
 }
 
+# After `devicectl … launch` returns 0 the process was only spawned: a dyld error, a crash in the first frames or a
+# black screen from a GDScript parse error still exit 0 (review). Wait, then check the process list, and pull the
+# boot line the game writes to user://boot.txt (Documents/ on iOS) for native=true|false. Both are best-effort.
+LAUNCH_WAIT=${LANE1_LAUNCH_WAIT:-8}
+RUNNING="not checked" NATIVE="?"
+verify_running() {
+  log "waiting ${LAUNCH_WAIT}s, then checking that $PRODUCT is still running…"
+  sleep "$LAUNCH_WAIT"
+  if xcrun devicectl device info processes --device "$DEVICE_ID" --json-output "$RUN_DIR/procs.json" \
+    >"$RUN_DIR/procs.log" 2>&1; then
+    if grep -q "/$PRODUCT/$SCHEME" "$RUN_DIR/procs.json" 2>/dev/null; then
+      RUNNING=yes
+    else
+      RUNNING=no
+    fi
+  else
+    RUNNING="unknown (devicectl device info processes failed: $(rel "$RUN_DIR/procs.log"))"
+  fi
+  rm -f "$RUN_DIR/boot.txt"
+  if xcrun devicectl device copy from --device "$DEVICE_ID" --domain-type appDataContainer \
+    --domain-identifier "$BUNDLE_ID" --source Documents/boot.txt --destination "$RUN_DIR/boot.txt" \
+    >"$RUN_DIR/copy-boot.log" 2>&1 && [ -s "$RUN_DIR/boot.txt" ]; then
+    local boot_t
+    boot_t=$(sed -n 's/.*boot_unix=\([0-9]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1)
+    if is_number "$boot_t" && [ "$boot_t" -ge $((LAUNCH_EPOCH - 60)) ]; then
+      NATIVE=$(sed -n 's/.*native=\([a-z]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1)
+      [ -n "$NATIVE" ] || NATIVE="?"
+      log "boot: $(head -n 1 "$RUN_DIR/boot.txt")"
+    else
+      NATIVE="? (boot.txt is from an earlier launch)"
+    fi
+  fi
+  case "$RUNNING" in
+    yes)
+      LAUNCH_RESULT="ok (running after ${LAUNCH_WAIT}s)"
+      ok "running after ${LAUNCH_WAIT}s (native traffic: $NATIVE)"
+      [ "$NATIVE" != false ] || warn "the game runs with the GDScript traffic fallback (C++ extension stubbed or failed to load)"
+      ;;
+    no)
+      LAUNCH_RESULT="failed (exited within ${LAUNCH_WAIT}s)"
+      warn "$PRODUCT is not running ${LAUNCH_WAIT}s after launch: it crashed or quit at startup."
+      hint "Crash log: Xcode > Window > Devices and Simulators > $DEVICE_NAME > View Device Logs (lane1)," \
+        "or open $(rel "$EXPORT_ROOT")/<debug|release>/$SCHEME.xcodeproj and Run (⌘R) to see the console." \
+        "If build_ios_ext stubbed an extension, see $(rel "$LANE1_NATIVE/build/ios/ext_status.txt")."
+      return 1
+      ;;
+    *)
+      LAUNCH_RESULT="ok (liveness unknown)"
+      warn "could not read the device process list — check the iPhone screen yourself"
+      ;;
+  esac
+  return 0
+}
+
 summary() {
   local total=$((SECONDS - T_START))
   printf '\n%s== 결과%s (%s)\n' "$_C_BLD" "$_C_OFF" "$CONFIG"
-  printf '  build   : %s\n  install : %s\n  launch  : %s\n' "$BUILD_RESULT" "$INSTALL_RESULT" "$LAUNCH_RESULT"
+  printf '  build   : %s\n  install : %s\n  launch  : %s\n  running : %s   native traffic: %s\n' "$BUILD_RESULT" \
+    "$INSTALL_RESULT" "$LAUNCH_RESULT" "$RUNNING" "$NATIVE"
   printf '  기능 확인: ❓ 사용자 확인 필요 (화면이 뜨는지, 햅틱, 120Hz — docs/IPHONE_DEPLOY.md 7절)\n'
   printf '  elapsed : %ss (목표 <= 600s)  stages: %s\n' "$total" "$LANE1_STAGE_TIMES"
   printf '  logs    : %s\n' "$(rel "$RUN_DIR")"
@@ -501,10 +563,10 @@ resolve_device
 if [ "$LAUNCH_ONLY" = 1 ]; then
   stage_end
   stage_begin "launch"
-  launch_app || {
+  if ! launch_app || ! verify_running; then
     summary
     exit 7
-  }
+  fi
   stage_end
   summary
   exit 0
@@ -512,6 +574,8 @@ fi
 resolve_team
 ensure_godot
 ensure_templates
+have cmake || warn "cmake not found: the C++ traffic core becomes a stub and the game uses the slower GDScript fallback" \
+  "(brew install cmake ninja)"
 grep -q '^run/main_scene=' "$LANE1_NATIVE/project.godot" ||
   warn "native/project.godot has no run/main_scene yet — the app will start to an empty screen/quit (gate owner)"
 stage_end
@@ -531,8 +595,16 @@ EXT_ARGS=("--target=template_$KIND")
 [ "$NO_EXT" = 0 ] || EXT_ARGS+=(--no-ext)
 [ "$CLEAN" = 0 ] || EXT_ARGS+=(--clean)
 if GODOT="$GODOT_BIN" bash "$SCRIPT_DIR/build_ios_ext.sh" "${EXT_ARGS[@]}" >"$RUN_DIR/ext.log" 2>&1; then
-  ok "extensions: $(tr '\n' ' ' <"$LANE1_NATIVE/build/ios/ext_status.txt" 2>/dev/null || echo '?')"
+  EXT_RESULT=$(tr '\n' ' ' <"$LANE1_NATIVE/build/ios/ext_status.txt" 2>/dev/null || echo '?')
+  if grep -qE '^stub:|=failed|=skipped' "$LANE1_NATIVE/build/ios/ext_status.txt" 2>/dev/null; then
+    warn "extensions: $EXT_RESULT"
+    hint "stub = that extension is left out on the iPhone (traffic -> GDScript fallback, haptics -> vibrate_handheld)." \
+      "log: $(rel "$RUN_DIR/ext.log")"
+  else
+    ok "extensions: $EXT_RESULT"
+  fi
 else
+  EXT_RESULT="failed (stubs)"
   tail -n 15 "$RUN_DIR/ext.log" >&2 || true
   warn "extension build failed — continuing so the game still launches (no Core Haptics / traffic classes)."
   hint "log: $(rel "$RUN_DIR/ext.log")"
@@ -554,6 +626,10 @@ mkdir -p "$EXPORT_DIR"
   tail_errors "$RUN_DIR/export.log"
   die 4 "godot export failed (log: $(rel "$RUN_DIR/export.log")); templates: $TPL_DIR"
 }
+if grep -q 'Metal shader baking limited' "$RUN_DIR/export.log"; then
+  warn "Godot could not pre-bake Metal shaders (Metal toolchain?): first frames on the iPhone may hitch."
+  hint "xcodebuild -downloadComponent MetalToolchain, then tools/mac/ios_run.sh --clean"
+fi
 PBX="$EXPORT_DIR/$SCHEME.xcodeproj/project.pbxproj"
 [ -f "$PBX" ] || die 4 "export produced no $(rel "$PBX") (log: $(rel "$RUN_DIR/export.log"))"
 # Team placeholder from export_presets.cfg -> real team, only in the generated (gitignored) project.
@@ -638,7 +714,7 @@ fi
 stage_end
 
 stage_begin "launch"
-if ! launch_app; then
+if ! launch_app || ! verify_running; then
   stage_end
   summary
   exit 7

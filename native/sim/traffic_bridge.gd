@@ -48,12 +48,20 @@ var _kind_names: PackedStringArray = []
 var _specs: Array[Dictionary] = []
 
 
-## True when the C++ ext is registered (loads it once if the editor scan has not yet).
+static var _load_tried: bool = false
+
+
+## True when the C++ ext is registered. Tries GDExtensionManager.load_extension at most once per process (a fresh
+## .godot/ has not registered it yet); a failed load prints its errors once, then one INFO line, never again.
 static func native_available() -> bool:
 	if ClassDB.class_exists(NATIVE_CLASS):
 		return true
-	if FileAccess.file_exists(GDEXT_PATH) and not GDExtensionManager.is_extension_loaded(GDEXT_PATH):
-		GDExtensionManager.load_extension(GDEXT_PATH)
+	if not _load_tried:
+		_load_tried = true
+		if FileAccess.file_exists(GDEXT_PATH) and not GDExtensionManager.is_extension_loaded(GDEXT_PATH):
+			GDExtensionManager.load_extension(GDEXT_PATH)
+		if not ClassDB.class_exists(NATIVE_CLASS):
+			print("INFO traffic: C++ extension unavailable -> GDScript fallback")
 	return ClassDB.class_exists(NATIVE_CLASS)
 
 

@@ -8,8 +8,8 @@
 ;
 ; 1차선 참교육 — native port (docs/NATIVE_PORT.md 3-1). Engine pin: Godot 4.7.2-stable (1-2).
 ; Planned autoload order (3-1): DB SaveGame InputBuffer Audio Haptics Fx UI.
-; Only the M1-0 stubs (DB, SaveGame) are registered below; add the others here, in this order,
-; when their scripts land. Cfg (core/cfg.gd) is a `class_name` constants holder, not an autoload.
+; Registered so far: DB, SaveGame, Haptics (the others are added here, in this order, when their scripts land;
+; InputBuffer/Audio/Fx/UI are still per-scene nodes of view/game.gd in M1a). Cfg (core/cfg.gd) is a `class_name` constants holder, not an autoload.
 
 config_version=5
 
@@ -18,11 +18,13 @@ config_version=5
 config/name="1차선 참교육"
 config/version="0.1.0"
 config/features=PackedStringArray("4.7", "Mobile")
+run/main_scene="res://view/game.tscn"
 
 [autoload]
 
 DB="*res://core/db.gd"
 SaveGame="*res://core/save_game.gd"
+Haptics="*res://autoload/haptics.gd"
 
 [debug]
 
@@ -48,3 +50,5 @@ renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=3

@@ -21,7 +21,8 @@
 2. **iPhone 연결** — 케이블로 꽂고 잠금 해제 → "이 컴퓨터 신뢰" → 개발자 모드 켜기(SIGNING.md 3~4단계).
 3. **받기** — `cd <G3> && git pull`
 4. **실행** — `tools/mac/ios_run.sh` (점검만: `--check`). 첫 실행은 Godot 4.7.2 + 템플릿 1.3 GB를 받아
-   SHA-512를 확인한다. 끝에 `build / install / launch` 결과와 소요 시간이 따로 찍힌다.
+   SHA-512를 확인한다. 끝에 `build / install / launch / running`과 소요 시간이 따로 찍힌다. `launch: ok`는 실행 8초 뒤에도
+   프로세스가 살아 있을 때만 찍힌다(`running: yes`). `native traffic: true|false`는 게임이 쓴 `Documents/boot.txt`에서 읽는다.
 5. **결과 보내기** — 실패하면 마지막 화면 + `.local/deploy-runs/<최신>/receipt.txt`를 보내 준다
    (Team ID·UDID는 출력에서 `AB******YZ`로 가려져 있다). 실행이 "신뢰하지 않는 개발자"로 막히면
    iPhone `설정 > 일반 > VPN 및 기기 관리 > 개발자 앱 > 신뢰` 후 `tools/mac/ios_run.sh --launch-only`.
@@ -45,7 +46,7 @@
 | 항목 | 값 |
 |---|---|
 | Mac | Apple silicon 권장, macOS Tahoe 26.6 이상 (Xcode 27 요건 ✅) |
-| Xcode | 27.x (App Store). iOS 플랫폼 구성요소 설치. `cmake`는 traffic 확장 빌드에만(없으면 경고 후 계속) |
+| Xcode | 27.x (App Store). iOS 플랫폼 구성요소 설치. `cmake`는 traffic 확장 빌드에만(없으면 경고 후 계속 → GDScript 교통 폴백). Metal toolchain(`xcodebuild -downloadComponent MetalToolchain`, 없으면 경고) |
 | iPhone | iOS 17 이상(Xcode 27 개발 실행 하한 ✅), A12 이상, 개발자 모드 |
 | Apple ID | 무료 가능. Xcode에 로그인만 하면 된다 — 비밀번호·2FA는 사용자가 직접 입력 |
 | 디스크 | Godot 앱 ~0.2 GB + 템플릿 ~1.3 GB(`~/Library/Application Support/Godot/export_templates/4.7.2.stable`) + DerivedData |
@@ -109,11 +110,11 @@ tools/mac/ios_run.sh [--release] [--clean] [--device <UDID|이름>] [--no-ext] [
 | device | `xcrun devicectl list devices --json-output` → 페어링된 iPhone 1대(여러 대면 1회 질문, `--device`로 지정). `developerModeStatus`가 `disabled`면 켜는 법 출력 | exit 5 |
 | team | `LANE1_TEAM_ID` → `~/.lane1/deploy.env` → 키체인 `Apple Development` 인증서의 **OU**(+ Xcode 계정 defaults) | 여러 개면 1회 질문 후 deploy.env(600)에 저장 |
 | godot | 4.7.2 앱·템플릿 확인/설치(SHA-512 검증) | exit 3 |
-| extensions | `tools/mac/build_ios_ext.sh`: haptics(xcrun clang++ → xcframework) + traffic(cmake -G Xcode) | **경고만 하고 계속**(빈 stub xcframework → 게임은 그 클래스 없이 뜬다) |
+| extensions | `tools/mac/build_ios_ext.sh`: haptics(xcrun clang++ → xcframework) + traffic(cmake -G Xcode) | **⚠️ 경고 후 계속**: stub xcframework가 manifest의 `entry_symbol`을 정의하고 false를 돌려준다 → Godot는 "initialization function … returned an error"만 찍고 그 클래스 없이 뜬다 ❓(기기 미검증). ~~빈 stub~~은 dyld가 실행 시 죽어서 기각 |
 | export | `Godot --headless --path native --import` → `--export-debug iOS .local/ios-export/debug/lane1.xcodeproj` → pbxproj의 `LANE1TEAM0`를 실제 팀으로 치환 | exit 4 |
 | build | `xcodebuild -project … -scheme lane1 -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath .local/iphone-deploy -allowProvisioningUpdates -allowProvisioningDeviceRegistration DEVELOPMENT_TEAM=… CODE_SIGN_STYLE=Automatic CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES build` (프로파일에 기기가 없다는 오류면 `-destination id=<UDID>`로 1회 재시도) → `test -d` → `codesign --verify --deep --strict` → `PlistBuddy CFBundleIdentifier == com.ffogtive.lane1Chamgyoyuk` | errSecInternalComponent → 로그인된 Terminal에서 실행 안내, exit 4 |
 | install | `xcrun devicectl device install app --device … lane1.app --json-output install.json` (기존 앱 삭제 없음) | exit 6 |
-| launch | `xcrun devicectl device process launch --device … --terminate-existing com.ffogtive.lane1Chamgyoyuk --json-output launch.json` | "신뢰하지 않는 개발자" 안내, exit 7 (설치 성공은 따로 표시) |
+| launch | `xcrun devicectl device process launch --device … --terminate-existing com.ffogtive.lane1Chamgyoyuk --json-output launch.json` | "신뢰하지 않는 개발자" 안내, exit 7 (설치 성공은 따로 표시). 성공 뒤 8초(`LANE1_LAUNCH_WAIT`) 기다려 `devicectl device info processes`로 살아 있는지 보고, `device copy from … Documents/boot.txt`로 부트 줄(`native=`)을 가져온다. 죽었으면 `launch: failed (exited within 8s)`, exit 7 |
 
 - 실행마다 `.local/deploy-runs/<YYYYmmdd-HHMMSS>-<pid>/`: `build.log export.log ext.log install.json launch.json
   devices.json receipt.txt exit-code`(EXIT trap). 동시 실행은 `.local/iphone-deploy.lock`(mkdir)으로 막고, **남은
@@ -138,10 +139,11 @@ Xcode에서 한 번 Run하면 기기 등록·프로파일 생성이 확실히 �
 | 확장 | 경로 | 빌드 | 실패 시 |
 |---|---|---|---|
 | IOSHaptics (Core Haptics + thermalState) | `native/platform/ios` (C 인터페이스, godot-cpp 없음) | `xcrun clang++ -arch arm64` → `libtool -static` → `xcodebuild -create-xcframework` | stub → `Haptics`가 `Input.vibrate_handheld`로 폴백 |
-| traffic (C++ 교통 코어) | `native/ext` (godot-cpp, gate 소유) | `cmake -G Xcode -DCMAKE_SYSTEM_NAME=iOS` (native/ext/README.md) | stub → 경고. 그 클래스를 쓰는 씬은 동작 안 함 |
+| traffic (C++ 교통 코어) | `native/ext` (godot-cpp, gate 소유) | `cmake -G Xcode -DCMAKE_SYSTEM_NAME=iOS` (native/ext/README.md) | stub → ⚠️ 경고. `TrafficBridge`가 GDScript 폴백(차선별 creep 모델, 웹 동등성 없음)으로 돈다. 정체 화면은 뜨지만 IDM·경적 답은 C++에만 있다 |
 
-- 생성된 Xcode 프로젝트는 두 진입 심볼을 `-Wl,-U,_traffic_library_init -Wl,-U,_lane1_haptics_init`로 약하게 참조한다
-  (컨테이너 export로 확인 ✅) — stub이어도 링크된다.
+- 생성된 Xcode 프로젝트는 두 진입 심볼을 `-Wl,-U,_traffic_library_init -Wl,-U,_lane1_haptics_init`로 dynamic lookup 처리하고
+  dummy.cpp가 그 주소를 weak 없이 등록한다(컨테이너 export로 확인 ✅). 그래서 심볼이 없는 빈 stub은 링크는 되지만 실행 때
+  dyld가 'symbol not found in flat namespace'로 죽는다 → stub은 진입 심볼을 정의하고 false를 돌려준다 ❓(Mac 미검증).
 - `Haptics` autoload(`native/autoload/haptics.gd`): `haptic("horn")`이 `data/haptics.json`을 읽어 IOSHaptics →
   `Input.vibrate_handheld(ms, amp)` → no-op 순으로 고른다. `thermal_state()`는 모듈이 없으면 `"unknown"`.
   autoload 등록(`project.godot`)은 gate 소유자 몫: 순서 DB SaveGame InputBuffer Audio **Haptics** Fx UI.
@@ -169,7 +171,13 @@ Xcode에서 한 번 Run하면 기기 등록·프로파일 생성이 확실히 �
 | 설치는 됐는데 실행 실패 | 개발자 신뢰(설정 > 일반 > VPN 및 기기 관리) 또는 잠금 해제 → `--launch-only`. **설치 성공은 유지해서 보고** |
 | 7일 뒤 앱이 안 열림 | 무료 프로파일 만료 → `ios_run.sh` 다시 (앱 삭제 금지, 데이터 유지) |
 | `maximum App ID limit` | 7일에 App ID 10개 한도. Bundle ID를 바꾸지 않는다 |
-| 화면이 비어 있음 | `native/project.godot`에 `run/main_scene`이 아직 없다(ios_run.sh가 경고) — gate 산출물 대기 |
+| 앱이 번쩍하고 닫힘 | `running: no` / `launch: failed (exited within 8s)`. Xcode > Window > Devices and Simulators > View Device Logs, 또는 export된 `lane1.xcodeproj`를 Xcode에서 Run(⌘R)해 콘솔을 본다. `ext_status.txt`에 stub이 있으면 함께 보낸다 |
+| 첫 화면에서 끊김 | 결과에 'Metal shader baking limited' 경고 → `xcodebuild -downloadComponent MetalToolchain` 후 `--clean` |
+| capability / 프로파일 오류 | 무료 Personal Team이 못 쓰는 기능(Push, iCloud 등)이 켜졌는지 본다. **기능을 지워서 빌드만 통과시키지 않는다** — 원인을 보고하고 결정을 받는다 |
+| 데이터가 초기화된 것처럼 보임 | Bundle ID가 `com.ffogtive.lane1Chamgyoyuk` 그대로인지, SaveGame 스키마 마이그레이션을 확인한다. **기존 앱을 삭제하지 않는다**(삭제 = 저장 데이터 삭제) |
+
+- Simulator만으로 "검증 완료"라고 하지 않는다. 실제 iPhone에서 `running: yes` + 사용자 확인까지가 완료다.
+- SaveGame 스키마를 바꾼 뒤 예전 바이너리를 다시 설치하는 것은 안전한 롤백이 아니다(새 스키마 데이터를 옛 코드가 읽는다).
 
 ## 9) 컨테이너에서 확인한 것 ✅ / 못 한 것 ❓
 

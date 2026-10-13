@@ -3,6 +3,8 @@ extends Node3D
 ## Few-of-a-kind vehicles (player, villains, boss) as MeshInstance3D (NATIVE_PORT 3-7): main mesh with the shared
 ## hero voxel material (lamps / paint / hit flash as instance uniforms), detailed sub-meshes (wheels spin with
 ## speed, driver, cannon), stock glass material, and the beam quad shown only on high beam.
+## The player also gets the web's roof beacon (player.js:28-36, created at runtime so the bake never saw it):
+## 0.5 × 0.28 × 0.32 box at points.beaconPos, dark amber 0x5a3a00 off, 0xffa000 + HDR emission on (blooms).
 
 const BIT_HIGHBEAM: int = 8
 
@@ -17,6 +19,10 @@ var _fx_material: Material
 var _hidden: Material
 var lamp_bits: int = -1
 var speed: float = 0.0
+var beacon: MeshInstance3D
+var _beacon_on_mat: StandardMaterial3D
+var _beacon_off_mat: StandardMaterial3D
+var _beacon_lit: int = -1
 
 
 func setup(factory: VehicleFactory, kind: String, variant: int, color: Variant = null) -> void:
@@ -69,11 +75,54 @@ func set_lamps(bits: int) -> void:
 		body.set_surface_override_material(_fx_surface, _fx_material if bits & BIT_HIGHBEAM else _hidden)
 
 
+## Adds the roof beacon (player.js beacon). Falls back to (-0.55, height − 0.05, 0.55) like the web.
+func enable_beacon() -> void:
+	if beacon != null:
+		return
+	var pts: Dictionary = template.get(&"points") if template.get(&"points") is Dictionary else {}
+	var h: float = float(template.get(&"height")) if template.get(&"height") != null else 1.7
+	var pos: Vector3 = pts.get("beaconPos", Vector3(-0.55, h - 0.05, 0.55))
+	var box := BoxMesh.new()
+	box.size = Vector3(0.5, 0.28, 0.32)
+	_beacon_off_mat = StandardMaterial3D.new()
+	_beacon_off_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED  # MeshBasicMaterial on the web
+	_beacon_off_mat.albedo_color = Color8(0x5a, 0x3a, 0x00)
+	_beacon_on_mat = StandardMaterial3D.new()
+	_beacon_on_mat.albedo_color = Color8(0xff, 0xa0, 0x00)
+	_beacon_on_mat.emission_enabled = true
+	_beacon_on_mat.emission = Color8(0xff, 0xa0, 0x00)
+	_beacon_on_mat.emission_energy_multiplier = 2.5  # > glow_hdr_threshold 1.0
+	beacon = MeshInstance3D.new()
+	beacon.name = "Beacon"
+	beacon.mesh = box
+	beacon.position = pos
+	beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	add_child(beacon)
+	set_beacon(false)
+
+
+## web: beaconOn when urgent (jam / boss) and floor(t / 0.18 s) is even.
+func set_beacon(on: bool) -> void:
+	if beacon == null or int(on) == _beacon_lit:
+		return
+	_beacon_lit = int(on)
+	beacon.material_override = _beacon_on_mat if on else _beacon_off_mat
+
+
 func set_flash(amount: float) -> void:
 	body.set_instance_shader_parameter(&"hero_flash", clampf(amount, 0.0, 1.0))
 
 
+## true: the owner spins the wheels with advance_wheels() on sim time (Game.manual shots/tests stay reproducible).
+var manual: bool = false
+
+
 func _process(delta: float) -> void:
+	if not manual:
+		advance_wheels(delta)
+
+
+func advance_wheels(delta: float) -> void:
 	if wheels.is_empty():
 		return
 	_spin = fmod(_spin + speed * delta / _wheel_r, TAU)

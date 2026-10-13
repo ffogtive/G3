@@ -3,8 +3,12 @@ extends Node3D
 ## M1a composition root (NATIVE_PORT 3-1 view/game.gd, 3-2 fixed tick): stage 1-1 jam scene.
 ##  sim  (_physics_process, 120 Hz): input edges → player driver → TrafficBridge.step → event fan-out
 ##  view (_process): NPC MultiMesh interpolation, hero views, camera (real-dt smoothing), N5 icons, HUD
-## TrafficBridge (res://sim/traffic_bridge.gd, sim agent) is used when present, else the view's TrafficStub with the
-## same interface. Command-line (after `--`): --stage=N --seed=N --traffic=auto|stub --no-debug-panel --manual.
+## TrafficBridge (res://sim/traffic_bridge.gd: C++ Traffic when the ext loads, else its GDScript creep model) is used
+## when present, else the view's TrafficStub with the same interface. Honk (web main.js:1076): honkCool gate, horn SFX +
+## haptic + "빵!" pop + ring, TrafficBridge.honk → reply bubble over the replying car (lines.json tables).
+## Command-line (after `--`): --stage=N --seed=N --traffic=auto|stub --no-debug-panel --manual --safe-pt=TOP,BOTTOM
+## (fake notch / home-indicator insets in points on desktop). Live runs write the boot line to user://boot.txt
+## (Documents/ on iOS) so tools/mac/ios_run.sh can report native=true|false after launch.
 
 const TICK: float = 1.0 / 120.0
 const BRIDGE_PATH: String = "res://sim/traffic_bridge.gd"
@@ -36,6 +40,10 @@ var hud: Hud
 var sfx: Sfx
 var haptics: Node
 var debug_panel: DebugPanel
+var bubbles: Bubbles
+var honk_cool: float = 1.0
+var last_honk: float = -INF
+var last_honk_reply: Dictionary = {}
 var start_s: float = 0.0
 var front_s: float = 200.0
 var sim_time: float = 0.0
@@ -50,7 +58,11 @@ var _villain_s: float = 200.0
 var _hazard_cars: Array[HeroVehicleView] = []
 var _bridge_villains: Array[HeroVehicleView] = []   # villains the bridge keeps outside the buffer (villains())
 var _vprev := PackedFloat32Array()
+var _pprev_s: float = 0.0
+var _lines: Dictionary = {}
+var _pick := RandomNumberGenerator.new()   # presentation-only picks (bubble lines); never touches the sim RNG
 var _built: bool = false
+var _safe_pt := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -65,6 +77,9 @@ func _ready() -> void:
 			manual = true
 		elif a.begins_with("--traffic="):
 			traffic_mode = a.trim_prefix("--traffic=")
+		elif a.begins_with("--safe-pt="):
+			var p: PackedStringArray = a.trim_prefix("--safe-pt=").split(",")
+			_safe_pt = Vector2(p[0].to_float(), p[1].to_float() if p.size() > 1 else 0.0)
 	build()
 
 
@@ -83,8 +98,20 @@ func build() -> void:
 	var setup: Dictionary = cfg.get("setup", {}) if cfg.get("setup") is Dictionary else {}
 	start_s = float(setup.get("startS", 0.0))
 	front_s = start_s + float(stage.get("jamLength", 170.0)) + float(setup.get("frontGap", 30.0))
+	var start_lane: int = int(setup.get("startLane", 3))
+	if traffic.has_method(&"setup_info"):  # main.js setupStage as resolved by the sim: one source for start / front
+		var si: Dictionary = traffic.call(&"setup_info")
+		start_s = float(si.get("start_s", start_s))
+		front_s = float(si.get("front_s", front_s))
+		start_lane = int(si.get("start_lane", start_lane))
+	var tune: Dictionary = cfg.get("tune", {}) if cfg.get("tune") is Dictionary else {}
+	honk_cool = float(tune.get("honkCool", 1.0))
+	var lt: Variant = ViewData.table("lines")
+	_lines = (lt as Dictionary).get("tables", {}) if lt is Dictionary else {}
+	_pick.seed = seed
 	player = PlayerDriver.new()
-	player.reset(int(setup.get("startLane", 3)), start_s)
+	player.reset(start_lane, start_s)
+	_pprev_s = player.s
 	var obstacles: Array = traffic.call(&"obstacles") if traffic.has_method(&"obstacles") else []
 
 	world = WorldView.new()
@@ -111,6 +138,7 @@ func build() -> void:
 	player_view = HeroVehicleView.new()
 	add_child(player_view)
 	player_view.setup(factory, "player", 0)
+	player_view.enable_beacon()
 	player_view.transform = road.world(player.s, player.x)
 	player_view.reset_physics_interpolation()
 
@@ -127,6 +155,7 @@ func build() -> void:
 	add_child(icons)
 	honk_fx = HonkWave.new()
 	honk_fx.name = "HonkWave"
+	honk_fx.manual = manual
 	add_child(honk_fx)
 	input = LaneInput.new()
 	input.name = "Input"
@@ -135,6 +164,17 @@ func build() -> void:
 	hud.name = "Hud"
 	add_child(hud)
 	hud.bind_input(input)
+	if _safe_pt != Vector2.ZERO:
+		hud.debug_safe_pt = _safe_pt
+		hud.apply_safe_area()
+	hud.process_mode = Node.PROCESS_MODE_ALWAYS    # draws the pause state
+	input.process_mode = Node.PROCESS_MODE_ALWAYS  # the pause button must work while paused
+	input.pause_requested.connect(func() -> void: set_paused(not get_tree().paused))
+	bubbles = Bubbles.new()
+	bubbles.name = "Bubbles"
+	bubbles.camera = camera
+	hud.root.add_child(bubbles)
+	hud.root.move_child(bubbles, 0)  # under the HUD widgets
 	sfx = Sfx.new()
 	sfx.name = "Sfx"
 	add_child(sfx)
@@ -152,6 +192,39 @@ func build() -> void:
 	vp.msaa_3d = Viewport.MSAA_4X
 	_update_view(1.0)
 	camera.snap()
+	for hv: HeroVehicleView in _heroes():
+		hv.manual = manual
+	var native: bool = traffic.has_method(&"is_native") and bool(traffic.call(&"is_native"))
+	var boot: String = "INFO game: stage %d seed %d traffic=%s native=%s cars=%d haptics=%s" % [stage_id, seed,
+		traffic.get_script().resource_path, native, _cur.size() / 8, haptics.get_script().resource_path if haptics != null else "none"]
+	print(boot)
+	if not manual:
+		_write_boot(boot)
+
+
+## user://boot.txt = the boot line + unix time; ios_run.sh pulls it (devicectl copy from) to record native=… and
+## that this launch really reached the main scene. Best effort: never fails the game.
+func _write_boot(line: String) -> void:
+	var f := FileAccess.open("user://boot.txt", FileAccess.WRITE)
+	if f != null:
+		f.store_line("%s boot_unix=%d" % [line, int(Time.get_unix_time_from_system())])
+		f.close()
+
+
+## Pause button / app sent to background: freezes sim and view (HUD + input keep running to resume).
+func set_paused(on: bool) -> void:
+	if manual or not is_inside_tree():
+		return
+	get_tree().paused = on
+	hud.paused = on
+	input.release_all()
+	while input.consume_lane() != 0:
+		pass
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED and _built:
+		set_paused(true)
 
 
 ## shoulder.js breakdown: the car sits 2.4 m ahead of the obstacle centre, yawed by detail.rotY, hazards blinking
@@ -253,6 +326,7 @@ func sim_tick(dt: float) -> void:
 			_log({"type": "lane_blocked", "to": to})
 	if input.consume_horn():
 		honk()
+	_pprev_s = player.s
 	player.step(dt, _cur)
 	if not _bridge_villains.is_empty():
 		_vprev.clear()
@@ -269,12 +343,70 @@ func sim_tick(dt: float) -> void:
 	player_view.transform = road.world(player.s, player.x, player.yaw)
 
 
-func honk() -> void:
+## web main.js:1076: one honk per honkCool (sim time here, so replays are deterministic); jam/boss only (M1a: jam).
+func honk() -> bool:
+	if sim_time - last_honk < honk_cool:
+		return false
+	last_honk = sim_time
 	haptic("horn")
 	sfx.play("horn")
 	honk_fx.emit_at(road.position(player.s + 2.6, player.x))
+	var roof: float = float(player_view.template.get(&"height")) if player_view.template != null else 1.6
+	bubbles.pop(road.position(player.s, player.x) + Vector3(0, roof + 1.2, 0), "빵!", "warn")  # clears the yellow roof
 	var r: Dictionary = traffic.call(&"honk", player.lane, player.s)
+	last_honk_reply = r
+	_reply_bubble(r)
 	_log({"type": "honk", "reply": r})
+	return true
+
+
+## main.js:1085-1098 reply → bubble over the replying car (carTop(car, 0.8)).
+func _reply_bubble(r: Dictionary) -> void:
+	var kind: String = str(r.get("kind", ""))
+	if kind.is_empty():
+		return
+	var id: int = int(r.get("id", -1))
+	var pos: Callable = _car_top(id, 0.8)
+	if kind == "villain" or not pos.call().is_finite():
+		if _bridge_villains.is_empty() and not villain_views.has(id):
+			return
+		var hv: HeroVehicleView = villain_views[id] if villain_views.has(id) else _bridge_villains[0]
+		var h: float = float(hv.template.get(&"height")) + 0.8
+		pos = func() -> Vector3: return hv.global_position + Vector3(0, h, 0)
+	var key: String = "h%d" % id
+	match kind:
+		"cheater":
+			bubbles.show_bubble(key, _line("CHEATER_LINES"), "thanks", 1.4, pos)
+			bubbles.pop(pos.call() + Vector3(0, 1.0, 0), "얌체 참교육 +300", "score")
+		"yield":
+			bubbles.show_bubble(key, _line("YIELD_LINES"), "thanks", 1.2, pos)
+		"letin":
+			bubbles.show_bubble(key, _line("LETIN_LINES"), "thanks", 1.2, pos)
+		"noway":
+			bubbles.show_bubble(key, _line("NOWAY_LINES"), "angry", 1.1, pos)
+		"tired":  # main.js:1098 inline (lines.json inline main.js:1098#1)
+			bubbles.show_bubble(key, _pick_of(["또 빵?", "빵빵 그만!", "귀 아파요", "들었다고요"]), "angry", 1.2, pos)
+		"villain":  # main.js:1083 inline: the villain never yields
+			bubbles.show_bubble(key, _pick_of(["왜 빵빵거려?", "빵빵해도 안 비켜~", "내 차선인데?"]), "taunt", 1.4, pos)
+
+
+func _line(table_name: String) -> String:
+	var t: Variant = _lines.get(table_name)
+	return _pick_of(t as Array) if t is Array and not (t as Array).is_empty() else "!"
+
+
+func _pick_of(arr: Array) -> String:
+	return str(arr[_pick.randi_range(0, arr.size() - 1)])
+
+
+## Live roof-top position of a buffer car (INF when the id is not in the buffer any more).
+func _car_top(id: int, above: float) -> Callable:
+	return func() -> Vector3:
+		var n: int = _cur.size() / 8
+		for k: int in n:
+			if int(_cur[k * 8]) == id:
+				return road.position(_cur[k * 8 + 4], _cur[k * 8 + 3]) + Vector3(0, float(_heights.get(id, 1.5)) + above, 0)
+		return Vector3(INF, INF, INF)
 
 
 func _log(ev: Dictionary) -> void:
@@ -284,12 +416,17 @@ func _log(ev: Dictionary) -> void:
 		log_events.pop_front()
 
 
-## Tests / shots: run n sim ticks synchronously (no rendering), then refresh the view once.
+## Tests / shots: run n sim ticks synchronously (no rendering), then refresh the view once. The camera target follows
+## the player every tick (review: it was only set once after the loop, so shots framed the start of the call).
 func advance_ticks(n: int) -> void:
 	for i: int in n:
 		sim_tick(TICK)
 		real_time += TICK
+		_sync_camera_target(player_view.global_transform)
 		camera.step(TICK)
+		honk_fx.advance(TICK)
+		for hv: HeroVehicleView in _heroes():
+			hv.advance_wheels(TICK)
 	_update_view(1.0)
 
 
@@ -298,9 +435,11 @@ func advance_ticks(n: int) -> void:
 func _process(delta: float) -> void:
 	if not _built:
 		return
+	if manual:  # the caller owns time (advance_ticks / render_step): wall-clock frame time must not leak into shots
+		_update_view(1.0)
+		return
 	real_time += delta
-	var frac: float = 1.0 if manual else Engine.get_physics_interpolation_fraction()
-	_update_view(frac)
+	_update_view(Engine.get_physics_interpolation_fraction())
 	camera.step(delta)
 
 
@@ -340,15 +479,37 @@ func _update_view(frac: float) -> void:
 		hv.set_lamps(hz)
 	player_view.speed = player.v
 	player_view.set_lamps(NpcMultiMesh.drawn_bits(player.lamp_bits, sim_time, 0))
-	var pxf: Transform3D = player_view.get_global_transform_interpolated() if not manual else player_view.global_transform
+	player_view.set_beacon(int(floorf(sim_time / 0.18)) % 2 == 0)  # urgent: M1a is always the jam phase
+	_sync_camera_target(player_view.get_global_transform_interpolated() if not manual else player_view.global_transform)
+	world.update_overheads(camera.global_position)
+	bubbles.avoid_rects.clear()
+	var safe: Rect2 = hud.safe_rect()
+	bubbles.safe_rect = safe
+	icons.bounds = safe.grow(-8.0)
+	icons.reserved = hud.reserved_rects()
+	icons.suppress = bubbles.anchored_ids()  # the honk target's reply bubble is the signal; no icon on top of it
+	if icons.visible:
+		for c: Dictionary in icons.update_icons(_cur, {"s": player.s, "x": player.x, "lane": player.state()["lane"]}, real_time):
+			if c.has("rect"):
+				bubbles.avoid_rects.append(c["rect"])
+	hud.set_state(lerpf(_pprev_s, player.s, frac), _villain_s, start_s, player.v)  # same time base as the villain
+	bubbles.step(real_time)
+	hud.horn_down = input.is_horn_down()
+
+
+func _sync_camera_target(pxf: Transform3D) -> void:
 	var pr: Vector2 = road.to_road(pxf.origin)
 	camera.target_s = pr.x
 	camera.target_x = pr.y
 	camera.target_v = player.v
-	if icons.visible:
-		icons.update_icons(_cur, {"s": player.s, "x": player.x, "lane": player.state()["lane"]}, real_time)
-	hud.set_state(player.s, _villain_s, start_s, player.v)
-	hud.horn_down = input.is_horn_down()
+
+
+func _heroes() -> Array[HeroVehicleView]:
+	var out: Array[HeroVehicleView] = [player_view]
+	for hv: HeroVehicleView in villain_views.values():
+		out.append(hv)
+	out.append_array(_bridge_villains)
+	return out
 
 
 func buffer() -> PackedFloat32Array:

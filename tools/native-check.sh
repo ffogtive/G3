@@ -4,12 +4,17 @@
 # 가설: ✅ "import → 헤드리스 T0 → Xvfb Mobile 스모크 샷" 3단이 모두 exit 0이면 골격(엔진 4.7.2,
 #       ext .so 로드, 렌더 경로)이 살아 있다. 실패한 단계 이름이 곧 고칠 곳이다.
 #
-# Usage: tools/native-check.sh [--no-build-ext] [--no-shot] [-- <run_tests.gd args, e.g. --suite=all>]
+# Usage: tools/native-check.sh [--no-build-ext] [--no-shot] [--no-jam] [-- <run_tests.gd args, e.g. --suite=all>]
 # Steps:
 #   1. ext   tools/godot/build_ext.sh (incremental; skipped with --no-build-ext or without cmake/c++)
 #   2. import  godot --headless --path native --import  (registers .gdextension, builds class cache)
 #   3. T0    godot --headless --path native -s res://tests/run_tests.gd -- <args>   (exit = fails)
 #   4. shot  xvfb-run ... --rendering-method mobile -s res://tests/shot.gd -- --shot=<out>/smoke_mobile.png
+#   5. jam   (T2, M1a) xvfb-run ... -s res://tests/shot_jam.gd -- --out=<out>/jam --ff-to=6 --honk-at=5.7 --safe-pt=59,34
+#            game.tscn with TrafficBridge, HUD under a fake Dynamic Island / home-indicator inset: exit 1 on a blank
+#            frame, draw budget overrun (250 / 400), N5 overlap, or no reply bubble / HONK ring on screen (the honk is
+#            0.3 s before the capture so both are still alive; at 4.5 s both had expired and the check proved nothing).
+#            Skipped with --no-shot or --no-jam.
 # Env: GODOT (default godot47, falls back to godot with a warning), NATIVE_PROJ (default native/), NATIVE_CHECK_OUT
 #      (default native/build/native-check; gitignored and hidden from the Godot importer).
 set -uo pipefail
@@ -17,12 +22,13 @@ set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PROJ=${NATIVE_PROJ:-$ROOT/native}
 OUT=${NATIVE_CHECK_OUT:-$PROJ/build/native-check}
-BUILD_EXT=1 SHOT=1
+BUILD_EXT=1 SHOT=1 JAM=1
 TEST_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-build-ext) BUILD_EXT=0 ;;
     --no-shot) SHOT=0 ;;
+    --no-jam) JAM=0 ;;
     --) shift; TEST_ARGS=("$@"); break ;;
     -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown option: $1 (test args go after --)" >&2; exit 2 ;;
@@ -114,6 +120,25 @@ if [ "$SHOT" = 1 ]; then
     grep -E '^(RESULT|FAIL|INFO)' "$OUT/shot.log"
     [ -s "$OUT/smoke_mobile.png" ] || { [ "$rc" = 0 ] && rc=1; }
     step shot $rc
+    if [ "$JAM" = 1 ]; then
+      rm -rf "$OUT/jam"
+      xvfb-run -a -s "-screen 0 1280x1024x24" "$GODOT" --path "$PROJ" --rendering-method mobile \
+        --audio-driver Dummy -s res://tests/shot_jam.gd -- --out="$OUT/jam" --ff-to=6 --honk-at=5.7 --safe-pt=59,34 \
+        > "$OUT/jam.log" 2>&1
+      rc=$?
+      grep -E '^(RESULT|FAIL)' "$OUT/jam.log"
+      if grep -E '^SCRIPT ERROR' "$OUT/jam.log" | head -n 5 | grep -q .; then
+        grep -E '^SCRIPT ERROR' "$OUT/jam.log" | head -n 5; [ "$rc" = 0 ] && rc=1
+      fi
+      [ -s "$OUT/jam/native_jam_ui.png" ] || { [ "$rc" = 0 ] && rc=1; }
+      bubbles=$(sed -n 's/^RESULT honk_reply=.* bubbles=\([0-9]*\) .*/\1/p' "$OUT/jam.log" | head -n 1)
+      rings=$(sed -n 's/^RESULT honk_reply=.* honk_rings=\([0-9]*\).*/\1/p' "$OUT/jam.log" | head -n 1)
+      if [ "${bubbles:-0}" -lt 1 ] || [ "${rings:-0}" -lt 1 ]; then
+        echo "FAIL jam: honk at 5.7 s left bubbles=${bubbles:-?} honk_rings=${rings:-?} at the 6.0 s capture (need >= 1 each)"
+        [ "$rc" = 0 ] && rc=1
+      fi
+      step jam $rc
+    fi
   else
     echo "[native-check] INFO: xvfb-run missing, skipping render smoke"; RESULTS+=("shot=skipped")
   fi

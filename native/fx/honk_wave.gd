@@ -54,7 +54,16 @@ func emit_at(origin: Vector3) -> void:
 	_rings[best].visible = true
 
 
+## true: the owner ages the rings with advance() (Game.manual: shots/tests run on sim time, not wall time).
+var manual: bool = false
+
+
 func _process(delta: float) -> void:
+	if not manual:
+		advance(delta)
+
+
+func advance(delta: float) -> void:
 	for i: int in _rings.size():
 		if not _rings[i].visible:
 			continue

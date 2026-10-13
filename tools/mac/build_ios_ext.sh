@@ -3,9 +3,12 @@
 #
 # 가설: ❓ (Mac 미검증) haptics(C 인터페이스, 소스 3개)는 xcrun clang++ + libtool + create-xcframework로 수 초에
 #       끝나고, traffic(godot-cpp)은 native/ext/README.md의 CMake(-G Xcode, CMAKE_SYSTEM_NAME=iOS) 절차로 빌드된다.
-#       ✅ (컨테이너) 빌드가 실패한 라이브러리 자리에 빈 정적 라이브러리(stub)를 두면 Godot 4.7.2 export가 끝까지
-#       가고(누락 파일이 있으면 _export_additional_assets가 그 뒤 라이브러리를 건너뜀), 생성된 dummy.cpp가
-#       진입 심볼을 약하게 참조(-Wl,-U)하므로 링크도 된다 → 게임은 그 클래스 없이 뜬다.
+#       ✅ (컨테이너) 빌드가 실패한 라이브러리 자리에 stub 정적 라이브러리를 두면 Godot 4.7.2 export가 끝까지
+#       간다(누락 파일이 있으면 _export_additional_assets가 그 뒤 라이브러리를 건너뜀).
+#       ~~빈 stub + dummy.cpp의 -Wl,-U 약한 참조로 링크·실행 OK~~ → 기각(리뷰): dummy.cpp는 진입 심볼을 weak 없이
+#       선언하고 &fn을 등록하므로, 심볼이 없으면 dyld가 실행 시 'symbol not found in flat namespace'로 죽는다.
+#       ❓ (Mac 미검증) 그래서 [libraries] stub은 manifest의 entry_symbol을 정의하고 false를 돌려준다 → Godot는
+#       "initialization function … returned an error"만 찍고 그 클래스 없이 뜬다(GDScript 폴백). 의존성 stub은 빈 것.
 #
 # Usage: tools/mac/build_ios_ext.sh [options]
 #   --host                build only the host haptics library (Linux .so for container tests / macOS .dylib for
@@ -172,7 +175,7 @@ build_traffic_ios() {
   gen=${CMAKE_GENERATOR:-Xcode}
   log "traffic ios $t (cmake -G $gen, -j$JOBS)"
   cmake -S "$EXT_DIR" -B "$bdir" -G "$gen" -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DGODOTCPP_TARGET="$t" >"$STATUS_DIR/traffic_cmake.log" 2>&1 || {
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_MIN" -DGODOTCPP_TARGET="$t" >"$STATUS_DIR/traffic_cmake.log" 2>&1 || {
     tail -n 20 "$STATUS_DIR/traffic_cmake.log" >&2
     return 1
   }
@@ -194,7 +197,7 @@ build_traffic_ios() {
 
 # ---------------------------------------------------------------------------------------------------------------
 # Stubs: every iOS library a manifest names must exist, or Godot's export silently drops the libraries after it.
-# manifest_ios_paths <manifest> <debug|release> -> res:// paths (libraries + dependencies) for that build type.
+# manifest_ios_paths <manifest> <debug|release> -> "lib<TAB>res://..." / "dep<TAB>res://..." lines for that build type.
 manifest_ios_paths() {
   awk -v want="$2" '
     function unq(s) { gsub(/^[ \t]*"|"[ \t]*$/, "", s); return s }
@@ -208,32 +211,43 @@ manifest_ios_paths() {
       key = $0; sub(/[ \t]*=.*/, "", key); indeps = (key == "ios" || key == "ios." want); next
     }
     section == "[dependencies]" && indeps && /^\}/ { indeps = 0; next }
-    section == "[dependencies]" && indeps && /"res:\/\// { v = $0; sub(/^[ \t]*"/, "", v); sub(/".*/, "", v); print v }
-    END { if (exact != "") print exact; else if (generic != "") print generic }
+    section == "[dependencies]" && indeps && /"res:\/\// { v = $0; sub(/^[ \t]*"/, "", v); sub(/".*/, "", v); print "dep\t" v }
+    END { if (exact != "") print "lib\t" exact; else if (generic != "") print "lib\t" generic }
   ' "$1"
 }
 
-STUB_LIB=""
-make_stub_lib() { # builds one empty arm64 static library (macOS only) into $STUB_LIB
-  [ -n "$STUB_LIB" ] && [ -f "$STUB_LIB" ] && return 0
-  local d="$STATUS_DIR/stub" sdk
-  mkdir -p "$d"
-  sdk=$(xcrun --sdk iphoneos --show-sdk-path)
-  printf 'static int lane1_stub_unused;\n' >"$d/stub.c"
-  xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" "-miphoneos-version-min=$IOS_MIN" -c "$d/stub.c" -o "$d/stub.o"
-  xcrun libtool -static -o "$d/libstub.a" "$d/stub.o"
-  STUB_LIB="$d/libstub.a"
+manifest_entry_symbol() { # <manifest> -> entry_symbol value (empty if none)
+  sed -n 's/^entry_symbol[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$1" | head -n 1
 }
 
-write_stub_xcframework() { # <path.xcframework>
-  local xcf=$1 name lib_name
+make_stub_lib() { # <out.a> [entry_symbol] : one arm64 iphoneos static library (macOS only)
+  # With an entry symbol the stub defines `GDExtensionBool <entry>(...)` returning false. Godot's generated dummy.cpp
+  # takes the entry's address (non-weak) and the pbxproj adds -Wl,-U,_<entry>, so a stub WITHOUT the symbol links but
+  # dies in dyld at launch ("symbol not found in flat namespace"). Returning false makes Godot log "initialization
+  # function ... returned an error" and boot without that extension's classes (GDScript fallback / vibrate_handheld).
+  local out=$1 entry=${2:-} d="$STATUS_DIR/stub" sdk base
+  mkdir -p "$d"
+  base="$d/$(basename "$out" .a)"
+  sdk=$(xcrun --sdk iphoneos --show-sdk-path)
+  if [ -n "$entry" ]; then
+    case "$entry" in *[!A-Za-z0-9_]*) die 4 "bad entry_symbol '$entry'" ;; esac
+    printf 'unsigned char %s(void *p, void *l, void *i) { (void)p; (void)l; (void)i; return 0; }\n' "$entry" >"$base.c"
+  else
+    printf 'static int lane1_stub_unused;\n' >"$base.c"
+  fi
+  xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" "-miphoneos-version-min=$IOS_MIN" -c "$base.c" -o "$base.o"
+  rm -f "$out"
+  xcrun libtool -static -o "$out" "$base.o"
+}
+
+write_stub_xcframework() { # <path.xcframework> [entry_symbol]
+  local xcf=$1 entry=${2:-} name lib_name
   name=$(basename "$xcf" .xcframework)
   lib_name="$name.a"
   rm -rf "$xcf"
   mkdir -p "$(dirname "$xcf")"
   if is_macos; then
-    make_stub_lib
-    cp "$STUB_LIB" "$STATUS_DIR/stub/$lib_name"
+    make_stub_lib "$STATUS_DIR/stub/$lib_name" "$entry"
     xcodebuild -create-xcframework -library "$STATUS_DIR/stub/$lib_name" -output "$xcf" >/dev/null
   else
     # Container only (export smoke tests): a structurally valid xcframework around an empty ar archive.
@@ -251,16 +265,17 @@ EOF
 }
 
 ensure_manifest_libraries() { # [--allow-fake] : stub every missing iOS library for $TARGET
-  local kind manifest res path missing=0 stubbed=0
+  local kind manifest role res path entry missing=0 stubbed=0
   kind=${TARGET#template_}
   while IFS= read -r manifest; do
-    while IFS= read -r res; do
+    entry=$(manifest_entry_symbol "$manifest")
+    while IFS=$'\t' read -r role res; do
       [ -n "$res" ] || continue
       path="$LANE1_NATIVE/${res#res://}"
       if [ ! -e "$path" ]; then
         missing=$((missing + 1))
         if is_macos || [ "${1:-}" = "--allow-fake" ]; then
-          write_stub_xcframework "$path"
+          if [ "$role" = lib ]; then write_stub_xcframework "$path" "$entry"; else write_stub_xcframework "$path"; fi
           stubbed=$((stubbed + 1))
           warn "stub: $(rel "$path") (from $(rel "$manifest")) — that extension's classes will be missing on device"
           status "stub:$(rel "$path")"

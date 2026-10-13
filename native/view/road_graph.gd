@@ -39,6 +39,11 @@ static func opp_lane_x(j: int) -> float:
 	return -11.1 - LANE_W * float(j)
 
 
+## true while the whole road is one straight segment: views may use the closed form (x, 0, −s) / yaw directly.
+func is_straight() -> bool:
+	return segments.size() == 1 and str(segments[0]["type"]) == "straight"
+
+
 func segment_at(s: float) -> Dictionary:
 	for seg: Dictionary in segments:
 		if s < float(seg["s0"]) + float(seg["len"]):

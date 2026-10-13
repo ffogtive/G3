@@ -23,6 +23,7 @@ func run() -> int:
 	_progress()
 	_blink_phase()
 	_swipe(tree)
+	_touch_emulation(tree)
 	_assets()
 	await _scene(tree)
 	return _fails
@@ -100,6 +101,68 @@ func _swipe(tree: SceneTree) -> void:
 	inp.queue_free()
 
 
+## Touch → one edge, even though emulate_mouse_from_touch (kept on for debug_panel Buttons) also delivers every touch
+## as an emulated mouse event (device == DEVICE_ID_EMULATION). Review: one tap / one swipe gave 2 lane edges.
+## Events go through Input.parse_input_event + flush (the real emulation path) when this display server dispatches
+## them (Xvfb), and through Viewport.push_input with hand-made emulated mouse twins otherwise (headless drops them).
+func _touch_emulation(tree: SceneTree) -> void:
+	var inp := LaneInput.new()
+	tree.root.add_child(inp)
+	inp.pt_override = 1.0
+	var real_path: bool = DisplayServer.get_name() != "headless"
+	var send := func(ev: InputEvent) -> void:
+		if real_path:
+			Input.parse_input_event(ev)
+			Input.flush_buffered_events()
+			return
+		tree.root.push_input(ev)
+		var twin: InputEventMouse = null
+		if ev is InputEventScreenTouch:
+			var mb := InputEventMouseButton.new()
+			mb.button_index = MOUSE_BUTTON_LEFT
+			mb.pressed = (ev as InputEventScreenTouch).pressed
+			mb.button_mask = MOUSE_BUTTON_MASK_LEFT if mb.pressed else 0
+			twin = mb
+		elif ev is InputEventScreenDrag:
+			var mm := InputEventMouseMotion.new()
+			mm.button_mask = MOUSE_BUTTON_MASK_LEFT
+			mm.relative = (ev as InputEventScreenDrag).relative
+			twin = mm
+		if twin != null:
+			twin.device = InputEvent.DEVICE_ID_EMULATION
+			twin.position = (ev as Variant).position
+			twin.global_position = twin.position
+			tree.root.push_input(twin)
+	var touch := func(pos: Vector2, pressed: bool) -> InputEventScreenTouch:
+		var t := InputEventScreenTouch.new()
+		t.index = 0
+		t.position = pos
+		t.pressed = pressed
+		return t
+	inp.set_zone("left", Rect2(-1.0e5, -1.0e5, 2.0e5, 2.0e5))
+	send.call(touch.call(Vector2(100, 800), true))
+	send.call(touch.call(Vector2(100, 800), false))
+	var tap: Array[int] = []
+	while inp.peek_lane() != 0:
+		tap.append(inp.consume_lane())
+	inp.set_zone("left", Rect2())
+	send.call(touch.call(Vector2(100, 600), true))
+	var d := InputEventScreenDrag.new()
+	d.index = 0
+	d.position = Vector2(300, 604)
+	d.relative = Vector2(200, 4)
+	send.call(d)
+	send.call(touch.call(Vector2(300, 604), false))
+	var swipe: Array[int] = []
+	while inp.peek_lane() != 0:
+		swipe.append(inp.consume_lane())
+	_check(ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", false) == true,
+		"emulate_mouse_from_touch is on (debug_panel Buttons rely on it)")
+	_check(tap == [-1] and swipe == [1], "touch + emulated mouse (%s): 1 tap on ◀ = 1 edge (got %s), 1 swipe = 1 edge (got %s)" \
+		% ["Input.parse_input_event" if real_path else "push_input twins", tap, swipe])
+	inp.queue_free()
+
+
 func _assets() -> void:
 	var f: Font = load("res://ui/fonts/BlackHanSans-Regular.ttf") if ResourceLoader.exists("res://ui/fonts/BlackHanSans-Regular.ttf") else null
 	if f == null:
@@ -150,6 +213,8 @@ func _scene(tree: SceneTree) -> void:
 		if str(e.get("type", "")) == "honk":
 			honked = true
 	_check(honked and g.honk_fx.active() > 0, "horn: TrafficBridge.honk + honk wave FX (sfx played %d)" % g.sfx.played)
+	_safe_area(g)
+	_camera_follows(g)
 	# N5 icon rules on the live buffer
 	var cur: PackedFloat32Array = g.buffer()
 	var shown: Array[Dictionary] = g.icons.update_icons(cur, {"s": g.player.s, "x": g.player.x, "lane": g.player.lane}, g.real_time)
@@ -161,6 +226,50 @@ func _scene(tree: SceneTree) -> void:
 	_n5_synthetic(g)
 	g.queue_free()
 	await tree.process_frame
+
+
+## Safe area (NATIVE_PORT 3-8): with a fake 59 / 34 pt Dynamic Island / home-indicator inset every HUD widget (bar,
+## pill, rows, gauge, buttons, pause) lies inside safe_rect(), and the pause zone emits pause_requested.
+func _safe_area(g: Game) -> void:
+	g.hud.debug_safe_pt = Vector2(59, 34)
+	g.hud.apply_safe_area()
+	g.hud.safe.size = g.hud.root.size - Vector2(g.hud.insets.x + g.hud.insets.z, g.hud.insets.y + g.hud.insets.w)
+	g.hud.safe.position = Vector2(g.hud.insets.x, g.hud.insets.y)
+	var sr: Rect2 = g.hud.safe_rect().grow(4.5)  # reserved_rects() are grown by 4
+	var inside: int = 0
+	var rects: Array[Rect2] = g.hud.reserved_rects()
+	for r: Rect2 in rects:
+		inside += 1 if sr.encloses(r) else 0
+	_check(g.hud.insets.y > 70.0 and g.hud.insets.w > 40.0 and inside == rects.size(),
+		"safe area: insets top %.0f / bottom %.0f units, %d/%d HUD widgets inside the safe rect" % [g.hud.insets.y,
+		g.hud.insets.w, inside, rects.size()])
+	g.hud.debug_safe_pt = Vector2.ZERO
+	g.hud.apply_safe_area()
+	var inp := LaneInput.new()
+	g.add_child(inp)
+	var n: Array[int] = [0]
+	inp.pause_requested.connect(func() -> void: n[0] += 1)
+	inp.set_zone("pause", Rect2(500, 60, 40, 40))
+	var t := InputEventScreenTouch.new()
+	t.position = Vector2(520, 80)
+	t.pressed = true
+	inp.inject(t)
+	_check(n[0] == 1, "pause button zone → pause_requested")
+	inp.queue_free()
+
+
+## advance_ticks keeps the camera target on the player every tick (review: shots framed the start of the call).
+## Bug shape: the smoothing converged on the target from the start of the call, so the camera lagged by the whole
+## displacement of the call; fixed, it lags by the smoothing only.
+func _camera_follows(g: Game) -> void:
+	var s0: float = g.player.s
+	g.advance_ticks(600)
+	var disp: float = g.player.s - s0
+	var p0: Vector3 = g.camera.global_position
+	g.camera.snap()
+	var err: float = (g.camera.global_position - p0).length()
+	_check(disp > 1.0 and err < 0.5 * disp,
+		"advance_ticks: camera follows the player every tick (moved %.2f m, camera off its target by %.2f m)" % [disp, err])
 
 
 ## Synthetic buffer: 6 signalling cars around the player + a villain far ahead → 4 icons max, villain kept,
@@ -193,7 +302,18 @@ func _n5_synthetic(g: Game) -> void:
 	_check(shown.size() <= 4 and 6 not in ids and icons.last_overlaps() == 0,
 		"N5 synthetic: %d icons %s, far car 6 excluded, no overlap" % [shown.size(), str(ids)])
 	var vpos := Vector3(-5.4, 3.3, -(ps + 150.0))
+	var vsp: Vector2 = icons.camera.unproject_position(vpos)
 	var on_screen: bool = not icons.camera.is_position_behind(vpos) \
-		and icons.get_viewport().get_visible_rect().has_point(icons.camera.unproject_position(vpos))
-	_check(not on_screen or 1000 in ids, "N5 synthetic: villain icon kept whenever on screen (on_screen=%s)" % on_screen)
+		and icons.get_viewport().get_visible_rect().grow(-40.0).has_point(vsp)
+	var under_hud: bool = false  # icons never sit under the HUD (bar / pill / buttons): review 'N5 slot budget'
+	for q: Rect2 in icons.reserved:
+		under_hud = under_hud or q.grow(40.0).has_point(vsp)
+	_check(not on_screen or under_hud or 1000 in ids,
+		"N5 synthetic: villain icon kept whenever on screen and clear of the HUD (on_screen=%s under_hud=%s)" % [on_screen, under_hud])
+	var covers: int = 0
+	for c: Dictionary in shown:
+		for q: Rect2 in icons.reserved:
+			covers += 1 if (c["rect"] as Rect2).intersects(q) else 0
+	_check(not icons.reserved.is_empty() and covers == 0,
+		"N5 synthetic: no icon covers a HUD rect (%d HUD rects, %d covered)" % [icons.reserved.size(), covers])
 	_check(cut_ok or 2 not in ids, "N5 synthetic: no-blinker cut-in shows the crossed-out blinker")

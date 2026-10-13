@@ -529,3 +529,104 @@ M1은 게임의 대부분이므로 다섯 단계로 나누고, **사용자의 �
 - 범위 조정: 리뷰는 stagegen.js와 villain_catalog.json을 둘 다 `tools/content/`로 옮기자고 했다. 데이터와 코드를 나눠 catalog는 `native/data/src/`, stagegen.js는 `tools/content/`에 둔다. 웹 원본은 동결 상태로 남긴다(옮기면 웹이 깨진다).
 - 범위 조정: iOS 햅틱 모듈은 ".gdip 또는 GDExtension" 중 **GDExtension(ObjC++)**으로 정했다. ext/traffic과 같은 godot-cpp·xcframework 빌드 경로를 쓰기 때문이다.
 - 리뷰 밖 자체 정정: 3-4의 "JS `%`는 `fposmod`로"는 틀렸다. JS `%`는 C의 `%`/`fmod`와 같고 `fposmod`와 다르다.
+
+---
+
+## 9. M1 진행 기록
+
+### 2026-10-13 — 컨테이너 야간 작업 (게이트 · 콘텐츠 · bake · Mac 도구 · C++ traffic · 뷰 · 통합)
+가설: (I1) TrafficBridge(C++)를 뷰에 연결하면 1-1 정체 슬라이스가 돈다: 주행, 스와이프 차선 변경, 경적 → 답 말풍선, N1 바 = 거리, N5 아이콘. ✅ 컨테이너에서 확인. "웹보다 낫다"는 기기 판정이라 ❓.
+
+**M1-0 합격 대비**
+- ✅ 4.7.2 Xvfb Mobile 샷이 빈 화면 가드를 통과한다 (`tools/native-check.sh` shot, lum_sd 0.17).
+- ✅ ext .so가 헤드리스에서 로드된다 (godot-cpp 10.0.0-stable, api 4.7, `test_ext`).
+- ✅ `export-content.mjs` → `native/data/src`, 골든. `web-frozen` = 753549a (태그 push가 막혀 SHA로 참조). audio.js `preComp`는 웹 동결 때문에 코드 대신 `tools/bake-audio.mjs`가 compressor 앞에서 탭한다.
+- ❓ iPhone에서 `ios_run.sh` 1회로 10분: Mac에서 아직 안 돌렸다. 컨테이너에서는 mock macOS로 전 경로, 실제 iOS export(Xcode 프로젝트 생성)까지 확인. 이제 `run/main_scene=res://view/game.tscn`이라 빈 씬 대신 1-1 정체 씬이 뜬다.
+
+**M1a 합격 대비**
+- ✅ T0: spawn 1/5/6 골든 + RNG 트레이스 + rng 1000개 일치, traffic 틱 골든 600 + 4800틱과 이벤트 18개 bit-exact.
+- ✅ T0 perf: 90판(161 NPC + 반대편 26) C++ p95 0.025–0.065 ms (debug/release), bridge p95 0.04–0.10 ms ≤ 0.5 ms.
+- ✅ T2 jam 샷: draw 33–35 (보이는 것) / 59–62 (그림자 포함) ≤ 250 / 400. 웹 동일 카메라 ΔE76 평균 6.67 (텍스트 갠트리 아래 중앙값 0.82) → 리뷰 반영 후 **3.94** (아래 2026-10-13 (2)). native-check에 jam 단계(`--no-jam`으로 끔)를 넣었다.
+- ❓ 기기 120Hz p95 ≤ 8.3 ms, thermalState 로그: Mac·기기가 필요하다. lavapipe 570–645 ms/frame(585×1266, MSAA 4x)은 기기 지표가 아니다. 뷰 CPU 동기화 p50 0.6–1.0 ms (debug 빌드, 잡음 큼)로 1.0 ms 예산 경계다.
+- ❓ 사용자 판정(조명·120Hz·햅틱이 웹보다 낫다): FEEDBACK_LOG 기록 대기.
+- 범위: core·C++ traffic ✅, bake ✅, world·camera ✅, 조명·포스트 ✅, 경적 SFX ✅. player는 ✅이지만 `view/player_driver.gd`(IDM 대역)가 임시로 맡고 `sim/player.gd`는 아직 없다. iOS 햅틱은 호스트(null 백엔드)만 ✅, `.mm`은 미컴파일 ❓.
+
+**통합 (이번 단계)**
+- `view/game.gd`: 120 Hz `_physics_process`에서 입력 → PlayerDriver → `TrafficBridge.step` → 이벤트 → N5 순서로 돈다. `_process`는 물리 보간 비율 하나로 NPC·빌런·플레이어 s(HUD)를 같은 시간축에 보간한다. startS·frontS는 `bridge.setup_info()`에서 받는다(단일 원천).
+- 경적(main.js:1076): honkCool 1 s(sim 시간), SFX + 햅틱 `horn` + '빵!' 팝 + 링. 답 kind별 말풍선(`ui/bubbles.gd`, lines.json YIELD/NOWAY/LETIN/CHEATER, tired·villain은 inline 대사). 말풍선은 N5 아이콘을 가리지 않게 위로 비킨다.
+- `project.godot`: main scene, Haptics autoload 등록. 순서는 DB SaveGame Haptics.
+- 테스트 추가:
+  - `test_hud_progress`: 60 s 동안 매 틱 바 = 1 − dist/span, 라벨 = round(dist), HUD villain_s = sim live s. 답한 경적마다 말풍선이 뜨는지도 본다.
+  - `test_determinism`: 같은 seed면 게임 단과 브리지 양 백엔드 모두 30 s 버퍼가 bit 동일, seed를 바꾸면 달라진다.
+  - shim: `test_haptics`(platform/ios 테스트를 러너에 연결), `test_perf_traffic`(`--suite=perf`).
+  - 전체 9파일 fails=0. `native-check.sh` GREEN (ext, import, t0, shot, jam).
+- 재현성: manual 모드(샷·테스트)는 벽시계 시간을 쓰지 않는다(real_time, 카메라, 링, 바퀴). 그래서 같은 인자로 찍은 샷 두 장이 바이트 동일하다(md5 일치).
+- export:
+  - Linux release export의 실행 파일이 main scene으로 부팅하고 C++ release .so를 로드한다. 오류 0.
+  - iOS export(컨테이너 stub xcframework)의 Xcode 프로젝트는 bundle `com.ffogtive.lane1Chamgyoyuk`, 팀 placeholder, iOS 15.0, iPhone 전용이고, traffic·haptics·godot-cpp xcframework를 담는다. pck에는 game.tscn과 main_scene이 있고 tests/·tools/·data/src는 없다. `ios_run.sh`의 preset·scheme·경로와 일치한다.
+
+**발견 (사용자 판정 필요 ❓)**
+- 1-1 정체에서는 차선 차량의 85–95%가 늘 브레이크등을 켠다. 웹과 같은 임계값 vBelow 1.6 m/s라서 생기는 '빨간 바다'다. 그래서 브레이크 파동은 '빨간 물결'이 아니라 **꺼진 틈이 뒤로 흐르는** 모양으로 보인다(final/brake_wave.png의 시공간 패널). 이미 켜진 차선에 `emit_brake_wave`를 강제로 넣어도 눈에 띄지 않는다. 파동을 읽히게 하려면 M1d N5에서 웹과 다른 연출이 필요하다. 예: 브레이크등 밝기를 감속도에 비례시키기, 파동 앞머리 플래시. 동등성 빌드(T4)에서는 끈다.
+- 램프 비트: C++은 깜빡이 '활성'(방향)을 쓰고 위상은 뷰가 웹식으로 적용한다. 위상이 두 번 적용되는 일은 없다 ✅.
+- 샷: `…/scratchpad/m1/final/{jam_native, jam_web, jam_side_by_side, honk_icons, brake_wave, jam_native_bridge}.png`. jam_native는 웹 프레임에 고정(stub)한 것이고, jam_native_bridge·honk_icons·brake_wave는 C++ TrafficBridge로 찍었다.
+
+### 2026-10-13 (2) — 코드·아트 리뷰 반영 (blocker 2 · major 10 · minor 다수)
+가설: blocker·major 리뷰를 모두 고치면(+ 싼 minor) M1a 슬라이스는 초록으로 남고, Mac 없이 할 수 있는 만큼 iPhone 한 명령 경로가 안전해진다. ✅ 컨테이너(테스트 9파일 fails=0, native-check GREEN, mock macOS 전 경로 exit 0). ❓ 실제 Mac·iPhone.
+- ~~빈 stub xcframework + `-Wl,-U`면 링크·실행 OK~~ → ❌ 기각(코드 리뷰): Godot가 만든 dummy.cpp가 진입 심볼 주소를 weak 없이 등록해서, 심볼이 없으면 실행 때 dyld가 죽는다. 이제 stub이 `entry_symbol`을 정의하고 false를 돌려준다 ❓(Mac 미검증).
+
+**고친 것 (✅ 컨테이너 확인)**
+- iOS 빌드·실행 경로 (`tools/mac/`)
+  - `build_ios_ext.sh`: `[libraries]` stub이 manifest의 `entry_symbol`(`traffic_library_init`, `lane1_haptics_init`)을 정의하고 0을 돌려준다. 의존성(godot-cpp) stub은 빈 것 그대로. traffic iOS 최소 버전은 `$IOS_MIN`(15.0)으로 통일했다.
+  - `ios_run.sh`:
+    - `launch: ok`는 실행 8초 뒤에도 프로세스가 살아 있을 때만 찍는다(`devicectl device info processes`). 죽었으면 `launch: failed (exited within 8s)`, exit 7. install=ok는 그대로 남긴다.
+    - 게임이 `user://boot.txt`(iOS Documents)에 부트 줄을 쓰면 `devicectl device copy from`으로 가져와 `native=true|false`를 receipt에 남긴다. 예전 실행의 파일이면 `?`로 둔다.
+    - stub이나 실패한 확장은 ✅가 아니라 ⚠️로 표시한다. `--check`에서 cmake가 없으면 경고한다. Metal toolchain이 없거나 export.log에 'Metal shader baking limited'가 있으면 경고한다.
+    - receipt에 `running= native= extensions=`를 더했다.
+    - mock macOS로 살아 있는 경우(exit 0)와 죽은 경우(exit 7), 오래된 boot.txt를 확인했다.
+- 입력: `LaneInput`이 emulate_mouse_from_touch로 생긴 마우스 이벤트(`DEVICE_ID_EMULATION`)를 무시한다. 탭 한 번 = 차선 한 칸 ✅. 테스트는 Xvfb에서 `Input.parse_input_event`로, headless에서는 에뮬레이션 쌍을 직접 넣어서 돌린다. 수정 전 코드로는 두 경로 모두 edge가 2개 나와 실패하는 것을 확인했다.
+- safe area: HUD 위젯을 모두 `Hud.safe` 아래로 옮겼다.
+  - 모바일에서는 `DisplayServer.get_display_safe_area()`를 캔버스 단위로 바꿔 쓴다. 데스크톱과 샷은 `--safe-pt=59,34`로 가짜 inset을 준다.
+  - N5 아이콘과 말풍선도 이 안에 머문다. 아이콘은 HUD 사각형 위에 놓이지 않고, 화면 밖이나 노치 아래에 있는 후보는 4슬롯을 차지하지 않는다.
+  - 게이트 jam 단계는 59/34 pt inset으로 찍는다.
+- 일시정지 버튼(오른쪽 위)과 앱이 백그라운드로 가면 자동 일시정지(`NOTIFICATION_APPLICATION_PAUSED`). sim·뷰를 멈추고 HUD·입력은 계속 돈다. 메뉴는 없다.
+- 샷 카메라: `advance_ticks`가 매 틱 카메라 목표를 플레이어로 맞춘다. 플레이어가 화면 높이의 약 69%에 온다(웹 70%). 테스트는 수정 전 코드로 실패하는 것(14.25 m 뒤처짐)을 확인했다.
+- 룩
+  - 그림자: SOFT_MEDIUM + blur 0.6. project.godot에도 `soft_shadow_filter_quality(.mobile)=3`을 넣었다.
+  - glow는 level 1만 쓴다. 뒷유리 R이 웹 ±3 안에 든다(전에는 +31..+42).
+  - AO는 `ao_light_affect` 0.35, `ao_strength` 0.6. 평평한 패치 761개가 최대 3.9 RGB만 움직였다.
+  - 접지 블롭을 1.02×1.0으로 줄이고 둥글게 했다.
+  - 플레이어 지붕 경광등(0x5a3a00 ↔ 0xffa000 + HDR, 0.18 s 점멸).
+  - 1-1 시작 갠트리 2개(빈 녹색 판 #0b7a4b, 카메라 앞 12–30 m면 world.js처럼 흐려짐)와 VMS 3개(빈 판).
+  - 핀 고정 ΔE76 평균: 6.67 → **3.94**.
+- N5
+  - BRAKE는 이벤트로만 뜬다: 브레이크 비트가 켜질 때나 감속 2 m/s² 초과일 때 1.2 s. 상시 크롤에서는 안 뜬다.
+  - 깜빡이 꺼진 반주기에는 배지를 흐리게 하지 않고 어두운 화살표 텍스처로 바꾼다.
+  - 무깜빡 끼어들기는 화살표 + 빨간 ⊘ 코너 배지다. X는 닫기 버튼처럼 읽혀서 바꿨다.
+  - 경적 답을 한 차에는 아이콘을 띄우지 않는다(말풍선이 신호다). HONK 아이콘은 NPC 경적용으로 남긴다.
+  - 텍스처는 192 px(2×), 화면 크기 42(약 36 pt).
+- 말풍선은 아이콘을 피해 옆으로 비킨다. 꼬리는 항상 답한 차에 닿는다. '빵!' 팝은 흰 글씨에 #1b1c1f 외곽선이고 지붕 +1.2 m에서 0.6 m 떠오르며 1.0→1.25→1.0으로 튄다.
+- HUD
+  - N1 바: 빈 트랙은 어두운 색, 채움은 노랑→주황, 마커는 위에서 본 내 차.
+  - 알약에는 '200'을 28 px 노랑으로 강조한다. 바·숫자는 여전히 `Hud.shown` 하나를 읽는다(N1 테스트 ✅).
+  - 속도 게이지: 원판 0.92, 240° 녹→황→적 호.
+  - 버튼은 평소 0.45, 누르면 1.0.
+- 기타: 확장 로드는 한 번만 시도한다(폴백 모드의 ERROR 반복 제거). native-check jam 단계는 경적을 5.7 s에 울리고, 말풍선과 링이 각각 1개 미만이면 실패한다.
+
+**리뷰와 다르게 한 것**
+- glow: "SCREEN 블렌드 + 램프 코어 2–3"은 효과가 없었다. ADDITIVE와 SCREEN이 같은 값을 냈고, 코어는 이미 Mobile HDR 상한(≈2.0)이다. 원인은 level 2 이상의 번짐이라 level 1만 남겼다. SCREEN은 유지했다.
+- 거리 알약: Label 2개나 RichTextLabel 대신 같은 `shown`을 읽는 커스텀 드로우로 그렸다. 숨긴 Label은 테스트용 N1 문자열을 유지한다.
+- 게이지 바늘·눈금은 아직 없다(M1c).
+- `docs/IPHONE_DEPLOY.md` §7/§8과 CLAUDE.md §2 보강은 이 단계의 소유 범위 밖이라 `docs/MOBILE_BUILD.md` 8절에만 넣었다(capability 오류, 데이터 초기화, Simulator 금지, 롤백 주의).
+
+**아침에 iPhone에서 확인할 것** (`git pull` → `tools/mac/ios_run.sh`)
+1. 결과 화면이 `launch: ok (running after 8s)`, `running: yes`, `native traffic: true`인지 본다. `false`면 cmake/traffic 빌드가 stub이 된 것이니 ext.log를 보낸다. `running: no`면 기기 로그를 보낸다(MOBILE_BUILD 8절).
+2. 다이내믹 아일랜드 아래로 진행 바·'원흉까지 N m'가 완전히 내려와 있는지, ◀ ▶ 경적 버튼이 홈 인디케이터 위에 있는지, 일시정지 버튼(오른쪽 위)이 멈춤/재개되는지 본다.
+3. 스와이프 한 번과 ◀/▶ 탭 한 번이 각각 정확히 한 칸인지, 경적이 '빵!' + 링 + 앞차 말풍선 + 햅틱을 내는지 본다.
+4. 120Hz 체감, 카메라가 움직일 때 그림자 지글거림, 브레이크등 glow(빨간 바다가 보이는지, 너무 약한지), 지붕 경광등 점멸, 갠트리를 지날 때 흐려지는지 본다.
+5. "조명·120Hz·햅틱이 웹보다 낫다?" 판정과 receipt.txt를 FEEDBACK_LOG에 남긴다.
+
+**전체 게임 대비 남은 차이 (M1b~M1d)**
+- 플레이어는 아직 `view/player_driver.gd`(IDM 대역)가 맡는다. player.js 이식(HP·추돌·분노·갓길 규칙), 원흉 페이즈·보스, 결과 화면, 점수가 없다.
+- UI·오디오·텍스트가 비어 있다. 메뉴·상점·스테이지 선택, 표지판·VMS 글자(M1c), BGM과 경적 외 효과음, 스테이지 배지·제목·잔챙이 카운터·분노 버튼이 없다.
+- 스테이지는 1-1 낮뿐이다. 밤·날씨가 없다.
+- 브레이크 파동을 읽히게 하는 연출(사용자 결정 ❓), 뷰 CPU 0.6–1.0 ms(1.0 ms 경계, 기기 측정 ❓), 실제 Metal·120 Hz·발열 ❓가 남아 있다.

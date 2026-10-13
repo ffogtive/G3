@@ -4,7 +4,8 @@ extends SceneTree
 ##       -s res://tests/shot_jam.gd -- --out=/abs/dir [--ff-to=6] [--size=585x1266] [--seed=1007]
 ##       [--state=/abs/web_state.json] [--web=/abs/web_jam.png] [--web-ui=/abs/web_jam_ui.png]
 ##       [--ambient=sky|hemi|flat] [--tonemap=linear|agx|filmic] [--no-shadows] [--no-glow] [--ao=0..1] [--tag=name]
-##       [--stub] [--honk-at=seconds] [--shadow-q=0..5 --shadow-blur= --bias= --nbias= --glow-int= --glow-levels=a,b,..]
+##       [--stub] [--honk-at=seconds] [--demo-signals] [--player-s=m] [--debug-panel] [--shadow-q=0..5 --shadow-blur= --bias= --nbias= --glow-int= --glow-levels=a,b,..]
+##       [--wave-strip=/abs.png [--wave-lane=2 --wave-ahead=50 --wave-strength=2.5 --wave-frames=5 --wave-dt=1.0]]
 ## Renders game.tscn (manual ticks: --ff-to seconds of 120 Hz sim, camera smoothed with the same fixed dt) into a
 ## SubViewport of the phone-equivalent size (1170×2532 / 2), saves
 ##   <out>/native_jam<tag>.png (3D only), <out>/native_jam_ui<tag>.png (HUD + N5 icons),
@@ -29,6 +30,7 @@ var _tag: String = ""
 var _opts: Dictionary = {}
 var _vp: SubViewport
 var _game: Game
+var _lens: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -94,14 +96,34 @@ func _main() -> void:
 			_game.advance_ticks(1)
 			_game.input.inject("horn:up")
 			_game.advance_ticks(n_ticks - honk_tick - 1)
+		elif _opts.has("demo-signals") and _game.traffic is TrafficStub:
+			_game.advance_ticks(maxi(0, n_ticks - 50))
+			(_game.traffic as TrafficStub).demo_signals(_game.player.s, _game.player.lane)
+			_game.advance_ticks(mini(50, n_ticks))
 		else:
 			_game.advance_ticks(n_ticks)
 	else:
 		_game.advance_ticks(n_ticks)  # warm the sim to the same time, then pin every car to the web frame
 		_apply_web_state(_state_path)
+	if _opts.has("player-s"):  # look-dev: teleport the player (and camera) to view e.g. the shoulder obstacles
+		_game.player.s = float(_opts["player-s"])
+		_game.player.x = RoadGraph.lane_x(float(_game.player.lane))
+		_game.player_view.transform = _game.road.world(_game.player.s, _game.player.x)
+		_game.render_step(0.0)
+		_game.camera.snap()
+	if _opts.has("debug-panel"):
+		var dp := DebugPanel.new()
+		dp.world = _game.world
+		dp.factory = _game.factory
+		dp.icons = _game.icons
+		_game.add_child(dp)
+		dp._panel.visible = true
 	var sim_us: int = Time.get_ticks_usec() - t_sim
 	print("RESULT build_ms=%d sim_ticks=%d sim_ms_per_tick=%.3f traffic=%s world=%s" % [build_ms, n_ticks,
 		float(sim_us) / 1000.0 / maxf(1.0, float(n_ticks)), _traffic_source(), JSON.stringify(_game.world.stats)])
+	if _opts.has("wave-strip"):
+		quit(await _wave_strip(str(_opts["wave-strip"])))
+		return
 
 	# 3D-only frame (HUD + icons hidden) for ΔE vs the web canvas
 	_set_overlay(false)
@@ -139,6 +161,11 @@ func _main() -> void:
 		draws_all, draws_vis, VIS_BUDGET, ALL_BUDGET, prims, objects, frame_ms, st.x, st.y])
 	print("RESULT icons=%d overlaps=%d [%s] npc_groups=%d cars_drawn=%d" % [shown.size(), overlaps, ", ".join(icon_desc),
 		_game.npc.group_count(), _game.npc.car_count()])
+	print("RESULT honk_reply=%s bubbles=%d [%s] honk_rings=%d" % [JSON.stringify(_game.last_honk_reply), _game.bubbles.count(),
+		", ".join(_game.bubbles.texts()), _game.honk_fx.active()])
+	var hud_rects: Array[Rect2] = _game.hud.reserved_rects()
+	print("RESULT hud_safe insets=%s safe_rect=%s bar=%s (--safe-pt=TOP,BOTTOM fakes a notch / home indicator)" % [
+		_game.hud.insets, _game.hud.safe_rect(), hud_rects[0] if not hud_rects.is_empty() else Rect2()])
 	if draws_vis > VIS_BUDGET or draws_all > ALL_BUDGET:
 		print("FAIL shot_jam: draw budget exceeded")
 		ok = false
@@ -202,6 +229,10 @@ func _apply_opts() -> void:
 		w.sun.shadow_bias = float(_opts["bias"])
 	if _opts.has("nbias"):
 		w.sun.shadow_normal_bias = float(_opts["nbias"])
+	if _opts.has("glow-blend"):  # additive | screen | softlight | replace | mix
+		w.env.glow_blend_mode = {"additive": Environment.GLOW_BLEND_MODE_ADDITIVE, "screen": Environment.GLOW_BLEND_MODE_SCREEN,
+			"softlight": Environment.GLOW_BLEND_MODE_SOFTLIGHT, "replace": Environment.GLOW_BLEND_MODE_REPLACE,
+			"mix": Environment.GLOW_BLEND_MODE_MIX}.get(str(_opts["glow-blend"]), w.env.glow_blend_mode)
 	if _opts.has("glow-int"):
 		w.env.glow_intensity = float(_opts["glow-int"])
 	if _opts.has("glow-levels"):
@@ -233,6 +264,7 @@ func _apply_web_state(path: String) -> void:
 	var p: Dictionary = d["player"]
 	_game.player.s = float(p["s"])
 	_game.player.x = float(p["x"])
+	_game.player.v = float(p.get("v", _game.player.v))
 	_game.player.lane = int(p["lane"])
 	_game.player.lc_t = 1.0
 	_game.player.yaw = float(p.get("yaw", 0.0))
@@ -303,3 +335,86 @@ func _side_by_side(web: Image, nat: Image) -> Image:
 	out.blit_rect(w2, Rect2i(Vector2i.ZERO, w2.get_size()), Vector2i.ZERO)
 	out.blit_rect(n2, Rect2i(Vector2i.ZERO, n2.get_size()), Vector2i(w2.get_width() + gap, 0))
 	return out
+
+
+## Brake-wave ripple strip (M1a "브레이크 파동"): N frames of one lane every wave-dt seconds of sim time, scaled 50 %
+## side by side, plus a space-time panel on the right: x = sim time (one column per 0.05 s), y = absolute s
+## (far ahead = up, like the view), one bar per car of that lane, red = brake lamp bit lit, grey = off; white lines
+## mark the frames. A wave reads as a diagonal band. Natural stop&go by default; --wave-emit adds
+## Traffic.emit_brake_wave (traffic.js:521, the JamShaper / behaviour API) at player.s + wave-ahead.
+## Also prints the lit pattern per frame (nearest first) so the ripple is checkable in text.
+func _wave_strip(path: String) -> int:
+	var lane: int = int(_opts.get("wave-lane", "1"))
+	var ahead: float = float(_opts.get("wave-ahead", "50"))
+	var strength: float = float(_opts.get("wave-strength", "2.5"))
+	var nf: int = int(_opts.get("wave-frames", "6"))
+	var dt: float = float(_opts.get("wave-dt", "0.5"))
+	if not (_game.traffic is TrafficBridge and bool(_game.traffic.call(&"is_native"))):
+		print("FAIL shot_jam: --wave-strip needs the C++ Traffic")
+		return 1
+	_game.hud.visible = false
+	if _opts.has("wave-emit"):
+		_game.traffic.call(&"native").call(&"emit_brake_wave", lane, _game.player.s + ahead, strength)
+		print("RESULT wave_emit: lane=%d s=%.1f strength=%.1f" % [lane, _game.player.s + ahead, strength])
+	for d: Dictionary in _game.traffic.call(&"car_specs"):
+		_lens[int(d["id"])] = float(d.get("len", 4.6))
+	var s_ref: float = _game.player.s
+	var cols: Array[Array] = []        # per 0.05 s: [[s, len, lit], ...]
+	var marks: PackedInt32Array = []   # column index of each frame
+	var tiles: Array[Image] = []
+	for f: int in nf:
+		var steps: int = roundi(dt * 20.0)
+		for k: int in steps:
+			_game.advance_ticks(6)
+			cols.append(_lane_cars(lane))
+		marks.append(cols.size() - 1)
+		await _frames(3)
+		var img: Image = _vp.get_texture().get_image()
+		img.resize(img.get_width() / 2, img.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+		img.convert(Image.FORMAT_RGBA8)
+		tiles.append(img)
+		var lit: PackedStringArray = []
+		for c: Array in cols[cols.size() - 1]:
+			var ds: float = float(c[0]) - _game.player.s
+			if ds > 0.0 and ds < 90.0:
+				lit.append(("%.0f*" if bool(c[2]) else "%.0f") % ds)
+		print("RESULT wave_frame=%d t=%.2f lane%d ds (*=brake lit): %s" % [f, _game.sim_time, lane, " ".join(lit)])
+	var w: int = tiles[0].get_width()
+	var h: int = tiles[0].get_height()
+	var cw: int = 5
+	var dw: int = cols.size() * cw
+	var out := Image.create(nf * (w + 8) + dw, h, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0.08, 0.09, 0.11))
+	for f: int in nf:
+		out.blit_rect(tiles[f], Rect2i(Vector2i.ZERO, tiles[f].get_size()), Vector2i(f * (w + 8), 0))
+	var x0: int = nf * (w + 8)
+	var s_lo: float = s_ref - 5.0
+	var s_hi: float = s_ref + 95.0
+	var px_m: float = float(h) / (s_hi - s_lo)
+	for ci: int in cols.size():
+		for c: Array in cols[ci]:
+			var top: float = float(h) - (float(c[0]) + float(c[1]) * 0.5 - s_lo) * px_m
+			var bot: float = float(h) - (float(c[0]) - float(c[1]) * 0.5 - s_lo) * px_m
+			var r := Rect2i(x0 + ci * cw, int(top), cw - 1, maxi(1, int(bot - top) - 1)).intersection(Rect2i(0, 0, out.get_width(), h))
+			if r.has_area():
+				out.fill_rect(r, Color8(0xff, 0x2a, 0x2a) if bool(c[2]) else Color8(0x4a, 0x50, 0x5a))
+	for m: int in marks:
+		out.fill_rect(Rect2i(x0 + m * cw + cw - 1, 0, 1, h), Color(1, 1, 1, 0.6))
+	out.save_png(path)
+	print("RESULT wave_strip=%s frames=%d columns=%d (%.2f s) lane=%d s=[%.0f, %.0f]" % [path, nf, cols.size(),
+		float(cols.size()) * 0.05, lane, s_lo, s_hi])
+	return 0
+
+
+func _lane_cars(lane: int) -> Array:
+	var buf: PackedFloat32Array = _game.buffer()
+	var rows: Array = []
+	for k: int in buf.size() / 8:
+		if int(buf[k * 8 + 2]) != lane:
+			continue
+		var ds: float = buf[k * 8 + 4] - _game.player.s
+		if ds < -10.0 or ds > 110.0:
+			continue
+		rows.append([buf[k * 8 + 4], float(_lens.get(int(buf[k * 8]), 4.6)), (int(buf[k * 8 + 7]) & 1) != 0])
+	rows.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	return rows

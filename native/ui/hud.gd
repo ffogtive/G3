@@ -6,6 +6,10 @@ extends CanvasLayer
 ##  - speed (km/h), HP bumper 5 segments, rage 5 segments (static values in M1a), ◀ ▶ lane buttons, 경적 horn button.
 ## Buttons are drawn here but input is read by LaneInput from the rects registered via bind_input() (multi-touch).
 ## Font: Black Han Sans (OFL, res://ui/fonts/OFL.txt).
+## Safe area (NATIVE_PORT 3-8): every widget lives under `safe`, whose offsets are the notch / Dynamic Island /
+## home-indicator insets from DisplayServer.get_display_safe_area() (mobile) converted to canvas units, so nothing
+## sits under the island or in the home-indicator band. Desktop / shots can fake insets with debug_safe_pt
+## (points of a 390-pt-wide phone; `--safe-pt=59,34`). root (full screen) still hosts the 3D-anchored bubbles.
 
 const FONT_PATH: String = "res://ui/fonts/BlackHanSans-Regular.ttf"
 const C_PANEL := Color(0.07, 0.08, 0.11, 0.78)
@@ -22,8 +26,21 @@ var speed_ms: float = 0.0
 var hp: int = 5
 var rage: int = 0
 var horn_down: bool = false
+## N1 values last pushed by set_state(): (bar fraction 0..1, metres to the villain). The bar fill, the player marker
+## and the "원흉까지 N m" label all read this one Vector2 (tests/test_hud_progress.gd checks it every tick).
+var shown := Vector2.ZERO
 var root: Control
+## Full-screen minus the safe-area insets; parent of every HUD widget.
+var safe: Control
+## (top, bottom) insets in points of a 390-pt-wide phone, applied when not on a mobile OS (tests / T2 shots).
+var debug_safe_pt := Vector2.ZERO
+## Applied insets in canvas units (left, top, right, bottom).
+var insets := Vector4.ZERO
+var paused: bool = false
 var _bar: Control
+var _pill: Control
+var _btn_pause: Control
+var _btn_alpha: Dictionary = {}   # Control → current alpha (idle-ghosted buttons)
 var _dist: Label
 var _speed: Label
 var _hp_row: Control
@@ -51,6 +68,11 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	safe = Control.new()
+	safe.name = "Safe"
+	safe.set_anchors_preset(Control.PRESET_FULL_RECT)
+	safe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(safe)
 	# ── top: progress (N1)
 	_bar = _custom(_draw_bar)
 	_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -58,7 +80,8 @@ func _ready() -> void:
 	_bar.offset_right = -12
 	_bar.offset_top = 10
 	_bar.offset_bottom = 46
-	var pill: Control = _custom(func(c: Control) -> void: _panel(c, Rect2(Vector2.ZERO, c.size), 17))
+	var pill: Control = _custom(_draw_pill)
+	_pill = pill
 	pill.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	pill.offset_top = 52
 	pill.offset_bottom = 88
@@ -71,6 +94,7 @@ func _ready() -> void:
 	_dist.offset_left = -110
 	_dist.offset_right = 110
 	_dist.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dist.visible = false  # the pill draws the same text with '200' emphasised; the Label keeps the N1 string for tests
 	# ── bottom centre: bumper HP + rage
 	_hp_row = _custom(_draw_hp)
 	_anchor_bottom_center(_hp_row, 150, 186, 150)
@@ -104,6 +128,59 @@ func _ready() -> void:
 	_corner(_btn_right, true, 104, 84)
 	_btn_horn = _custom(_draw_horn)
 	_corner(_btn_horn, false, 16, 112)
+	_btn_pause = _custom(_draw_pause)
+	_btn_pause.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_btn_pause.offset_left = -60
+	_btn_pause.offset_right = -14
+	_btn_pause.offset_top = 52
+	_btn_pause.offset_bottom = 98
+	for b: Control in [_btn_left, _btn_right, _btn_horn]:
+		_btn_alpha[b] = IDLE_ALPHA
+		b.modulate.a = IDLE_ALPHA
+	get_viewport().size_changed.connect(apply_safe_area)
+	apply_safe_area()
+
+
+const IDLE_ALPHA: float = 0.45
+
+
+## Safe-area insets → `safe` offsets (canvas units). Mobile: DisplayServer.get_display_safe_area() is in window
+## pixels (full-screen app), scaled by visible-rect / window size. Elsewhere the screen's usable rect has nothing to do
+## with the window, so only debug_safe_pt applies.
+func apply_safe_area() -> void:
+	var vis: Vector2 = get_viewport().get_visible_rect().size
+	var ins := Vector4.ZERO
+	if OS.has_feature("mobile"):
+		var win := Vector2(DisplayServer.window_get_size())
+		if win.x > 0.0 and win.y > 0.0:
+			var sa := Rect2(DisplayServer.get_display_safe_area())
+			var k: Vector2 = vis / win
+			ins = Vector4(sa.position.x * k.x, sa.position.y * k.y, (win.x - sa.end.x) * k.x, (win.y - sa.end.y) * k.y)
+	elif debug_safe_pt != Vector2.ZERO:
+		var u: float = vis.x / 390.0
+		ins = Vector4(0.0, debug_safe_pt.x * u, 0.0, debug_safe_pt.y * u)
+	insets = Vector4(maxf(0.0, ins.x), maxf(0.0, ins.y), maxf(0.0, ins.z), maxf(0.0, ins.w))
+	safe.offset_left = insets.x
+	safe.offset_top = insets.y
+	safe.offset_right = -insets.z
+	safe.offset_bottom = -insets.w
+	_zones_size = Vector2.ZERO  # re-register the touch zones next frame
+
+
+## The rect HUD widgets, bubbles and N5 icons must stay inside (viewport units).
+func safe_rect() -> Rect2:
+	var vis: Vector2 = get_viewport().get_visible_rect().size
+	return Rect2(Vector2(insets.x, insets.y), vis - Vector2(insets.x + insets.z, insets.y + insets.w))
+
+
+## Screen rects N5 icons must not cover.
+func reserved_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	if not visible:
+		return out
+	for c: Control in [_bar, _pill, _hp_row, _rage_row, _gauge, _btn_left, _btn_right, _btn_horn, _btn_pause]:
+		out.append(c.get_global_rect().grow(4.0))
+	return out
 
 
 func _load_font() -> Font:
@@ -122,7 +199,7 @@ func _custom(draw_fn: Callable) -> Control:
 	var c := Control.new()
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.draw.connect(func() -> void: draw_fn.call(c))
-	root.add_child(c)
+	safe.add_child(c)
 	return c
 
 
@@ -138,7 +215,7 @@ func _label(text: String, size: int, color: Color, outline: int) -> Label:
 	ls.outline_color = Color(0.05, 0.06, 0.09, 0.95)
 	l.label_settings = ls
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	root.add_child(l)
+	safe.add_child(l)
 	return l
 
 
@@ -177,22 +254,47 @@ func set_state(p_s: float, v_s: float, s0: float, v_ms: float) -> void:
 	villain_s = v_s
 	start_s = s0
 	speed_ms = v_ms
+	shown = progress_values(p_s, v_s, s0)
+	if _dist != null:
+		_dist.text = distance_text(shown.y)
 
 
-func _process(_delta: float) -> void:
-	var pv: Vector2 = progress_values(player_s, villain_s, start_s)
-	_dist.text = "원흉까지 %d m" % roundi(pv.y)
+static func distance_text(metres: float) -> String:
+	return "원흉까지 %d m" % roundi(metres)
+
+
+func distance_label() -> String:
+	return _dist.text if _dist != null else ""
+
+
+func _process(delta: float) -> void:
+	_dist.text = distance_text(shown.y)
 	_speed.text = str(roundi(speed_ms * 3.6))
 	_bar.queue_redraw()
+	_pill.queue_redraw()
+	_btn_pause.queue_redraw()
+	if _input != null:
+		_ghost(_btn_left, _input.is_zone_down("left"), delta)
+		_ghost(_btn_right, _input.is_zone_down("right"), delta)
+	_ghost(_btn_horn, horn_down, delta)
 	_hp_row.queue_redraw()
 	_rage_row.queue_redraw()
 	_btn_horn.queue_redraw()
 	_gauge.queue_redraw()
-	if _input != null and root.size != _zones_size:
-		_zones_size = root.size
+	if _input != null and safe.size != _zones_size:
+		_zones_size = safe.size
 		_input.set_zone("left", _btn_left.get_global_rect())
 		_input.set_zone("right", _btn_right.get_global_rect())
 		_input.set_zone("horn", _btn_horn.get_global_rect())
+		_input.set_zone("pause", _btn_pause.get_global_rect().grow(6.0))
+
+
+## Idle buttons are ghosted (0.45) so the cars behind the player stay visible; 1.0 while pressed (≈0.08 s fade).
+func _ghost(b: Control, down: bool, delta: float) -> void:
+	var a: float = move_toward(float(_btn_alpha.get(b, IDLE_ALPHA)), 1.0 if down else IDLE_ALPHA,
+		(1.0 - IDLE_ALPHA) * delta / 0.08)
+	_btn_alpha[b] = a
+	b.modulate.a = a
 
 
 func _panel(c: Control, r: Rect2, radius: int = 14) -> void:
@@ -207,22 +309,27 @@ func _panel(c: Control, r: Rect2, radius: int = 14) -> void:
 func _draw_bar(c: Control) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	_panel(c, r, 18)
-	var pv: Vector2 = progress_values(player_s, villain_s, start_s)
-	var track := Rect2(r.position + Vector2(22, 12), Vector2(r.size.x - 60, r.size.y - 24))
+	var pv: Vector2 = shown
+	var track := Rect2(r.position + Vector2(22, 13), Vector2(r.size.x - 60, r.size.y - 26))
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color8(0xb8, 0x2a, 0x22)
-	sb.set_corner_radius_all(6)
+	sb.bg_color = Color(0.13, 0.14, 0.18, 0.9)  # empty track: not a red "danger / boss HP" bar
+	sb.set_corner_radius_all(5)
 	c.draw_style_box(sb, track)
-	var fill := track
-	fill.size.x = maxf(12.0, track.size.x * pv.x)
-	var sf := StyleBoxFlat.new()
-	sf.bg_color = Color8(0xff, 0xc4, 0x2e)
-	sf.set_corner_radius_all(6)
-	c.draw_style_box(sf, fill)
-	# player marker (yellow car) at the same fraction
+	c.draw_circle(Vector2(track.position.x + 2, track.get_center().y), 4.0, Color.WHITE)  # start dot
+	var fw: float = maxf(8.0, track.size.x * pv.x)
+	var c0 := Color8(0xff, 0xd2, 0x3f)
+	var c1: Color = c0.lerp(Color8(0xff, 0x7a, 0x1a), pv.x)
+	var tl := track.position
+	c.draw_polygon(PackedVector2Array([tl, tl + Vector2(fw, 0), tl + Vector2(fw, track.size.y), tl + Vector2(0, track.size.y)]),
+		PackedColorArray([c0, c1, c1, c0]))
+	# player marker: top-view hero car (yellow body, 2 black stripes) at the same fraction
 	var px: float = track.position.x + track.size.x * pv.x
-	c.draw_rect(Rect2(Vector2(px - 9, track.position.y - 5), Vector2(18, track.size.y + 10)), Color8(0x1c, 0x1c, 0x1c))
-	c.draw_rect(Rect2(Vector2(px - 7, track.position.y - 3), Vector2(14, track.size.y + 6)), Color8(0xff, 0xcc, 0x28))
+	var car := Rect2(Vector2(px - 13, track.get_center().y - 7), Vector2(26, 14))
+	c.draw_rect(car.grow(2.0), Color8(0x1c, 0x1c, 0x1c))
+	c.draw_rect(car, Color8(0xff, 0xcc, 0x28))
+	c.draw_rect(Rect2(car.position + Vector2(8, 0), Vector2(3, 14)), Color8(0x1c, 0x1c, 0x1c))
+	c.draw_rect(Rect2(car.position + Vector2(15, 0), Vector2(3, 14)), Color8(0x1c, 0x1c, 0x1c))
+	c.draw_rect(Rect2(car.position + Vector2(20, 2), Vector2(4, 10)), Color8(0x25, 0x3a, 0x5c))  # windscreen (front)
 	# villain at the end of the bar (the bar's 100 % IS the villain's live position)
 	var vc := Vector2(r.end.x - 20, r.get_center().y)
 	c.draw_circle(vc, 14, Color8(0x1c, 0x1c, 0x1c))
@@ -249,10 +356,40 @@ func _segments(c: Control, title: String, n_on: int, col: Color) -> void:
 func _draw_gauge(c: Control) -> void:
 	var ctr: Vector2 = c.size * 0.5
 	var rad: float = minf(c.size.x, c.size.y) * 0.5
-	c.draw_circle(ctr, rad, C_PANEL)
-	c.draw_arc(ctr, rad - 4, PI * 0.75, PI * 2.25, 32, C_OFF, 5)
+	c.draw_circle(ctr, rad, Color(C_PANEL, 0.92))
+	var a0: float = PI * 5.0 / 6.0     # 240° sweep like the web gauge
+	var sweep: float = PI * 4.0 / 3.0
+	c.draw_arc(ctr, rad - 5, a0, a0 + sweep, 40, Color(1, 1, 1, 0.18), 6)
 	var k: float = clampf(speed_ms * 3.6 / 120.0, 0.0, 1.0)
-	c.draw_arc(ctr, rad - 4, PI * 0.75, PI * 0.75 + PI * 1.5 * maxf(0.02, k), 32, C_HP.lerp(Color8(0xff, 0x4a, 0x2a), k), 5)
+	var col: Color = C_HP.lerp(Color8(0xff, 0xb2, 0x1e), k * 2.0) if k < 0.5 else Color8(0xff, 0xb2, 0x1e).lerp(Color8(0xff, 0x3b, 0x30), k * 2.0 - 1.0)
+	c.draw_arc(ctr, rad - 5, a0, a0 + sweep * maxf(0.03, k), 40, col, 6)
+
+
+## "원흉까지 200 m" with the number emphasised (28 px yellow) and the words at 18 px; text from the same `shown`.
+func _draw_pill(c: Control) -> void:
+	_panel(c, Rect2(Vector2.ZERO, c.size), 17)
+	var parts: Array = [["원흉까지 ", 18, Color.WHITE], [str(roundi(shown.y)), 28, Color8(0xff, 0xd2, 0x3f)], [" m", 18, Color.WHITE]]
+	var w: float = 0.0
+	for p: Array in parts:
+		w += font.get_string_size(str(p[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, int(p[1])).x
+	var x: float = (c.size.x - w) * 0.5
+	var base: float = c.size.y * 0.5 + 10.0
+	for p: Array in parts:
+		var fs: int = int(p[1])
+		c.draw_string_outline(font, Vector2(x, base), str(p[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.05, 0.06, 0.09, 0.95))
+		c.draw_string(font, Vector2(x, base), str(p[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, p[2] as Color)
+		x += font.get_string_size(str(p[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+
+
+func _draw_pause(c: Control) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	_panel(c, r, 14)
+	var ctr: Vector2 = r.get_center()
+	if paused:
+		c.draw_colored_polygon(PackedVector2Array([ctr + Vector2(-7, -11), ctr + Vector2(11, 0), ctr + Vector2(-7, 11)]), Color.WHITE)
+	else:
+		c.draw_rect(Rect2(ctr + Vector2(-9, -11), Vector2(6, 22)), Color.WHITE)
+		c.draw_rect(Rect2(ctr + Vector2(3, -11), Vector2(6, 22)), Color.WHITE)
 
 
 func _draw_hp(c: Control) -> void:

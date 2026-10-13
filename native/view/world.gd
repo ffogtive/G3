@@ -36,6 +36,8 @@ var _hemi_sky_lin := Vector3.ZERO
 var _hemi_ground_lin := Vector3.ZERO
 var _sun_dir := Vector3(-0.4, 0.8, 0.3).normalized()
 var _instances: Array[Dictionary] = []      # {mesh: ArrayMesh, xf: Transform3D, cast: bool, chunk: int}
+## Overhead gantries (separate instances, not merged): {node: MeshInstance3D, s: float}; faded like world.js update().
+var overheads: Array[Dictionary] = []
 var _mesh_cache: Dictionary = {}
 
 
@@ -97,11 +99,15 @@ func _apply_sky(sky_name: String) -> void:
 	env.glow_enabled = true
 	env.glow_hdr_threshold = 1.0
 	env.glow_hdr_scale = 2.0
-	env.glow_intensity = 0.75
+	env.glow_intensity = 0.8
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.0
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
-	var levels: PackedFloat32Array = [0.0, 1.0, 0.8, 0.5, 0.2, 0.0, 0.0]  # tight halo first, faint wide spill
+	# The purple rear windows (art review: R +31..+42) were glow spill from the lamps right below them: with glow off
+	# they match the web to ±3. A/B (pinned web frame, 2026-10-13): levels 2+ spill into the glass whatever the blend
+	# mode (ADDITIVE and SCREEN measured the same); level 1 only keeps a tight halo with the windows at web ±3
+	# (a 0.1 trace of level 2 already gave +9). Lamp cores already sit at the Mobile HDR ceiling (~2.0, voxel.gdshader), so no hotter core.
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	var levels: PackedFloat32Array = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	for i: int in 7:
 		env.set_glow_level(i, levels[i])
 	world_env = WorldEnvironment.new()
@@ -123,11 +129,13 @@ func _apply_sky(sky_name: String) -> void:
 	sun.directional_shadow_fade_start = 0.85
 	sun.shadow_bias = 0.1          # 0.04 / 1.2 gave acne on flat roofs (A/B shots, 2026-10-13)
 	sun.shadow_normal_bias = 2.0
-	sun.shadow_blur = 1.0
+	sun.shadow_blur = 0.6           # with SOFT_MEDIUM: clean penumbra (SOFT_LOW + 1.0 left dither grain, art review)
 	add_child(sun)
 	sun.basis = Basis.looking_at(-_sun_dir, Vector3.UP if absf(_sun_dir.y) < 0.99 else Vector3.FORWARD)
 	RenderingServer.directional_shadow_atlas_set_size(2048, true)
-	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
+	# == rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality(.mobile)=3 in project.godot.
+	# Device fallback if A15 GPU time is short: SOFT_LOW with shadow_blur 0.5 (docs/NATIVE_PORT.md 9).
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM)
 
 	factory.set_param(&"hemi_sky", _hemi_sky_lin)
 	factory.set_param(&"hemi_ground", _hemi_ground_lin)
@@ -283,7 +291,12 @@ func _layout(stage: Dictionary, s_min: float, s_max: float, start_s: float, fron
 		var s: float = s_min + rng.next_float() * (s_max - s_min + 300.0)
 		var y: float = 55.0 + rng.next_float() * 40.0
 		_prop("cloud", i * 17 + id, x, s, 0.0, y)
-	# gantry signs / VMS / banners carry text (M1c); the CCTV gantry is text-free
+	# world.js:187-193: two overhead gantry signs + three VMS. Frames and blank plates now (they anchor the
+	# composition and cast the shadow band across the lanes); the plate text is M1c (SubViewport + Label → texture).
+	_overhead("res://assets/props/gantry_sign_2l.res", 0.0, start_s + 46.0)
+	_overhead("res://assets/props/gantry_sign_2l.res", 0.0, front_s + 150.0)
+	for vs: float in [start_s + 105.0, front_s + 25.0, front_s + 260.0]:
+		_add("res://assets/props/vms.res", 0.0, vs, 0.0, true, "vms")
 	_prop("cctv", 0, 0.0, start_s + (front_s - start_s) * 0.55, 0.0)
 
 
@@ -305,6 +318,78 @@ func _add(path: String, x: float, s: float, rot_y: float, cast: bool, kind: Stri
 	xf.origin.y = y
 	_instances.append({"mesh": mesh, "xf": xf, "cast": cast, "kind": kind, "chunk": floori(s / CHUNK_LEN)})
 	stats[kind] = int(stats.get(kind, 0)) + 1
+
+
+## An overhead sign as its own MeshInstance3D so it can fade when it sits between the chase camera and the player.
+func _overhead(path: String, x: float, s: float) -> void:
+	if not _mesh_cache.has(path):
+		_mesh_cache[path] = load(path) if ResourceLoader.exists(path) else null
+	var mesh: ArrayMesh = _mesh_cache[path]
+	if mesh == null:
+		push_warning("WorldView: missing %s" % path)
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "Overhead_%d" % overheads.size()
+	mi.mesh = mesh
+	for i: int in mesh.get_surface_count():
+		var sname: String = mesh.surface_get_name(i)
+		if sname == "panel":
+			mi.set_surface_override_material(i, _blank_sign_material())
+		elif sname != "glass" and sname != "fx":
+			mi.set_surface_override_material(i, factory.mat_static)
+	mi.transform = road.world(s, x, 0.0)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	add_child(mi)
+	# GeometryInstance3D.transparency is Forward+ only (ignored on Mobile), so fading swaps in alpha materials:
+	# the frame as vertex-colour StandardMaterial3D (COLOR is sRGB8), the plate as the sign green, both with alpha f.
+	var frame_fade := StandardMaterial3D.new()
+	frame_fade.vertex_color_use_as_albedo = true
+	frame_fade.vertex_color_is_srgb = true
+	frame_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var plate_fade: StandardMaterial3D = _blank_sign_material().duplicate() as StandardMaterial3D
+	plate_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	overheads.append({"node": mi, "s": s, "f": 1.0, "frame_fade": frame_fade, "plate_fade": plate_fade})
+	stats["gantry"] = int(stats.get("gantry", 0)) + 1
+
+
+var _blank_sign: StandardMaterial3D
+
+
+## Until the M1c text panel: the web sign's board colour (scenery.js signMaterial #0b7a4b, white rim drawn later).
+func _blank_sign_material() -> StandardMaterial3D:
+	if _blank_sign == null:
+		_blank_sign = StandardMaterial3D.new()
+		_blank_sign.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_blank_sign.albedo_color = Color.html("#0b7a4b")
+	return _blank_sign
+
+
+## world.js update(): an overhead structure 12–30 m ahead of a raised camera fades to 0.22 opacity (it would cover
+## the player in the chase view), 1.0 elsewhere.
+func update_overheads(cam_pos: Vector3) -> void:
+	if overheads.is_empty():
+		return
+	var cs: float = road.to_road(cam_pos).x
+	for o: Dictionary in overheads:
+		var d: float = float(o["s"]) - cs
+		var f: float = 1.0
+		if cam_pos.y > 5.0 and d > -2.0 and d < 30.0:
+			f = 0.22 + 0.78 * clampf((d - 12.0) / 18.0, 0.0, 1.0)
+		if absf(float(o["f"]) - f) <= 0.01:
+			continue
+		o["f"] = f
+		var mi: MeshInstance3D = o["node"]
+		var ff: StandardMaterial3D = o["frame_fade"]
+		var pf: StandardMaterial3D = o["plate_fade"]
+		ff.albedo_color.a = f
+		pf.albedo_color.a = f
+		var opaque: bool = f > 0.995
+		for i: int in mi.mesh.get_surface_count():
+			var sname: String = mi.mesh.surface_get_name(i)
+			if sname == "panel":
+				mi.set_surface_override_material(i, _blank_sign_material() if opaque else pf)
+			elif sname != "glass" and sname != "fx":
+				mi.set_surface_override_material(i, factory.mat_static if opaque else ff)
 
 
 func _obstacle_props(obstacles: Array) -> void:

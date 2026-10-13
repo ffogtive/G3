@@ -28,7 +28,8 @@
    sudo xcodebuild -runFirstLaunch
    xcodebuild -version        # Xcode 27.x 확인
    ```
-3. `cmake`는 traffic 확장(C++) iOS 빌드에만 필요하다. 없으면 `ios_run.sh`가 경고만 하고 게임은 그대로 뜬다.
+3. `cmake`는 traffic 확장(C++) iOS 빌드에만 필요하다. 없으면 `ios_run.sh --check`부터 경고하고, traffic은 stub(진입 심볼이
+   false를 돌려줌)이 되어 게임은 GDScript 교통 폴백으로 뜬다 ❓(기기 미검증). 결과 화면과 receipt에 `native traffic: false`로 남는다.
    `brew install cmake` (Homebrew가 있을 때).
 
 ## 2단계. Apple 계정 로그인 (Xcode)

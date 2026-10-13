@@ -11,6 +11,7 @@ extends Node
 signal lane_requested(dir: int)
 signal horn_changed(down: bool)
 signal rage_requested
+signal pause_requested
 
 const SWIPE_PT: float = 34.0
 const RAGE_PT: float = 60.0
@@ -52,6 +53,11 @@ func units_per_pt() -> float:
 func _input(event: InputEvent) -> void:
 	if not enabled:
 		return
+	# input_devices/pointing/emulate_mouse_from_touch stays on (debug_panel Buttons need it), so every touch also
+	# arrives as an emulated mouse event with device == DEVICE_ID_EMULATION. Handle the touch only, or each tap /
+	# swipe would produce two lane edges (review: tap_left lane_edges=2).
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
 		_on_touch(t.index, t.position, t.pressed)
@@ -91,6 +97,8 @@ func _zone_at(p: Vector2) -> String:
 func _on_touch(index: int, pos: Vector2, pressed: bool) -> void:
 	if pressed:
 		var zone: String = _zone_at(pos)
+		if zone != "pause" and is_inside_tree() and get_tree().paused:
+			return  # while paused only the pause button works (no queued lane edges on resume)
 		_touch[index] = {"start": pos, "zone": zone, "done": false}
 		match zone:
 			"horn":
@@ -102,6 +110,8 @@ func _on_touch(index: int, pos: Vector2, pressed: bool) -> void:
 				_push_lane(1)
 			"rage":
 				_push_rage()
+			"pause":
+				pause_requested.emit()
 	else:
 		if _horn_fingers.erase(index):
 			_horn_changed()
@@ -165,6 +175,14 @@ func release_all() -> void:
 
 
 # ── InputBuffer-style consumption (sim tick side) ──
+
+## True while any finger that started in `zone_name` is still down (HUD button feedback).
+func is_zone_down(zone_name: String) -> bool:
+	for t: Variant in _touch.values():
+		if str((t as Dictionary).get("zone", "")) == zone_name:
+			return true
+	return false
+
 
 func consume_lane() -> int:
 	return _lane_edges.pop_front() if not _lane_edges.is_empty() else 0

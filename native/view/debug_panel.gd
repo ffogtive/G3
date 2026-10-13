@@ -7,7 +7,7 @@ extends CanvasLayer
 const TONEMAPS: Array[String] = ["Linear", "AgX", "Filmic"]
 const AMBIENTS: Array[String] = ["Sky", "Hemi", "Flat"]
 const MSAAS: Array[String] = ["Off", "2x", "4x"]
-const AO_ON: float = 0.55  # voxel.gdshader default ao_strength
+const AO_ON: float = 0.6  # voxel.gdshader default ao_strength
 
 var world: WorldView
 var factory: VehicleFactory

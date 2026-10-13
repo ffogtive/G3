@@ -77,12 +77,18 @@ static func load_traffic_tables() -> Dictionary:
 
 
 ## Loads res://ext/traffic.gdextension on demand (a fresh .godot/ has not registered it yet).
+## Tries the load at most once per process so the no-ext path does not repeat the loader's ERROR lines.
+static var _ext_load_tried: bool = false
+
+
 static func _exact_parser_available() -> bool:
 	if ClassDB.class_exists(&"Traffic"):
 		return true
-	const GDEXT: String = "res://ext/traffic.gdextension"
-	if FileAccess.file_exists(GDEXT) and not GDExtensionManager.is_extension_loaded(GDEXT):
-		GDExtensionManager.load_extension(GDEXT)
+	if not _ext_load_tried:
+		_ext_load_tried = true
+		const GDEXT: String = "res://ext/traffic.gdextension"
+		if FileAccess.file_exists(GDEXT) and not GDExtensionManager.is_extension_loaded(GDEXT):
+			GDExtensionManager.load_extension(GDEXT)
 	return ClassDB.class_exists(&"Traffic")
 
 

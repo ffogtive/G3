@@ -60,12 +60,14 @@ func setup(p_factory: VehicleFactory, p_road: RoadGraph, specs: Dictionary) -> v
 		add_child(mmi)
 		var buf := PackedFloat32Array()
 		buf.resize(ids.size() * FLOATS)
-		var paints: Array[Color] = []
+		var paints := PackedColorArray()
+		var pids := PackedInt32Array()
 		for i: int in ids.size():
 			var sp: Dictionary = specs[ids[i]]
 			paints.append(factory.paint_for(tpl, int(sp.get("color", 0xffffff))))
+			pids.append(int(ids[i]))
 			_slot[ids[i]] = [key, i]
-		_groups[key] = {"mmi": mmi, "ids": ids, "buf": buf, "paints": paints,
+		_groups[key] = {"mmi": mmi, "ids": pids, "buf": buf, "paints": paints,
 			"len": float(tpl.get(&"length")), "w": float(tpl.get(&"width"))}
 	_make_blob(specs.size())
 
@@ -110,19 +112,21 @@ func sync(prev: PackedFloat32Array, cur: PackedFloat32Array, frac: float) -> voi
 		for k: int in n:
 			_row_of[int(cur[k * STRIDE])] = k
 	var same_order: bool = prev.size() == cur.size()
+	var straight: bool = road.is_straight()
 	var bi: int = 0
 	var blob_buf: PackedFloat32Array = _blob_buf
+	var blob_cap: int = blob_buf.size() / 12
 	for key: String in _groups:
 		var g: Dictionary = _groups[key]
-		var ids: Array = g["ids"]
-		var paints: Array = g["paints"]
+		var ids: PackedInt32Array = g["ids"]
+		var paints: PackedColorArray = g["paints"]
 		var buf: PackedFloat32Array = g["buf"]
-		var bw: float = float(g["w"]) * 1.15
-		var bl: float = float(g["len"]) * 1.06
+		var bw: float = float(g["w"]) * 1.02   # was 1.15 / 1.06: read as a floor mat past the silhouette (art review)
+		var bl: float = float(g["len"]) * 1.0
 		for i: int in ids.size():
 			var id: int = ids[i]
 			var f: int = i * FLOATS
-			var k: int = int(_row_of.get(id, -1))
+			var k: int = _row_of.get(id, -1)
 			if k < 0:
 				buf[f + 7] = -1000.0  # not in this tick: park far below the road
 				continue
@@ -135,18 +139,57 @@ func sync(prev: PackedFloat32Array, cur: PackedFloat32Array, frac: float) -> voi
 				x = lerpf(prev[o + 3], x, frac)
 				s = lerpf(prev[o + 4], s, frac)
 				yaw = lerp_angle(prev[o + 5], yaw, frac)
-			var xf: Transform3D = road.world(s, x, yaw)
-			if bits & BIT_VILLAIN:
-				xf.origin.y = -1000.0  # villains are hero views
-			_write_xf(buf, f, xf)
+			var villain: bool = (bits & BIT_VILLAIN) != 0
+			var c: float
+			var sn: float
+			var ox: float
+			var oy: float
+			var oz: float
+			if straight:  # closed form of RoadGraph.world(s, x, yaw) for the straight road
+				c = cos(yaw)
+				sn = sin(yaw)
+				ox = x
+				oy = 0.0
+				oz = -s
+				buf[f] = c
+				buf[f + 1] = 0.0
+				buf[f + 2] = sn
+				buf[f + 4] = 0.0
+				buf[f + 5] = 1.0
+				buf[f + 6] = 0.0
+				buf[f + 8] = -sn
+				buf[f + 9] = 0.0
+				buf[f + 10] = c
+			else:
+				var xf: Transform3D = road.world(s, x, yaw)
+				_write_xf(buf, f, xf)
+				c = xf.basis.x.x
+				sn = xf.basis.z.x
+				ox = xf.origin.x
+				oy = xf.origin.y
+				oz = xf.origin.z
+			buf[f + 3] = ox
+			buf[f + 7] = -1000.0 if villain else oy  # villains are hero views
+			buf[f + 11] = oz
 			var paint: Color = paints[i]
 			buf[f + 12] = paint.r if paint.a > 0.5 else -1.0
 			buf[f + 13] = paint.g
 			buf[f + 14] = paint.b
 			buf[f + 15] = float(drawn_bits(bits, lamp_time, id) if blink_phase else bits)
-			if not (bits & BIT_VILLAIN) and bi * 12 + 12 <= blob_buf.size():
-				var bxf := Transform3D(xf.basis * Basis.from_scale(Vector3(bw, 1.0, bl)), xf.origin + Vector3(0, 0.03, 0))
-				_write_xf(blob_buf, bi * 12, bxf)
+			if not villain and bi < blob_cap:
+				var b: int = bi * 12
+				blob_buf[b] = c * bw
+				blob_buf[b + 1] = 0.0
+				blob_buf[b + 2] = sn * bl
+				blob_buf[b + 3] = ox
+				blob_buf[b + 4] = 0.0
+				blob_buf[b + 5] = 1.0
+				blob_buf[b + 6] = 0.0
+				blob_buf[b + 7] = oy + 0.03
+				blob_buf[b + 8] = -sn * bw
+				blob_buf[b + 9] = 0.0
+				blob_buf[b + 10] = c * bl
+				blob_buf[b + 11] = oz
 				bi += 1
 		g["buf"] = buf
 		((g["mmi"] as MultiMeshInstance3D).multimesh as MultiMesh).buffer = buf

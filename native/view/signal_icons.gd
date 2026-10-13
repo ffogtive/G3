@@ -6,11 +6,18 @@ extends Node3D
 ## at most 4 at once; colour AND shape differ per signal (colour-blind safe). Billboards drawn on top of the scene,
 ## size eased by distance. Placement is greedy by priority in screen space, so two icons never overlap
 ## (last_overlaps() is the T2 'icon overlap 0' check).
+## Review fixes (art review 2026-10-13): BRAKE is event-driven (1.2 s when the brake bit turns on or the car
+## decelerates > 2 m/s²; never in a steady crawl, where 85–95 % of jam cars are lit); blink icons swap an on / off
+## texture instead of dimming the whole badge; no-blinker cut-in = full arrow + red ⊘ corner badge (the old X read
+## as a close button); a honk reply shows no icon (the reply bubble carries it) and ids in `suppress` get none;
+## icons stay inside `bounds` and off `reserved` (HUD) rects; textures are baked at 2× (192 px).
 
 const MAX_ICONS: int = 4
 const NEAR_M: float = 25.0
 const EVENT_HOLD: float = 2.6
-const ICON_PX: int = 96
+const BRAKE_HOLD: float = 1.2
+const BRAKE_DECEL: float = 2.0               # m/s² that counts as a braking event even if the bit was already on
+const ICON_PX: int = 192
 const BIT_BRAKE: int = 1
 const BIT_BLINK_L: int = 2
 const BIT_BLINK_R: int = 4
@@ -37,11 +44,14 @@ const SVG: Dictionary = {
 	Icon.HONK: "<path d='M14 38 L30 38 L50 20 L50 76 L30 58 L14 58 Z' fill='#ffd21e' stroke='#4a3a00' stroke-width='3'/>" +
 		"<g fill='none' stroke='#ffd21e' stroke-width='6' stroke-linecap='round'><path d='M60 34 Q68 48 60 62'/>" +
 		"<path d='M70 26 Q82 48 70 70'/></g>",
-	Icon.CUTIN_L: "<path d='M18 48 L56 20 L56 36 L80 36 L80 60 L56 60 L56 76 Z' fill='#ffb21e' fill-opacity='0.55' stroke='#4a2a00' stroke-width='3'/>" +
-		"<g stroke='#ff2a2a' stroke-width='11' stroke-linecap='round'><path d='M22 22 L74 74'/><path d='M74 22 L22 74'/></g>",
-	Icon.CUTIN_R: "<path d='M78 48 L40 20 L40 36 L16 36 L16 60 L40 60 L40 76 Z' fill='#ffb21e' fill-opacity='0.55' stroke='#4a2a00' stroke-width='3'/>" +
-		"<g stroke='#ff2a2a' stroke-width='11' stroke-linecap='round'><path d='M22 22 L74 74'/><path d='M74 22 L22 74'/></g>",
+	Icon.CUTIN_L: "<path d='M12 42 L46 16 L46 30 L72 30 L72 54 L46 54 L46 68 Z' fill='#ffb21e' stroke='#4a2a00' stroke-width='3'/>" + NO_SIGN,
+	Icon.CUTIN_R: "<path d='M84 42 L50 16 L50 30 L24 30 L24 54 L50 54 L50 68 Z' fill='#ffb21e' stroke='#4a2a00' stroke-width='3'/>" + NO_SIGN,
 }
+## "no signal" corner badge for the cut-in icons (lower right): ⊘ in red on the dark badge colour.
+const NO_SIGN: String = "<circle cx='70' cy='70' r='19' fill='#14161c' stroke='#ff2a2a' stroke-width='7'/>" + \
+	"<path d='M57 83 L83 57' stroke='#ff2a2a' stroke-width='7' stroke-linecap='round'/>"
+## Blink icons, dark half: same arrow in the web beacon's off colour (badge stays opaque, only the arrow goes dark).
+const BLINK_OFF_FILL: String = "#5a3a00"
 ## priority within one car (higher wins)
 const ICON_PRI: Dictionary = {Icon.CUTIN_L: 9, Icon.CUTIN_R: 9, Icon.HONK: 8, Icon.HAZARD: 6, Icon.BLINK_L: 5,
 	Icon.BLINK_R: 5, Icon.HIGHBEAM: 4, Icon.BRAKE: 2}
@@ -49,8 +59,19 @@ const ICON_PRI: Dictionary = {Icon.CUTIN_L: 9, Icon.CUTIN_R: 9, Icon.HONK: 8, Ic
 var road: RoadGraph
 var camera: Camera3D
 var lamp_time: float = 0.0
-var size_px: float = 54.0                   # on-screen icon size at 20 m (scaled by viewport height / 960)
+var size_px: float = 42.0                   # on-screen icon size at 20 m (scaled by viewport height / 960) ≈ 36 pt
+## Screen rect icons must stay inside (game sets the HUD safe rect, shrunk by 8); empty = whole viewport − 8.
+var bounds := Rect2()
+## Screen rects icons must not cover (HUD bar, pill, rows, buttons); seeded into the overlap check.
+var reserved: Array[Rect2] = []
+## car id → true: no icon this frame (e.g. a car whose honk-reply bubble is up).
+var suppress: Dictionary = {}
 var _tex: Dictionary = {}
+var _tex_off: Dictionary = {}                # blink icons: dark-half texture
+var _last_bits: Dictionary = {}              # car id → lamp bits at the previous update_icons()
+var _last_v: Dictionary = {}                 # car id → speed at the previous update_icons()
+var _last_now: float = NAN
+var _brake_until: Dictionary = {}            # car id → time the BRAKE icon expires
 var _sprites: Array[Sprite3D] = []
 var _events: Dictionary = {}                 # car id → {icon, until, side}
 var _shown: Array[Dictionary] = []
@@ -60,14 +81,11 @@ var heights: Dictionary = {}                 # car id → roof height (m)
 
 func _ready() -> void:
 	for icon: int in SVG:
-		var img := Image.new()
-		var svg: String = "<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'>%s%s</svg>" % [BADGE, SVG[icon]]
-		var err: Error = img.load_svg_from_string(svg, float(ICON_PX) / 96.0)
-		if err != OK:
-			img = Image.create(ICON_PX, ICON_PX, false, Image.FORMAT_RGBA8)
-			img.fill(Color.MAGENTA)
-		img.generate_mipmaps()
-		_tex[icon] = ImageTexture.create_from_image(img)
+		_tex[icon] = _bake(str(SVG[icon]))
+		if icon == Icon.BLINK_L or icon == Icon.BLINK_R:
+			_tex_off[icon] = _bake(str(SVG[icon]).replace("#ffb21e", BLINK_OFF_FILL))
+		elif icon == Icon.HAZARD:
+			_tex_off[icon] = _bake(str(SVG[icon]).replace("#ff3b30", "#5a1a14"))
 	for i: int in MAX_ICONS:
 		var sp := Sprite3D.new()
 		sp.name = "Icon%d" % i
@@ -86,7 +104,18 @@ func _ready() -> void:
 		_sprites.append(sp)
 
 
-## Sim events → short-lived icons: cutin (blinker false → crossed-out blinker), honk_reply → horn wave.
+func _bake(body: String) -> ImageTexture:
+	var img := Image.new()
+	var svg: String = "<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'>%s%s</svg>" % [BADGE, body]
+	if img.load_svg_from_string(svg, float(ICON_PX) / 96.0) != OK:
+		img = Image.create(ICON_PX, ICON_PX, false, Image.FORMAT_RGBA8)
+		img.fill(Color.MAGENTA)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## Sim events → short-lived icons: cutin (blinker false → crossed-out blinker). honk_reply only makes the car
+## event-eligible (no icon): the reply bubble says it, and a horn icon over the replier read as "this car honked".
 func on_event(ev: Dictionary, now: float) -> void:
 	var id: int = int(ev.get("id", -1))
 	if id < 0:
@@ -100,7 +129,7 @@ func on_event(ev: Dictionary, now: float) -> void:
 			else:
 				_events[id] = {"icon": -1, "until": now + EVENT_HOLD}  # event car: eligible beyond 25 m
 		"honk_reply":
-			_events[id] = {"icon": Icon.HONK, "until": now + 1.4}
+			_events[id] = {"icon": -1, "until": now + 1.4}
 
 
 ## cur: sim buffer (stride 8); player {s, x, lane}; now: real time for event expiry. Returns the shown icons.
@@ -108,6 +137,7 @@ func update_icons(cur: PackedFloat32Array, player: Dictionary, now: float) -> Ar
 	for id: int in _events.keys():
 		if float(_events[id]["until"]) < now:
 			_events.erase(id)
+	_track_brakes(cur, now)
 	var ps: float = float(player.get("s", 0.0))
 	var plane: int = int(roundf(float(player.get("lane", 3.0))))
 	var cands: Array[Dictionary] = []
@@ -127,7 +157,7 @@ func update_icons(cur: PackedFloat32Array, player: Dictionary, now: float) -> Ar
 		var villain: bool = (bits & BIT_VILLAIN) != 0
 		var ev: Dictionary = _events.get(id, {})
 		var near: bool = absf(ds) <= NEAR_M and cur[o + 2] >= 0.0
-		if not (villain or near or not ev.is_empty()):
+		if suppress.has(id) or not (villain or near or not ev.is_empty()):
 			continue
 		var icon: int = -1
 		if not ev.is_empty() and int(ev["icon"]) >= 0:
@@ -140,7 +170,7 @@ func update_icons(cur: PackedFloat32Array, player: Dictionary, now: float) -> Ar
 			icon = Icon.BLINK_R
 		elif bits & BIT_HIGHBEAM:
 			icon = Icon.HIGHBEAM
-		elif bits & BIT_BRAKE and (villain or id == ahead_id):
+		elif bits & BIT_BRAKE and (villain or id == ahead_id) and float(_brake_until.get(id, -INF)) >= now:
 			icon = Icon.BRAKE
 		if icon == -1:
 			continue
@@ -150,8 +180,10 @@ func update_icons(cur: PackedFloat32Array, player: Dictionary, now: float) -> Ar
 	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["pri"]) > float(b["pri"]))
 	_shown.clear()
 	_overlaps = 0
-	var rects: Array[Rect2] = []
-	var vp_h: float = get_viewport().get_visible_rect().size.y if is_inside_tree() else 960.0
+	var rects: Array[Rect2] = reserved.duplicate()
+	var vis: Rect2 = get_viewport().get_visible_rect() if is_inside_tree() else Rect2(0, 0, 540, 960)
+	var vp_h: float = vis.size.y
+	var inside: Rect2 = bounds if bounds.has_area() else vis.grow(-8.0)
 	for c: Dictionary in cands:
 		if _shown.size() >= MAX_ICONS:
 			break
@@ -163,6 +195,8 @@ func update_icons(cur: PackedFloat32Array, player: Dictionary, now: float) -> Ar
 		var dist: float = camera.global_position.distance_to(wp)
 		var px: float = size_px * (vp_h / 960.0) * clampf(1.25 - dist / 120.0, 0.7, 1.15)
 		var r := Rect2(sp - Vector2(px, px) * 0.5, Vector2(px, px)).grow(2.0)
+		if not inside.encloses(r):  # off screen or under the notch: must not take one of the 4 slots
+			continue
 		var clash: bool = false
 		for q: Rect2 in rects:
 			if q.intersects(r):
@@ -182,19 +216,47 @@ func update_icons(cur: PackedFloat32Array, player: Dictionary, now: float) -> Ar
 			continue
 		var c: Dictionary = _shown[i]
 		var icon: int = int(c["icon"])
-		var lit: bool = true
+		var tex: Texture2D = null
 		if icon == Icon.BLINK_L or icon == Icon.BLINK_R:
-			lit = NpcMultiMesh.blink_lit(lamp_time, int(c["id"]))   # same phase as the lamp
+			# same phase as the lamp; the dark half swaps to the dark-arrow texture (badge stays opaque)
+			tex = _tex[icon] if NpcMultiMesh.blink_lit(lamp_time, int(c["id"])) else _tex_off[icon]
 		elif icon == -2:
-			lit = false
-			icon = Icon.HAZARD
-		spr.texture = _tex[icon]
+			tex = _tex_off[Icon.HAZARD]  # hazard active, dark half: hold the slot with the dark texture
+		else:
+			tex = _tex[icon]
+		spr.texture = tex
 		spr.global_position = c["world"]
 		# fixed_size: pixel_size is relative to the viewport height at 1 m → px / vp_h / texture px
 		spr.pixel_size = float(c["px"]) / vp_h / float(ICON_PX) * 2.0 * tan(deg_to_rad(camera.fov) * 0.5)
-		spr.modulate = Color(1, 1, 1, 1.0 if lit else 0.28)
+		spr.modulate = Color.WHITE
 		spr.visible = true
 	return _shown
+
+
+## BRAKE as an event: the brake bit turning on, or a deceleration above BRAKE_DECEL, holds the icon BRAKE_HOLD s.
+## A car seen for the first time with the bit on counts as turning on.
+func _track_brakes(cur: PackedFloat32Array, now: float) -> void:
+	var dt: float = now - _last_now if is_finite(_last_now) else 0.0
+	var bits_now: Dictionary = {}
+	var v_now: Dictionary = {}
+	var n: int = cur.size() / 8
+	for k: int in n:
+		var o: int = k * 8
+		var id: int = int(cur[o])
+		var bits: int = int(cur[o + 7])
+		var v: float = cur[o + 6]
+		var was: int = int(_last_bits.get(id, 0))
+		var decel: float = (float(_last_v[id]) - v) / dt if dt > 1e-4 and _last_v.has(id) else 0.0
+		if (bits & BIT_BRAKE) and (not (was & BIT_BRAKE) or decel > BRAKE_DECEL):
+			_brake_until[id] = now + BRAKE_HOLD
+		bits_now[id] = bits
+		v_now[id] = v
+	for id: int in _brake_until.keys():
+		if float(_brake_until[id]) < now:
+			_brake_until.erase(id)
+	_last_bits = bits_now
+	_last_v = v_now
+	_last_now = now
 
 
 func _hazard_active(_id: int, _bits: int) -> bool:
