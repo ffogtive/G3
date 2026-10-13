@@ -141,6 +141,10 @@ function mkVehicle(kind) {
   const v = V.buildVehicle(kind, { color, detailed: det, seed, variant: vs !== undefined ? +vs : undefined });
   if (Q.has('pose')) V.setPose(v, Q.get('pose'));           // 오토바이 라이더 포즈 (?pose=stand)
   if (Q.has('blink')) V.setBlinker(v, Q.get('blink'), true); // 깜빡이 고정 켬 (?blink=left|right|hazard)
+  if (Q.has('fall') && v.userData.fall) { // 넘어진 바이크 (userData.fall 권장값 확인용). 바퀴도 body 로 옮겨 같이 눕힘
+    const f = v.userData.fall, b = v.userData.body; for (const w of [...v.userData.wheels]) b.attach(w);
+    b.rotation.z = (+Q.get('fall') || 1) * f.rotZ; b.position.y = f.y;
+  }
   return v;
 }
 function applyLights() {
@@ -236,7 +240,7 @@ function refreshLabels() {
       // 실제 바운딩 vs userData 치수 비교 (사이드미러 제외 못 하므로 ±0.5m 허용)
       const bb = new THREE.Box3();
       e.obj.updateMatrixWorld(true);
-      e.obj.traverse((o) => { if (o.isMesh && o.name !== 'beam') { o.geometry.boundingBox || o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
+      e.obj.traverse((o) => { if (o.isMesh && o.name !== 'beam' && !/^blink/.test(o.name) && o.name !== 'flag') { o.geometry.boundingBox || o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
       const bl = bb.max.z - bb.min.z, bw = bb.max.x - bb.min.x, bh = bb.max.y;
       const bad = Math.abs(bl - ud.length) > 0.5 || Math.abs(bh - ud.height) > 0.05 || bw - ud.width > 0.7 || bw < ud.width - 0.05;
       txt = `<b>${e.kind}</b>${ud.detailed ? ' ★' : ''}  ${ud.length}×${ud.width}×${ud.height}m  r${ud.wheelRadius}\n${s.tris}▲  ${s.meshes} meshes (${s.casters} cast)` + (bad ? `\nBBOX ${bl.toFixed(2)}×${bw.toFixed(2)}×${bh.toFixed(2)}` : '');

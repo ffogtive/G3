@@ -28,6 +28,37 @@
 //  - buildProjectile 'caltrop' | 'waterBalloon' | 'gum' (원점 = 중심, 캐시 공유 → 풀링 그대로)
 //  - buildFxProp('drone' | 'balloons' | 'helicopter' | 'ufo') : THREE.Group — 원점·userData 는 파일 끝 각 빌더 주석
 //  - 하네스: game/dev/vehicles.html?view=items (차 4종 뒤/앞 + 새 탄·소품 + 피니시 조합)
+//
+// v0.4 에셋 (깜빡이 · 폭주족 바이크 · 삼각별 세단) — 기존 차종의 지오메트리/치수는 1바이트도 안 바뀜 (회귀 해시 360/360 동일)
+//  가설: 깜빡이 빌런의 인과가 보이려면 추격캠 30~50m 앞에서 "주황 번쩍임이 차폭 밖으로 번져야" 한다
+//        → 켜질 때만 보이는 과장 램프(원래보다 6cm 크게 + 흰노랑 코어) + 화면을 향하는 후광 점(Points, 반짝 살).
+//  - setBlinker(v, side, t) : side 'left'(-X) | 'right'(+X) | 'hazard'(양쪽 동시) | null/false(끔)
+//                             t = 초(number) → BLINK_PERIOD(2/3s) 주기 0.333s 켜짐/0.333s 꺼짐(≈1.5Hz), true(기본) → 켜짐 고정
+//                             반환 = 지금 켜졌는지 (false→true 순간에 audio 'blink' 딸깍)
+//    userData.blinkers = [L, R] (Mesh 'blinkL'/'blinkR' + 자식 Points 'blinkHalo'), userData.blinkSide.
+//    꺼짐 = visible:false → 평소 모습·draw call 그대로. 켜짐 = 한쪽당 draw call 2 (램프 + 후광).
+//    setHazard(기존 비상등 메시)와 독립: 같이 켜도 깜빡이 램프가 비상등을 감싸 덮을 뿐 z-fight 없음.
+//    램프 위치는 lamp(c,'hazard') 가 자동 기록(앞·뒤·사이드미러·측면 마커) → 새 차종도 lamp 만 쓰면 깜빡이가 생긴다.
+//    방향지시등이 아닌 호박등은 lamp(..., { blink:false }) (트럭 캡 마커등·레커 붐 끝). 앞 깜빡이 없는 경운기는 blinkOnly() 로 보강.
+//    후광 크기 = MAT.blinkHalo.size (기본 2.6, 월드 m 기준 Points — FOV 를 안 따라가므로 확대 카메라에서는 보정 필요)
+//  - buildVehicle('motorbike', { color?, variant: 0..3 | seed }) 폭주족 바이크 + 라이더 (detailed 기본). MOTORBIKE_VARIANTS 이름:
+//      0 '죽창 삼단'(삼단시트·죽창 머플러·체커 깃발) 1 '로켓카울'(뾰족 카울·풍방·엎드림) 2 '쭉쭉이 핸들'(에이프 행어·쌍 삼각기) 3 '우퍼 스쿠터'(스피커 타워)
+//    치수: length 1.9~2.4 (깃발·죽창 끝 제외, 충돌용) / width 0.8 (핸들) / height = ride 포즈 라이더·깃발 꼭대기
+//    userData: 기존 규약 그대로 (kind, length, width, height, body, brake, hazard, head, blinkers, flashMats, exhaust …) +
+//      wheels [F, R]  — 2개뿐! (차는 4개). group 직속 자식, 로컬 X 회전 = 굴러감. 형광 휠 = 자식 'rimGlow'(MAT.glow)
+//      rider (Group, body 자식, 원점 = 엉덩이/시트 접점) — 포즈마다 지오메트리 1개(draw call 1). driver 도 같은 객체
+//      setPose(name) / rider.userData.setPose(name) / setPose(v, name) export — RIDER_POSES:
+//        'ride' 'stand'(스텝 위 일어서기) 'oneHand'(오른손 번쩍) 'noHands'(만세) 'lie'(엎드려 슈퍼맨) ← 바이크 위
+//        'tumble'(웅크린 공 — 굴리기용) 'sprawl'(큰대자 + 어질어질 눈) 'sit'(엉덩방아) ← 땅 위 (사람 피해 묘사 없음, 슬랩스틱)
+//      rider.userData.groundY[pose] = 땅에 놓을 때 rider 원점 높이. 넘어짐: scene.attach(rider) 로 떼고 setPose('tumble') → 굴린 뒤 'sprawl'/'sit'
+//      bike (= body) — 쓰러뜨리기: fall = { rotZ, y } 권장값 (body.rotation.z = ±rotZ, body.position.y = y; 바퀴는 body.attach 로 같이)
+//      flags [Mesh] — 깃발(피벗 = 깃대 끝). 펄럭임: flags[i].rotation.y = sin(t*9 + i) * 0.25  /  motoVariant (이름)
+//  - buildVehicle('starSedan', { color?(기본 검정, 은색 0xc3c8ce 등), variant: 0 크롬 | 1 블랙아웃 }) 고급 세단 패러디.
+//    실존 로고·이름 없음: 그릴 위 오각 별 장식 + 트렁크 별만. 두툼한 강철 앞범퍼 + 고무 범퍼가드 + 스키드 → 들이받기 연출용.
+//    detailed 기본 (운전자 'star' = 올백·금테 선글라스). userData.ramPoint (Object3D, 앞범퍼 중앙 = 충돌 이펙트 위치). length 5.53 (범퍼가드 포함)
+//  - 모든 차종 buildVehicle(kind, { variant }) 지원: seed 대신 변형 직접 지정 (지정 안 하면 기존 seed 규칙 그대로)
+//  - 하네스: vehicles.html?view=blinker (전 차종 깜빡이, 게임 추격캠) | ?view=bikes | ?view=tunnel (터널 정체, &cam=chase|portal|inside|all)
+//            타일 뷰 보조 파라미터: &kinds=motorbike:2 (변형) &pose=stand &blink=left &fall=1
 // ════════════════════════════════════════════════════════════════════════
 import * as THREE from 'three';
 import { PLAYER_COLOR, FONT_DISPLAY } from './config.js';
@@ -2158,8 +2189,9 @@ function blinkHaloTex() {
   g.addColorStop(0.62, 'rgba(255,128,0,0.26)'); g.addColorStop(1, 'rgba(255,110,0,0)');
   x.fillStyle = g; x.fillRect(0, 0, S, S);
   x.globalCompositeOperation = 'lighter';
-  for (const [w, l] of [[0.07, 0.98], [0.045, 0.62]]) for (let k = 0; k < (l > 0.9 ? 2 : 2); k++) {
-    x.save(); x.translate(h, h); x.rotate(l > 0.9 ? k * Math.PI / 2 : Math.PI / 4 + k * Math.PI / 2);
+  // 반짝 살: 긴 + 자 (w 0.07, 길이 0.98) + 짧은 × 자 (w 0.045, 길이 0.62)
+  for (const [w, l, a0] of [[0.07, 0.98, 0], [0.045, 0.62, Math.PI / 4]]) for (let k = 0; k < 2; k++) {
+    x.save(); x.translate(h, h); x.rotate(a0 + (k * Math.PI) / 2);
     const lg = x.createLinearGradient(-h * l, 0, h * l, 0);
     lg.addColorStop(0, 'rgba(255,200,80,0)'); lg.addColorStop(0.5, 'rgba(255,245,200,0.9)'); lg.addColorStop(1, 'rgba(255,200,80,0)');
     x.fillStyle = lg; x.beginPath(); x.moveTo(-h * l, 0); x.lineTo(0, -S * w); x.lineTo(h * l, 0); x.lineTo(0, S * w); x.closePath(); x.fill();
