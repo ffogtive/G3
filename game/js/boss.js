@@ -184,8 +184,10 @@ export class BossManager {
         if (ds < 42 && ds < bd) { bd = ds; best = v; }
         continue;
       }
-      const dx = Math.abs(v.x - player.x) - Math.max(0, (v.w - 2) / 2);
-      if (dx > LANE_W * 1.15) continue;
+      // 정면: 빌런이 차지한 차로(차선 물기면 2개) ±1 차로 안이면 조준 가능
+      const pl = Math.round((player.x + LANE_W * 1.5) / LANE_W);
+      if (!v.lanes().some((l) => Math.abs(l - pl) <= 1)) continue;
+      const dx = Math.abs(v.x - player.x);
       if (dx < bd) { bd = dx; best = v; }
     }
     return best;
