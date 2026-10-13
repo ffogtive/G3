@@ -821,6 +821,16 @@ function autopilot(phase) {
     // 갓길 폐쇄·터널: 차로 사이로 — 앞 틈이 더 넓은 옆 차로로 옮기고, 막히면 경적
     if (traffic.shoulderClosed) {
       const front = player.s + player.len / 2;
+      // 추월 차로('pass')가 있으면 그 차로로 가서 머문다 (원흉 옆 멈칫 구간은 경적·대기)
+      const passLane = (traffic.laneKind || []).indexOf('pass');
+      if (passLane >= 0) {
+        if (player.lane !== passLane) {
+          const dir = passLane < player.lane ? -1 : 1;
+          if (!traffic.canMergeInto(player.lane + dir, player, 0.5)) { out[dir < 0 ? 'left' : 'right'] = true; autoNext = G.realTime + 0.3; }
+          else { out.horn = true; autoNext = G.realTime + 1.0; }
+        } else if (traffic.gapAhead(player.lane, front, player).gap < 4) { out.horn = true; autoNext = G.realTime + 1.0; }
+        return out;
+      }
       const gapIn = (l) => traffic.gapAhead(l, front - (l === player.lane ? 0 : player.len + 0.8), player).gap;
       const cur = gapIn(player.lane);
       let best = player.lane, bg = cur;

@@ -154,7 +154,7 @@ export class Traffic {
     this.jamSrcT = 0;
     for (let l = 0; l < NUM_LANES; l++) {
       const lk = this.laneKind[l];
-      const gapOf = () => lk === 'spaced' ? 7 + rng() * 5 : lk === 'train' ? 1.2 + rng() * 0.5 : lk === 'flow' ? 2.6 + rng() * 2 : (1.5 + rng() * 1.7) / density;
+      const gapOf = () => lk === 'spaced' ? 7 + rng() * 5 : lk === 'pass' ? 6 + rng() * 4 : lk === 'train' ? 1.2 + rng() * 0.5 : lk === 'flow' ? 2.6 + rng() * 2 : (1.5 + rng() * 1.7) / density;
       let cursor = frontRear[l] - (lk === 'spaced' ? 9 + rng() * 4 : 2.2 + rng() * 1.6) - (villainLanes.has(l) && zig ? 6 : 0);
       while (cursor > tail) {
         const kind = pickWeighted(rng, NPC_KINDS);
@@ -365,7 +365,8 @@ export class Traffic {
             this.onMiniAct?.(c, m.type);
           }
           m.cool = 3;
-        } else {
+        } else if (m.acted < 2) {
+          // 잔챙이 투척은 지나갈 때 최대 2번 (옆에 붙어 기어가는 동안 무한 투척 금지)
           m.acted++;
           m.cool = 2.0 + this.rng() * 1.2;
           this.onMiniAct?.(c, m.type);
@@ -399,6 +400,7 @@ export class Traffic {
         if (lk === 'train') { v0 = jamV * 1.0; T = 0.45; s0 = 1.2; aMax = 1.6; }                 // 쉬지 않고 굴러가는 기차
         else if (lk === 'flow') { v0 = jamV * 0.95 * c.personal; T = 0.8; s0 = 2.2; aMax = 1.6; } // 꾸준한 흐름
         else if (lk === 'spaced') { v0 = jamV * 1.05 * c.personal; T = 1.6; s0 = 5.5; aMax = 1.4; } // 거리 두는 차로
+        else if (lk === 'pass') { v0 = jamV * (this.jamShape?.passV ?? 2.2) * c.personal; T = 1.0; s0 = 3.0; aMax = 2.0; } // 유일한 추월 차로 (빌런 옆에서만 멈칫)
         else {
           // 차선 단위 stop & go (같은 차선은 같이 움직임)
           const lf = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.42 + c.lane * 1.9));
@@ -415,7 +417,7 @@ export class Traffic {
       let gap = Infinity, dv = 0, lv = 0;
       if (L) { gap = L.gap; lv = L.car.v; dv = c.v - lv; }
       // 해방 전: 빌런 옆을 지나가지 못함 (빌런이 막는 차선은 가상의 벽)
-      if (!c.released && !c.isWall && !c.isCheater) {
+      if (!c.released && !c.isWall && !c.isCheater && this.laneKind?.[Math.min(NUM_LANES - 1, c.lane)] !== 'pass') {
         const g2 = (this.frontLine - 3 - (this.zigzag ? 5 : 0)) - (c.s + c.len / 2);
         if (g2 < gap) { gap = g2; dv = c.v - this.frontV; lv = this.frontV; }
       }
@@ -544,10 +546,12 @@ export class Traffic {
       if (S.type === 'yield' && this.jamSrcT <= 0) {
         // 옆 차로 톱니: 빌런 옆(-20~+5m) 차들이 '들어오나?' 하고 차례로 멈칫 → 그 차로에 틈(포켓)이 생김
         const lane = S.lane ?? 0;
-        const cands = (this.buckets[lane] || []).filter((c) => this.cars.includes(c) && !c.isWall && !c.released && c.brakeT <= 0 && c.s > v.s - 20 && c.s < v.s + 5);
+        // 차마다 한 번만 멈칫하고 지나간다 (계속 붙잡으면 추월 차로가 얼어붙음)
+        const cands = (this.buckets[lane] || []).filter((c) => this.cars.includes(c) && !c.isWall && !c.released && !c.yielded && c.brakeT <= 0 && c.s > v.s - 20 && c.s < v.s + 5);
         if (cands.length) {
           const c = cands.sort((a, b) => b.s - a.s)[0];
           c.brakeT = S.hold ?? 2.5;
+          c.yielded = true;
           c.yieldPocket = t;
           this.emitBrakeWave(lane, c.s - c.len / 2 - 1, 0.7, { amp: 0.8 });
         }

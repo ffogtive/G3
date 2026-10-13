@@ -59,6 +59,29 @@
 //  - 모든 차종 buildVehicle(kind, { variant }) 지원: seed 대신 변형 직접 지정 (지정 안 하면 기존 seed 규칙 그대로)
 //  - 하네스: vehicles.html?view=blinker (전 차종 깜빡이, 게임 추격캠) | ?view=bikes | ?view=tunnel (터널 정체, &cam=chase|portal|inside|all)
 //            타일 뷰 보조 파라미터: &kinds=motorbike:2 (변형) &pose=stand &blink=left &fall=1
+//
+// v0.4.1 에셋 (V04_SPEC 단계 4·10·13·17 + 부록 A) — 기존 차종 지오메트리/치수 그대로 (회귀 해시 434/434 동일: 20종×detailed×변형×색 + 투사체·소품·도로·터널)
+//  가설: 판 차별화 = 빌런의 '보이는' 시그니처 행동 + 판마다 다른 무대 → 깜빡이 템포·조향·손상·숨은 위반 단서를 추격캠에서 읽히는 덩어리로.
+//  ◆ 단계 4  setBlinker(v, side, t, { tempo: 1|2|'hyper', period, halo: 1.8|true, wet }) — 4번째 인자 없으면 이전과 100% 동일
+//            BLINK_PERIOD_HYPER(1/3s), BLINK_HALO_VILLAIN(1.8), setBlinkHalo(v, k), setBlinkWet(v, on)(빗길 노면 반사 줄)
+//            setSteer(v, rad) — detailed: userData.steerWheels(가장 앞 축).rotation.y (order 'YXZ'), ±STEER_MAX 30° 클램프. 비detailed: body 요 ±2°
+//  ◆ 단계 10 kind 'beginner'(민트 경차 + 뒷유리 '초보운전' 스티커, v0 모닝형/v1 박스형, detailed = 겁먹은 운전자)
+//            kind 'unmarked'(진회색 암행순찰차: 점등 전 평범, setStrobe → 그릴·뒷선반 적청 'police' + 뒷유리 LED '정차하세요' userData.strobeSign)
+//            buildFxProp('crashScene') 갓길 추돌사고 현장 (앞차 L3 뒤 손상·뒤차 L3 앞 손상+보닛·경찰차·삼각대·콘·파편·운전자 2명, userData.update(t))
+//            buildVehicle(kind, { sticker: 'beginner'|'myLane' }) — passenger 계열 뒷유리 스티커 (+1 draw call), userData.sticker
+//  ◆ 부록 A  buildVehicle(kind, { plate: 'normal'|'none'|'covered'|'temp' }) — 뒤 번호판만 (plate() 쓰는 전 차종). 지오메트리 캐시 키에 포함, draw call 동일
+//            buildVehicle('van', { passengers: 0..9 }) — 탑승 인원(운전자 포함). 옆유리 양면 머리 실루엣(열 안 0.33m 엇갈림), 뒷유리 마지막 열, 앞유리 앞줄
+//            userData.plate / userData.passengers 로 되읽기
+//  ◆ HP     setDamage(v, 0..4, { focus: 'both'|'rear'|'front' }) — 1 범퍼(긁힘·깨진 왼 테일램프) 2 보닛 들림 3 왼 헤드램프 깨짐+뒤범퍼 덜렁 4 구김·지붕 눌림·유리 금
+//            player 계열 4종 + passenger·포터캡 계열 전부. userData.damage, damageMesh, smokePoint(연기 fx 위치, 전 승용·포터캡 차종)
+//  ◆ 단계 13 buildFxProp('angelRing'|'wings'|'devilHorns'|'ruler'|'rentFlag'), buildProjectile('phoneMount'|'charger')
+//            (도로 쪽 소품·데칼·갠트리·합류부·비상주차대·빗길은 scenery.js)
+//  ◆ 단계 17 buildVehicle('motorbike', { lod: true }) 라이더·깃발 병합 = 2 draw call (setPose 없음, userData.lod)
+//            buildVehicle('motorbike', { leader: true }) 분리형 깃대 userData.flagPole(깃대 Mesh 아래 LED·깃발) + userData.leds + setLeaderLed(v, on)
+//            RIDER_POSES += 'dismount' 'run' 'run2' 'cower' (P1 에서 lie/sprawl/tumble/sit 금지 — 아래 RIDER_POSES 주석), setKickstand(v, on), KICK_LEAN
+//            kind 'chairmanSedan' 회장님 세단 (삼각김밥 엠블럼·세로 크롬 그릴·정장 넥타이 운전자, userData.tapFinger·ramPoint)
+//  - 공통 추가 userData: bodyMesh(차체 메시), steerWheels, steer, smokePoint, blinkHalo, blinkWet
+//  - 하네스: ?view=steer | stage56 | violators | damage | props1(&tiles=1) | p1(&tiles=1, &tl=alarm|wave&ws=s)  + 타일 뷰 &plate= &pax= &sticker= &dmg= &steer=(도) &lod &leader
 // ════════════════════════════════════════════════════════════════════════
 import * as THREE from 'three';
 import { PLAYER_COLOR, FONT_DISPLAY } from './config.js';
@@ -2382,6 +2405,86 @@ function buildStarSedan(c, p) {
 }
 
 // ────────────────────────────────────────────────────────────────────────
+// '회장님 세단' (v0.4.1, P1 메아리터널 피니셔) — kind 'chairmanSedan'. 실존 로고·차명·'벤츠'·'삼각별' 없음.
+//  검정 대형 의전 세단 (5.8m) + 세로 살 크롬 그릴 + 삼각김밥 엠블럼(후드 오너먼트·그릴·트렁크) + 짙은 썬팅 뒷좌석 + 크롬 몰딩.
+//  운전자 = 회장님(희끗한 올백·선글라스·무표정) + 흰 셔츠 + 검정 정장 깃 + 버건디 넥타이. 들이받기 연출용 강철 범퍼(ramPoint) 유지.
+//  userData.tapFinger (Mesh, 피벗 = 손가락 관절: rotation.z = 톡톡, 인내 게이지가 오를수록 빠르게), ramPoint, kimbap (후드 오너먼트 메시 아님 → 차체에 구움)
+// ────────────────────────────────────────────────────────────────────────
+// XY 평면(±Z 를 보는) 볼록 다각형 기둥: pts = [[x,y]...] (볼록), 중심 (cz), 두께 t
+function polyPrism(g, pts, cz, t, col, front = null) {
+  let cx = 0, cy = 0; for (const [x, y] of pts) { cx += x / pts.length; cy += y / pts.length; }
+  const ctr = g._x(cx, cy, cz);
+  for (const s of [-1, 1]) { const z = cz + (s * t) / 2, C0 = g._x(cx, cy, z); for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; g.tri(C0, g._x(a[0], a[1], z), g._x(b[0], b[1], z), s < 0 && front !== null ? front : col, ctr); } }
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; g.quad(g._x(a[0], a[1], cz - t / 2), g._x(b[0], b[1], cz - t / 2), g._x(b[0], b[1], cz + t / 2), g._x(a[0], a[1], cz + t / 2), col, ctr); }
+}
+// 둥근 삼각형 (삼각김밥) 점들: 밑변 폭 w, 높이 h, 모서리 반지름 r (원점 = 밑변 중앙)
+function kimbapPts(w, h, r) {
+  const A = [0, h], B = [w / 2, 0], Cc = [-w / 2, 0], P = [];
+  for (const [V0, V1, V2] of [[A, B, Cc], [B, Cc, A], [Cc, A, B]]) { // 각 꼭짓점을 r 만큼 안쪽 원호로
+    const d1 = [V1[0] - V0[0], V1[1] - V0[1]], d2 = [V2[0] - V0[0], V2[1] - V0[1]];
+    const l1 = Math.hypot(...d1), l2 = Math.hypot(...d2);
+    const p1 = [V0[0] + (d2[0] / l2) * r * 1.6, V0[1] + (d2[1] / l2) * r * 1.6], p2 = [V0[0] + (d1[0] / l1) * r * 1.6, V0[1] + (d1[1] / l1) * r * 1.6];
+    const m = [(p1[0] + p2[0]) / 2 * 0.7 + V0[0] * 0.3, (p1[1] + p2[1]) / 2 * 0.7 + V0[1] * 0.3];
+    P.push(p1, m, p2);
+  }
+  return P;
+}
+// 삼각김밥 엠블럼 (밥 = 흰 둥근 삼각 / 김 = 검정 띠 앞뒤로 감쌈). 원점 = 밑변 중앙, ±Z 양면
+function kimbap(g, x, y, z, s, t = 0.03, rim = C.chrome) {
+  g.at(x, y, z, 0, 0, 0, s, (q) => {
+    polyPrism(q, kimbapPts(1.0, 0.9, 0.12), 0, t * 1.6 / s, rim);                       // 크롬 테
+    polyPrism(q, kimbapPts(0.86, 0.78, 0.1).map(([a, b]) => [a, b + 0.05]), 0, t * 2.2 / s, 0xf8f8f4); // 밥
+    q.box(-0.17, 0.17, 0.04, 0.4, -t * 1.25 / s, t * 1.25 / s, 0x111214);               // 김 띠
+  });
+}
+function buildChairman(c, p) {
+  const col = p.color, chrome = C.chrome;
+  const P = { L: 5.8, W: 2.0, yb: 0.32, hood: 0.92, belt: 0.97, roofY: 1.5, roofT: 0.08, col,
+    cab: { zb0: -0.55, zb1: 1.62, zt0: 0.05, zt1: 1.18, inB: 0.06, inT: 0.2 },
+    wheel: { r: 0.41, w: 0.34, zF: -1.85, zR: 1.75, out: 0.03, o: { rim: 0xd7dde5, cap: chrome, hubK: 0.72, spokeCol: 0x8e97a2 } },
+    tail: 'bar', tailH: 0.18, tailIn: 0.26, tailAmb: 0.16, tailWrap: 0.22, hmsl: 'trunk', bumper: shade(col, 0.92), grille: 0x0b0c0f, grilleW: 0.46, headH: 0.12,
+    pillarC: 0.26, pillarCz: 0.36, pillarBv: 0.44, seatV: 0.36, glassCol: 0x0a0d14, sill: true, flareCol: shade(col, 0.8),
+    driver: { head: 'chairman', shirt: 0xf4f4f2, scale: 1.3 } };
+  const r = passenger(c, P);
+  const B = c.body, hw = r.hw, hl = r.hl, zf = r.zf;
+  // ── 크게 솟은 크롬 그릴 (세로 살 9줄) + 그릴 위 삼각김밥 + 후드 오너먼트
+  const gy0 = r.yb + 0.22, gy1 = r.hood + 0.04, gw = 0.42;
+  B.box(-gw - 0.05, gw + 0.05, gy0 - 0.05, gy1 + 0.03, zf - 0.08, zf + 0.04, chrome, '', { U: 0xf4f6f8 });
+  B.box(-gw, gw, gy0, gy1 - 0.02, zf - 0.09, zf - 0.07, 0x0b0c0f);
+  for (let i = 0; i < 9; i++) { const x = -gw + 0.05 + i * ((gw * 2 - 0.1) / 8); B.box(x - 0.016, x + 0.016, gy0, gy1 - 0.02, zf - 0.105, zf - 0.08, chrome); }
+  kimbap(B, 0, (gy0 + gy1) / 2 - 0.08, zf - 0.11, 0.2, 0.012);
+  B.box(-0.035, 0.035, r.hood, r.hood + 0.05, zf + 0.12, zf + 0.2, chrome);                          // 오너먼트 받침
+  kimbap(B, 0, r.hood + 0.05, zf + 0.16, 0.2, 0.014);                                                 // 후드 위 삼각김밥 (서 있음)
+  // ── 강철 앞범퍼 + 크롬 띠 + 범퍼가드 (들이받기용)
+  const fz0 = -hl - 0.14, fz1 = -hl + 0.2;
+  B.box(-hw - 0.04, hw + 0.04, r.yb - 0.08, r.yb + 0.26, fz0, fz1, shade(col, 0.85), 'D', { U: shade(col, 1.0) });
+  B.box(-hw - 0.045, hw + 0.045, r.yb + 0.14, r.yb + 0.19, fz0 - 0.008, fz1 - 0.04, chrome);
+  for (const s of SIDES) B.box(...xr(s, 0.55, 0.7), r.yb - 0.1, r.yb + 0.32, fz0 - 0.06, fz0 + 0.1, 0x15161a);
+  // ── 크롬 몰딩: 창틀 + 벨트라인 + 문 아래 + 트렁크 띠, 트렁크 삼각김밥, 듀얼 크롬 머플러, 긴 안테나
+  B.sub(outsetF(r.F, 0.018), 0, 1, 0, 1, 0, 0.05, chrome, 'DU');
+  for (const s of SIDES) {
+    B.box(...xr(s, hw - 0.005, hw + 0.014), r.belt - 0.06, r.belt - 0.03, zf + 0.2, r.zr - 0.15, chrome);
+    B.box(...xr(s, hw - 0.005, hw + 0.016), r.yb + 0.04, r.yb + 0.08, P.wheel.zF + 0.5, P.wheel.zR - 0.5, chrome);
+  }
+  B.box(-0.5, 0.5, r.belt - 0.13, r.belt - 0.1, r.zr + 0.02, r.zr + 0.05, chrome);
+  kimbap(B, 0, r.belt - 0.09, r.zr + 0.065, 0.13, 0.01);
+  for (const s of SIDES) B.box(...xr(s, 0.56, 0.72), r.yb - 0.02, r.yb + 0.06, hl - 0.02, hl + 0.05, chrome, '', { K: 0x111214 });
+  B.box(hw - 0.2, hw - 0.18, r.belt, r.belt + 0.7, r.zr - 0.3, r.zr - 0.28, 0x15161a);
+  // ── 회장님 정장: 검정 깃 + 버건디 넥타이 + 핸들 위 손 (톡톡 손가락은 별도 메시)
+  if (c.detailed && c.driverPos) {
+    const [dx, dy, dz] = c.driverPos;
+    for (const s of SIDES) B.box(dx + s * 0.11 - 0.06, dx + s * 0.11 + 0.06, r.belt, dy + 0.02, dz - 0.106, dz - 0.098, 0x111214); // 정장 깃
+    B.box(dx - 0.035, dx + 0.035, dy - 0.22, dy + 0.015, dz - 0.112, dz - 0.104, 0x8a1828);                                       // 넥타이
+    B.box(dx - 0.045, dx + 0.045, dy - 0.03, dy + 0.02, dz - 0.115, dz - 0.104, 0x6a1020);                                       // 매듭
+    B.box(dx - 0.09, dx + 0.01, r.belt + 0.23, r.belt + 0.29, dz - 0.4, dz - 0.32, 0xe8bb92);                                    // 핸들 위 오른손
+    const F = new GB(); F.box(0, 0.075, -0.016, 0.016, -0.018, 0.018, 0xe8bb92);
+    c.extra.push({ key: 'tapFinger', gb: F, mat: 'body', pos: [dx + 0.01, r.belt + 0.29, dz - 0.36], name: 'tapFinger' });
+  }
+  c.points.ramPoint = [0, r.yb + 0.1, fz0 - 0.06];
+  return { L: Math.round((hl * 2 + 0.2) * 100) / 100, W: P.W, r, exhaust: [0.64, r.yb, hl] }; // 유리 = 기본(회장님 얼굴이 보이게)
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // 방향지시등(깜빡이) 지오메트리
 //  lamp(c,'hazard') 가 기록한 박스를 좌(-X)/우(+X)로 나눠 "켜졌을 때만 보이는" 과장 램프로 굽는다.
 //  - 원래 램프보다 바깥으로 6cm·위아래 4cm·바라보는 면으로 6cm 크게 + 거의 흰 노랑 코어가 1.2cm 솟음 → 꺼진 모습(차체 굽기)은 그대로
@@ -2493,6 +2596,8 @@ const KINDS = {
   // v0.4.1: 1-5·1-6 전용 (초보운전 피해차 / 암행순찰차)
   beginner: { build: buildBeginner, variants: 2, color: 0x9fe3c9 },
   unmarked: { build: buildUnmarked, variants: 1, color: 0x3b3f46 },
+  // v0.4.1: P1 메아리터널 피니셔 (회장님 세단)
+  chairmanSedan: { build: buildChairman, detailed: true, color: 0x0c0d10 },
 };
 export const VEHICLE_KINDS = Object.keys(KINDS);
 

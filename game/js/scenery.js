@@ -806,6 +806,22 @@ function buildTunnelGeo(length, night, variant, opts) {
     const xw = sd * (TN.wallX - 0.03);
     qfC(A, [xw, 1.0, z0], [xw, 1.0, z1], [xw, TN.springY + 1.0, z1], [xw, TN.springY + 1.0, z0], black, black, glowW, glowW, [-sd, 0, 0]);
   }
+  // ── 8) (opt-in) 비상구 문 + 보도 유도 표지 (v0.4.1 P1 라이더 대피 목표). 오른쪽 벽 s = length/2 (기존 녹색 비상구 표지 바로 아래)
+  if (opts.exit) {
+    const x = TN.wallX, se = length * 0.5;
+    S.box(x - 0.015, TN.walkH, -se, 0.03, 1.8, 1.32, 0x1f8f4f);                          // 녹색 문틀
+    S.box(x - 0.04, TN.walkH + 0.04, -se, 0.03, 1.68, 1.1, 0xd9dcd2);                     // 문짝
+    S.box(x - 0.07, TN.walkH + 0.95, -se, 0.04, 0.07, 0.8, 0x8e97a2);                     // 푸시바
+    S.box(x - 0.05, TN.walkH + 1.5, -se + 0.3, 0.02, 0.22, 0.3, 0x9fd0ff);                // 작은 창
+    for (let k = -3; k <= 3; k++) {                                                        // 유도 표지 (10m 간격, 문 쪽 화살표)
+      if (k === 0) continue;
+      const sz = -se - k * 10, dir = k > 0 ? 1 : -1;                                       // dir: +1 → 문이 +Z 쪽
+      N.box(x - 0.03, 0.55, sz, 0.03, 0.26, 0.62, TPAL.exitG);
+      N.box(x - 0.05, 0.62, sz + dir * 0.12, 0.02, 0.12, 0.2, 0xffffff);                   // 화살표 몸
+      N.box(x - 0.05, 0.6, sz + dir * 0.24, 0.02, 0.16, 0.06, 0xffffff);                   // 화살촉
+      N.box(x - 0.05, 0.6, sz - dir * 0.14, 0.02, 0.16, 0.1, 0xffffff);                    // 달리는 사람(약식)
+    }
+  }
   return { road: G.build(), shell: S.build(), glow: N.build(), add: A.build() };
 }
 
@@ -820,7 +836,7 @@ function buildTunnelGeo(length, night, variant, opts) {
 export function buildTunnelSegment(length = SEG_LEN, opts = {}) {
   const night = !!opts.night, seed = opts.seed | 0;
   const variant = ((seed % ROAD_VARIANTS) + ROAD_VARIANTS) % ROAD_VARIANTS;
-  const key = `tunnel|${length}|${night ? 1 : 0}|${variant}|${opts.band ?? '-'}|${opts.fans === false ? 0 : 1}`;
+  const key = `tunnel|${length}|${night ? 1 : 0}|${variant}|${opts.band ?? '-'}|${opts.fans === false ? 0 : 1}` + (opts.exit ? '|exit' : '');
   const geo = cached(_tunnelCache, key, () => buildTunnelGeo(length, night, variant, opts));
   const g = new THREE.Group();
   g.name = 'tunnelSegment';
@@ -833,8 +849,69 @@ export function buildTunnelSegment(length = SEG_LEN, opts = {}) {
     kind: 'tunnelSegment', length, night, seed, wallX: TN.wallX, crownY: TN.crownY, capY: TN.capY, shoulder: false,
     ambience: TUNNEL_AMBIENCE, drawCalls: 4,
   };
+  if (opts.exit) { // v0.4.1 비상구 위치 (라이더 대피 목표점, 보도 위)
+    const ep = new THREE.Object3D(); ep.name = 'exitPoint'; ep.position.set(TN.wallX - 0.6, TN.walkH, -length * 0.5); g.add(ep);
+    g.userData.exitPoint = ep;
+  }
   return g;
 }
+
+// ── v0.4.1 터널 천장등 제어 (P1): 등기구를 덮는 발광 덮개(첫 호출 때 세그먼트마다 생성, 지오메트리는 길이별 공유) + 공유 셰이더 재질
+//  'alarm' = 빨간 비상 점멸(1.6Hz), 'wave' = 흰빛 순차 점등(파도 앞에서부터, 막 켜진 등은 '띵' 하고 더 밝게) — 아직 안 켜진 등은 빨간 점멸 유지
+//  'normal' = 덮개 숨김(원래 주황 나트륨등). 포인트 라이트 없음 (emissive 만) → 덮개 켜져도 세그먼트당 +1 draw call
+const TL_U = { uMode: { value: 1 }, uT: { value: 0 }, uWave: { value: -1e9 }, uRed: { value: new THREE.Color(0xff2a1c) }, uWhite: { value: new THREE.Color(0xf2f7ff) } };
+const TL_MAT = new THREE.ShaderMaterial({
+  name: 'scenery.tunnelCtl', uniforms: TL_U,
+  vertexShader: /* glsl */`attribute float lz; varying float vZ;
+    void main() { vZ = (modelMatrix * vec4(0.0, 0.0, lz, 1.0)).z; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`uniform float uMode; uniform float uT; uniform float uWave; uniform vec3 uRed; uniform vec3 uWhite; varying float vZ;
+    void main() {
+      float blink = step(0.5, fract(uT * 1.6));
+      vec3 col = uRed * mix(0.07, 1.0, blink);
+      if (uMode > 1.5) { float lit = step(vZ, uWave); float pop = smoothstep(6.0, 0.0, uWave - vZ) * lit; col = mix(col, uWhite * (1.0 + 0.9 * pop), lit); }
+      gl_FragColor = vec4(col, 1.0);
+      #include <colorspace_fragment>
+    }`,
+});
+const POOL_RED = MAT.additive.clone(); POOL_RED.color.set(0xff3a2a); POOL_RED.name = 'scenery.additiveRed';
+function tunnelLightGeo(length) {
+  return cached(_tunnelCache, 'ctl|' + length, () => {
+    const G = new GB(), LZ = [];
+    const push = (fn, lz) => { const n0 = G.p.length / 3; fn(); for (let i = n0; i < G.p.length / 3; i++) LZ.push(lz); };
+    const LA = 0.21;
+    for (const sd of [-1, 1]) {
+      const lx = sd * TN.wallX * Math.cos(LA) - sd * 0.12, ly = TN.springY + (TN.crownY - TN.springY) * Math.sin(LA) - 0.05, rz = sd * 0.6;
+      for (let s = 1; s < length; s += 2) push(() => G.box(lx - sd * 0.1, ly - 0.14, -s - 0.75, 0.05, 0.28, 1.44, 0xffffff, { rz }), -s - 0.75);
+      const cx = sd * 4.3, cy = TN.springY + (TN.crownY - TN.springY) * Math.sqrt(1 - (4.3 / TN.wallX) ** 2) - 0.12 - 0.02;
+      for (let s = 3; s < length; s += 4) push(() => qf(G, [cx - 0.27, cy, -s + 0.05], [cx + 0.27, cy, -s + 0.05], [cx + 0.27, cy, -(s + 2.25)], [cx - 0.27, cy, -(s + 2.25)], 0xffffff, [0, -1, 0]), -(s + 1.1));
+    }
+    const geo = G.build(); geo.setAttribute('lz', new THREE.Float32BufferAttribute(LZ, 1));
+    return geo;
+  });
+}
+/**
+ * setTunnelLights(target, mode, t, opts) (추가 export) — target: 터널 세그먼트 | 배열 | 아무 Group(자식 중 tunnelSegment 를 찾음)
+ *  mode: 'normal' | 'alarm' | 'wave'.  t = 초(점멸 위상).  opts.waveS = 흰빛이 도달한 월드 s (s ≥ waveS 인 등이 켜짐 → 값을 줄여 가면
+ *  앞에서 뒤로 '띵띵띵' 번짐) 또는 opts.waveZ(월드 z). 재질·유니폼이 공유라 매 프레임 한 번만 불러도 모든 세그먼트에 적용.
+ *  빛웅덩이(가산 'light' 메시)도 alarm 때 빨갛게, 그 외엔 원래 주황.
+ */
+export function setTunnelLights(target, mode = 'normal', t = 0, opts = {}) {
+  const segs = [];
+  const visit = (o) => { if (!o) return; if (Array.isArray(o)) { o.forEach(visit); return; } if (o.userData?.kind === 'tunnelSegment') segs.push(o); else if (o.children) o.children.forEach(visit); };
+  visit(target);
+  const on = mode === 'alarm' || mode === 'wave';
+  for (const seg of segs) {
+    let m = seg.userData.ctlLights;
+    if (!m && on) { m = new THREE.Mesh(tunnelLightGeo(seg.userData.length), TL_MAT); m.name = 'ctlLights'; m.renderOrder = 2; seg.add(m); seg.userData.ctlLights = m; }
+    if (m) m.visible = on;
+    const pool = seg.getObjectByName('light'); if (pool) pool.material = mode === 'alarm' ? POOL_RED : MAT.additive;
+    seg.userData.lightMode = mode;
+  }
+  TL_U.uMode.value = mode === 'wave' ? 2 : 1; TL_U.uT.value = t;
+  TL_U.uWave.value = opts.waveZ !== undefined ? opts.waveZ : opts.waveS !== undefined ? -opts.waveS : -1e9;
+  return segs.length;
+}
+export const TUNNEL_LIGHT_MODES = ['normal', 'alarm', 'wave'];
 /** 터널 안 권장 조명 (추가 export): 코어가 플레이어가 터널 안일 때 world.hemi/sun/fog 를 이 값으로 보간 */
 export const TUNNEL_AMBIENCE = Object.freeze({ hemiSky: 0xffdcb4, hemiGround: 0x5a4632, hemiI: 1.45, sunI: 0.55, fog: 0x3a2c22, fogNear: 50, fogFar: 260 });
 

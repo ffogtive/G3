@@ -91,7 +91,8 @@ export const APPROACH_BY_ID = {
 export const JAMSHAPE_BY_ID = {
   1: { lanes: ['train', 'packed', 'flow', 'flow'] },                          // 1차로만 쉬지 않는 기차, 2차로 누수
   3: { lanes: ['spaced', 'spaced', 'packed', 'packed'] },                     // 오른쪽 깔때기(원인은 왼쪽, 빨강은 오른쪽)
-  5: { lanes: ['spaced', 'spaced', 'packed', 'packed'], sources: [{ type: 'yield', lane: 0, hold: 2.5, period: 2.5 }] },   // 옆 차로 톱니 + 뒤는 원활
+  // 5: 1차로 = 유일한 추월 차로(벽 없음, 빌런보다 빠름) — 단 좀비 깜빡이 옆에선 '들어오나?' 하고 차례로 멈칫(톱니)
+  5: { lanes: ['pass', 'spaced', 'packed', 'packed'], passV: 2.6, sources: [{ type: 'yield', lane: 0, hold: 1.2, period: 1.6 }] },
   6: { lanes: ['packed', 'flow', 'flow', 'flow'] },                           // 1차로 증폭 아코디언 (파동은 tailgater 모듈이 냄)
 };
 
@@ -273,6 +274,8 @@ export function stageFromEntry(e) {
     approach: e.approach || APPROACH_BY_ID[e.id] || null,
     jamShape: e.jam_shape_spec || JAMSHAPE_BY_ID[e.id] || null,
   };
+  // 추월 차로('pass')에는 앞줄 벽을 두지 않는다 (그 차로가 접근 경로)
+  if (stage.jamShape?.lanes) stage.jamShape.lanes.forEach((k, l) => { if (k === 'pass' && stage.frontRow) delete stage.frontRow[l]; });
   return stage;
 }
 

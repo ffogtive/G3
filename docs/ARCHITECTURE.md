@@ -97,6 +97,58 @@ export const MOTORBIKE_VARIANTS = ['죽창 삼단','로켓카울','쭉쭉이 핸
 starSedan 5.53 × 1.96 × 1.54 (범퍼가드 포함), ~1,700▲, 7 draw call.
 라이더 분리(슬랩스틱): `scene.attach(v.userData.rider)` → `setPose('tumble')` 으로 굴리고 → `'sprawl'`/`'sit'` + `groundY`. 피·부상 묘사 없음(어질어질 눈).
 
+### vehicles.js v0.4.1 추가 (V04_SPEC 단계 4·10·13·17 + 부록 A)
+가설: 판 차별화 = 빌런의 **보이는** 시그니처 행동 + 판마다 다른 무대. 그래서 깜빡이 템포·조향·손상·숨은 위반 단서를 추격캠에서 읽히는 덩어리로 만든다 (✅ 하네스 `?view=steer|stage56|violators|damage|props1|p1`).
+기존 차종의 지오메트리·치수는 그대로다 (회귀 해시 434/434 동일). 새 옵션은 기본값일 때 캐시 키가 바뀌지 않는다.
+
+```js
+// 단계 4 — 깜빡이 템포·후광·조향 (4번째 인자를 안 주면 이전과 100% 같다)
+export const BLINK_PERIOD_HYPER = 1 / 3, BLINK_HALO_VILLAIN = 1.8;
+setBlinker(v, side, t, { tempo: 1 | 2 | 'hyper', period?, halo?: number | true, wet?: boolean }) : boolean
+setBlinkHalo(v, k)            // 후광 배율 (차량에 기억). 배율별 공유 재질 + 렌더 직전 MAT.blinkHalo.size × k 동기화
+setBlinkWet(v, on)            // 빗길: 깜빡이 램프 아래 노면 반사 줄 (가산, 램프와 같이 깜빡임)
+export const STEER_MAX = π/6, STEER_BODY_YAW = 2°;
+setSteer(v, rad) : number     // rad > 0 = 왼쪽(−X). detailed: steerWheels.rotation.y (order 'YXZ' → 굴러감 rotation.x 와 독립)
+                              // 비detailed: body.rotation.y = (rad/STEER_MAX)·2°.  ±30° 로 과장해서 써도 됨 (진짜 차로 변경 텔)
+// 단계 10 — 1-5·1-6 전용
+buildVehicle('beginner', { variant: 0 | 1, detailed? })   // 민트 경차 + 뒷유리 '초보운전' 스티커 (detailed = 겁먹은 운전자)
+buildVehicle('unmarked', { detailed? })                    // 진회색 암행순찰차. setStrobe(v, t) → 그릴·뒷선반 적청 + 뒷유리 LED '정차하세요'
+buildFxProp('crashScene')                                  // 갓길 추돌사고 현장 묶음, userData.update(t) 로 비상등·경광등
+buildVehicle(kind, { sticker: 'beginner' | 'myLane' })     // passenger 계열 뒷유리 스티커
+// 부록 A — 숨은 위반 차량
+buildVehicle(kind, { plate: 'normal' | 'none' | 'covered' | 'temp' })   // 뒤 번호판 (none 빈 브래킷 / covered 신문지+테이프 / temp 빨간 사선 임시)
+buildVehicle('van', { passengers: 0..9 })                               // 탑승 인원(운전자 포함) 머리 실루엣
+// HP 손상
+setDamage(v, level 0..4, { focus: 'both' | 'rear' | 'front' }) : number
+// 단계 13 — 판 소품
+buildFxProp('angelRing' | 'wings' | 'devilHorns' | 'ruler' | 'rentFlag'); buildProjectile('phoneMount' | 'charger')
+// 단계 17 — P1
+buildVehicle('motorbike', { lod: true })      // 라이더(ride)·깃발 병합 → draw call 2 (차체 + 네온). 포즈 교체 없음
+buildVehicle('motorbike', { leader: true })   // 분리형 리더 깃대 + 무지개 LED
+setLeaderLed(v, on); setKickstand(v, on); export const KICK_LEAN = 0.16;
+RIDER_POSES += 'dismount' | 'run' | 'run2' | 'cower'   // P1 판에서는 lie·sprawl·tumble·sit 금지 (라이더 선대피, 빈 바이크만 넘어짐)
+buildVehicle('chairmanSedan')                // 회장님 세단 (삼각김밥 엠블럼, 실존 로고·차명 없음)
+```
+
+| userData (추가) | 대상 | 내용 |
+|---|---|---|
+| `bodyMesh` | 전 차종 | 차체 메시 (detailed 면 body Group 안). setDamage 가 geometry 를 바꾼다 |
+| `steerWheels`, `steer` | 전 차종 | 가장 앞 축 바퀴 (오토바이 = 앞바퀴 1개, 비detailed = 빈 배열) / 마지막 setSteer 각 |
+| `blinkHalo`, `blinkWet` | 전 차종 | 후광 배율 / 빗길 반사 줄 켜짐 |
+| `smokePoint` | 승용·SUV·밴·player 계열·포터캡 계열 | Object3D, 엔진룸(캡오버는 그릴) — 손상 연기·김 fx 위치 |
+| `damage`, `damageFocus`, `damageMesh` | setDamage 대상 | 현재 단계 / 손상 덧붙임 메시 ('damage', 차량 재질 공유 → 피격 플래시 같이) |
+| `sticker` | beginner · sticker 옵션 | 뒷유리 스티커 메시 |
+| `strobe`, `strobePattern`, `strobeSign` | unmarked | 숨은 적/청 스트로브 [R, B] · 'police' · 뒷유리 LED 전광판 (setStrobe 가 같이 켜고 끔) |
+| `plate`, `passengers` | plate·passengers 옵션 | 옵션 값 되읽기 (코어 판정용) |
+| `lod` | motorbike lod | true (rider·flags·setPose 없음) |
+| `flagPole`, `ledPole`, `ledBike`, `leds`, `leader` | motorbike leader | 깃대 Mesh(피벗 = 소켓, 자식 = LED·깃발) → `scene.attach(flagPole)` 한 번에 통째로 떨어짐 |
+| `kickstand`, `parked` | motorbike (setKickstand 후) | 킥스탠드 다리 메시 / 정차 상태 |
+| `tapFinger`, `ramPoint` | chairmanSedan | 핸들 톡톡 손가락(rotation.z) / 앞범퍼 중앙 (들이받기 이펙트) |
+
+`buildFxProp` 추가 userData — `crashScene`: `{ cars:[앞, 뒤], police, steam, length: 19, update(t) }` (원점 = 갓길 중심선 x≈8.7, 앞 = −Z), `angelRing`: `ring`, `wings`: `wings[L,R]` + `setTorn(bool)`, `devilHorns`: `horns[L,R]`, `ruler`: `tag`, `rentFlag`: `flag`(펄럭 rotation.y). 셋(링·날개·뿔)·깃발의 원점 = 지붕 위 부착점 (차 `userData.height`).
+
+비용: unmarked 꺼짐 1 dc / 켜짐 4 dc(+적·청·LED 판), beginner 2 dc(차체+스티커), chairmanSedan 8 dc(detailed)·1 dc, motorbike LOD 2 dc(1,610~1,870▲), leader 11 dc, van passengers 9 = 2,040▲(1 dc, 0명 768▲), plate 변형 +24~144▲(dc 동일), setDamage L≥1 = +1 dc(+180~800▲), crashScene 9 dc·4,070▲.
+
 ## scenery.js
 아트 디렉션: 한국 고속도로. 진회색 아스팔트, 흰 점선 차선, 1차선 왼쪽 노란 실선, 콘크리트 중앙분리대 + **녹색 눈부심방지 판**, 우측 갓길 + 가드레일, 구간별 **방음벽**(투명 패널에 버드세이버 스티커/녹색 판넬), 아파트 단지("101동"), 소나무 산, 논, 교회 첨탑(밤엔 빨간 십자가), 녹색 도로 안내 표지판, 주황 LED VMS 전광판, 졸음쉼터 현수막.
 
@@ -138,6 +190,28 @@ export function buildTunnelPortal(name = '○○터널', opts = {}) : THREE.Grou
 //  원점 x=0, s=0 = 터널 시작면. 정면 +Z(다가오는 차), 두께 0.8m 와 날개벽·비탈(approach 14m) 은 +Z 쪽.
 //  현판(캔버스, 아치 위 boardY) + 입구 오른쪽 길가 안내표지(낮아서 추격캠에서 오래 읽힘). opts: { night?, length?(m → 'L=2,400m'), sub?, exit? }
 //  출구 = buildTunnelPortal(name, { exit: true }) 를 rotation.y = π 로 터널 끝 s 에 배치 (현판 없음).
+```
+
+### scenery.js v0.4.1 추가 (1챕터 판 소품 · 빗길 · 터널 제어)
+가설: 판 소품은 추격캠(38° 내려다봄)에서 가장 크게 보이는 노면 데칼이 1순위, 세로 구조물은 실루엣 + 발광으로 보조 (✅ `vehicles.html?view=props1`, `?view=p1`).
+기존 buildRoadSegment·buildTunnelSegment 지오메트리는 그대로 (opt-in 옵션만 캐시 키에 붙음).
+
+```js
+buildRoadDecal(kind, opts) : Group   // 노면 데칼 1 dc (y 0.025, polygonOffset). 원점 = 데칼 시작 s, x = 도로 좌표
+//  'enforceStart'(빨간 '단속구간' 띠) | 'enforceEnd'('단속 끝' 띠) — opts.lanes=[a,b], 14.4 × 3.2m
+//  'ownerOnly'('건물주 전용', opts.lane=0) → userData.setPassing(true) = 발광 '추월차로'
+//  'mergeArrow' | 'bayText'('비상주차대') | 'laneHighlight'(#4 발광 굵은 점선 + 빨간 빗금, opts.x·length) | 'puddles'(#5 물웅덩이)
+buildEnforceGantry({ night, rearLane = 2, label }) : Group   // #7 단속 갠트리 (cctv 지주 재사용) 3 dc + 플래시
+//  userData: rearCam(Group, rotation.y 0 → π = 후면 단속), flash(i | 'rear', on), flashes[4], rearFlash, height, spansRoad
+buildMergeTaper({ length = 120, taper = 40, night }) : Group // #8 갓길 = 합류차로 → 점선, 테이퍼 빗금, '합류 끝' 표지, 노면 화살표, 지퍼 빛줄
+//  userData: taperS, endS, setZip(p 0..1, t) — 테이퍼 끝(앞)에서 뒤로 초록 지퍼 이빨이 켜짐 (지퍼식 합류 해방)
+buildEmergencyBay({ length = 40, night }) : Group          // #3 갓길 비상주차대 표시 + 'P 비상주차대' 표지 + 비상전화. userData.stopS = 정차 차량 권장 s
+buildRoadSegment(len, { wet: true }) / setRoadWet(seg, on)  // #5 빗길: 노면 재질 WET_MAT(Phong) + 물웅덩이 데칼 (+1 dc), 지오메트리 공유 그대로
+buildTunnelSegment(len, { exit: true })                    // P1 비상구 문 + 보도 유도 표지, userData.exitPoint (라이더 대피 목표)
+setTunnelLights(target, 'normal' | 'alarm' | 'wave', t, { waveS | waveZ }) : number
+//  천장·어깨 등기구 발광 덮개(세그먼트당 첫 호출 때 생성, +1 dc) + 공유 셰이더. alarm = 빨간 비상 점멸 1.6Hz(빛웅덩이도 빨갛게),
+//  wave = s ≥ waveS 인 등만 흰빛 (waveS 를 줄여 가면 앞에서 뒤로 '띵띵띵', 막 켜진 등은 더 밝게). 포인트 라이트 없음
+export const TUNNEL_LIGHT_MODES, WET_MAT;
 ```
 
 ## fx.js
