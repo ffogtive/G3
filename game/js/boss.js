@@ -7,6 +7,31 @@ import * as THREE from 'three';
 import { laneX, LANE_W, NUM_LANES, SHOULDER_LANE } from './config.js';
 import { buildVehicle, buildProjectile, buildWarningMarker, setBrake, setHazard, setFlash, setHeadlights } from './vehicles.js';
 import { occupies } from './traffic.js';
+import * as VEH from './vehicles.js';
+
+// 피니시 소품 (아트 모듈에 없으면 간단한 대체 모델)
+function fxProp(kind) {
+  try { const g = VEH.buildFxProp?.(kind); if (g) return g; } catch { /* 대체 */ }
+  const g = new THREE.Group();
+  const mat = (c, o = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
+  if (kind === 'balloons') {
+    const bunch = new THREE.Group();
+    const cols = [0xff4d6d, 0xffd23a, 0x4dabf7, 0x51cf66, 0xcc5de8, 0xff922b];
+    cols.forEach((c, i) => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), mat(c)); b.position.set(Math.cos(i) * 0.8, 3 + (i % 3) * 0.5, Math.sin(i) * 0.8); bunch.add(b); });
+    const str = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 3, 4), mat(0xffffff)); str.position.y = 1.5; g.add(str, bunch);
+    g.userData.bunch = bunch;
+  } else if (kind === 'helicopter') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 6), mat(0xffd23a)); body.position.y = 7.5; g.add(body);
+    const rotor = new THREE.Mesh(new THREE.BoxGeometry(9, 0.12, 0.5), mat(0x333333)); rotor.position.y = 8.8; g.add(rotor);
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 6, 4), mat(0x222222)); cable.position.y = 3.2; g.add(cable);
+    g.userData.rotor = rotor; g.userData.cableLen = 6;
+  } else if (kind === 'ufo') {
+    const saucer = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 1.2, 1, 16), mat(0x9aa4b2)); saucer.position.y = 12; g.add(saucer);
+    const beam = new THREE.Mesh(new THREE.ConeGeometry(2.6, 12, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x9cff9c, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    beam.position.y = 6; g.add(beam); g.userData.beam = beam;
+  }
+  return g;
+}
 
 const POP_ORDER = [0, 1, 2, 3]; // 앞바퀴부터 (압정을 앞에서 밟으니까): FL, FR, RL, RR
 const _v3 = new THREE.Vector3();
@@ -106,7 +131,7 @@ export class BossManager {
   }
 
   clear() {
-    for (const v of this.villains) { this.scene.remove(v.mesh); this.scene.remove(v.marker); }
+    for (const v of this.villains) { this.scene.remove(v.mesh); this.scene.remove(v.marker); if (v.prop) this.scene.remove(v.prop); }
     for (const w of this.waves) this.scene.remove(w.group);
     for (const b of this.beams) this.scene.remove(b.mesh);
     for (const it of this.items) { this._releaseItem(it.obj); if (it.marker) this._releaseMarker(it.marker); }
@@ -138,11 +163,16 @@ export class BossManager {
   }
   refV() { return this.villains.length ? this.villains[0].vNominal : 0; }
 
-  // 압정 투척 대상: 플레이어 차선 ±1 이내의 살아있는 원흉
+  // 압정 투척 대상: 정면(앞) = 플레이어 차선 ±1 이내 / 뒤에서 = 42m 안이면 화물차 너머로 높이 던져 넣기
   targetFor(player) {
     let best = null, bd = Infinity;
     for (const v of this.villains) {
       if (!v.alive) continue;
+      const ds = v.s - player.s;
+      if (ds > 0) { // 플레이어가 뒤에 있음
+        if (ds < 42 && ds < bd) { bd = ds; best = v; }
+        continue;
+      }
       const dx = Math.abs(v.x - player.x) - Math.max(0, (v.w - 2) / 2);
       if (dx > LANE_W * 1.15) continue;
       if (dx < bd) { bd = dx; best = v; }
@@ -151,8 +181,9 @@ export class BossManager {
   }
 
   // ── 피해. 반환 { popped, killed, villain }
-  damage(v, amount, pos, kind = 'tack') {
+  damage(v, amount, pos, kind = 'tack', fromRear = false) {
     if (!v || !v.alive) return { popped: false, killed: false };
+    v.hitFromRear = fromRear;
     const before = v.hp / v.maxHp;
     v.hp -= amount;
     v.flash = 1;
@@ -167,7 +198,11 @@ export class BossManager {
   }
 
   _popTire(v) {
-    const idx = POP_ORDER[4 - v.tires];
+    // 맞은 쪽 바퀴부터 (뒤에서 던지면 뒷바퀴, 앞에서 막고 던지면 앞바퀴)
+    v.popped = v.popped || [];
+    const order = v.hitFromRear ? [2, 3, 0, 1] : POP_ORDER;
+    const idx = order.find((i) => !v.popped.includes(i)) ?? 0;
+    v.popped.push(idx);
     v.tires--;
     const wheel = v.mesh.userData.wheels?.[idx];
     const p = v.wheelWorldPos(idx, new THREE.Vector3());
@@ -199,6 +234,7 @@ export class BossManager {
     v.vel = new THREE.Vector3(0, 8, -(v.v + 3));
     v.spin = new THREE.Vector3(3.5 + Math.random() * 2, 7 + Math.random() * 3, 2.5);
     v.launched = false;
+    v.finish = this.finishStyle || 'rocket';
     while (v.tires > 0) this._popTire(v);
     const p = v.mesh.position.clone(); p.y += 1;
     this.fx.explosion(p, v.len > 6 ? 1.4 : 1.0);
@@ -209,6 +245,7 @@ export class BossManager {
   }
 
   _updateDeath(v, dt) {
+    if (v.finish && v.finish !== 'rocket') return this._updateFinish(v, dt);
     v.deathT += dt;
     v.baseS += v.vNominal * dt;
     const m = v.mesh;
@@ -233,6 +270,66 @@ export class BossManager {
       this.fx.twinkle(m.position.clone());
       this.audio.play('twinkle');
       m.visible = false;
+      this.onGone?.(v);
+    }
+  }
+
+  // 피니시 연출: 풍선 둥실 / 헬기 견인 / UFO 납치
+  _updateFinish(v, dt) {
+    v.deathT += dt;
+    v.baseS += v.vNominal * dt;
+    const m = v.mesh, t = v.deathT;
+    const bounce = () => { // 처음 0.8초: 펑크 나고 털썩
+      v.vel.y += -26 * dt; m.position.addScaledVector(v.vel, dt);
+      if (m.position.y < 0) { m.position.y = 0; v.vel.y = Math.abs(v.vel.y) * 0.4; }
+      m.rotation.y += v.spin.y * dt * 0.4;
+    };
+    if (t < 0.8) { bounce(); v.s = -m.position.z; return; }
+    if (!v.prop) {
+      v.prop = fxProp(v.finish === 'heli' ? 'helicopter' : v.finish === 'ufo' ? 'ufo' : 'balloons');
+      this.scene.add(v.prop);
+      m.rotation.set(0, m.rotation.y, 0);
+      this.audio.play(v.finish === 'ufo' ? 'twinkle' : 'whoosh');
+      v.liftY = m.position.y;
+    }
+    const u = t - 0.8;
+    const P = v.prop;
+    if (v.finish === 'balloon') {
+      // 풍선 다발이 차 지붕에 묶여 둥실둥실
+      v.liftY += (2 + u * 4.5) * dt;
+      m.position.y = v.liftY;
+      m.position.x += Math.sin(t * 2) * dt * 0.8;
+      m.rotation.z = Math.sin(t * 2.3) * 0.12;
+      P.position.set(m.position.x, m.position.y + v.h, m.position.z);
+      if (P.userData.bunch) P.userData.bunch.rotation.z = Math.sin(t * 1.7) * 0.15;
+    } else if (v.finish === 'heli') {
+      // 헬기가 내려와 고리를 걸고 들어 올려 앞으로 날아감
+      const hookY = Math.max(v.h + 0.2, 18 - u * 14);
+      if (u < 1.0) { P.position.set(m.position.x, hookY, m.position.z); }
+      else {
+        v.liftY += (4 + (u - 1) * 7) * dt;
+        m.position.y = v.liftY;
+        m.position.z -= (6 + u * 6) * dt;
+        m.rotation.z = Math.sin(t * 3) * 0.1;
+        P.position.set(m.position.x, m.position.y + v.h + 0.2, m.position.z);
+      }
+      if (P.userData.rotor) P.userData.rotor.rotation.y += dt * 30;
+      if (P.userData.tailRotor) P.userData.tailRotor.rotation.x += dt * 40;
+    } else {
+      // UFO: 빛줄기에 빨려 빙글빙글 올라감
+      P.position.set(m.position.x, 0, m.position.z);
+      if (u > 0.3) { v.liftY += (1.5 + (u - 0.3) * 9) * dt; m.position.y = v.liftY; m.rotation.y += dt * (3 + u * 6); }
+      if (P.userData.beam) P.userData.beam.material.opacity = 0.25 + Math.sin(t * 20) * 0.08;
+      if (m.position.y > 11) m.visible = false;
+    }
+    v.s = -m.position.z;
+    const done = v.finish === 'ufo' ? 2.4 : 3.0;
+    if (u > done && !v.gone) {
+      v.gone = true; v.dying = false;
+      this.fx.twinkle((v.finish === 'ufo' ? P.position.clone().setY(12) : m.position.clone()));
+      this.audio.play('twinkle');
+      m.visible = false;
+      this.scene.remove(P); v.prop = null;
       this.onGone?.(v);
     }
   }
@@ -379,7 +476,22 @@ export class BossManager {
     this.audio.play('throw');
   }
 
-  // ctx: { dt, time, phase, player, hud, laneFree(lane, v) }  반환 이벤트 배열
+  // 잔챙이 빌런이 던지는 것 (정체 구간에서도 판정)
+  throwFrom(src, lane, player, kind) {
+    const obj = this._getItem(kind);
+    const from = new THREE.Vector3(src.x, src.h + 0.3, -(src.s));
+    const dur = 0.8;
+    const landS = player.s + Math.max(0, player.v) * dur + 0.4;
+    const to = new THREE.Vector3(laneX(lane), 0.45, -landS);
+    const marker = this._getMarker();
+    marker.position.set(to.x, 0.04, to.z);
+    marker.userData.setProgress?.(0);
+    obj.position.copy(from);
+    this.items.push({ obj, kind, lane, from, to, t: 0, dur, landed: false, marker, rolling: false, roll: 0, s: landS, len: 1.1, rollT: 0, fromMini: true });
+    this.audio.play('throw', { volume: 0.6 });
+  }
+
+  // ctx: { dt, time, phase, player, hud, laneFree(lane, v), playerBehind }  반환 이벤트 배열
   update(dt, ctx) {
     this.time = ctx.time;
     const events = [];
@@ -495,7 +607,8 @@ export class BossManager {
         this.attackT = a + Math.random() * (b - a);
         const alive = this.alive;
         const v = alive[Math.floor(Math.random() * alive.length)];
-        this._attack(this._chooseAttack(), v, ctx);
+        // 플레이어가 아직 뒤(갓길)에 있으면: 뒤로 투척만 (앞으로 쏘는 공격은 안 닿음)
+        this._attack(ctx.playerBehind ? 'throw' : this._chooseAttack(), v, ctx);
       }
     }
 
@@ -562,8 +675,8 @@ export class BossManager {
           this.fx.smokePuff(o.position, { count: 5, color: 0xd9cfb8 });
           if (!it.rolling) {
             if (it.marker) { this._releaseMarker(it.marker); it.marker = null; }
-            if (player.invuln <= 0 && fighting && occupies(player, it.lane) && Math.abs(it.s - player.s) < player.len / 2 + 1.6) {
-              events.push({ type: 'playerHit', cause: it.kind, text: it.kind === 'cup' ? '커피 테러!' : it.kind === 'phone' ? '폰 투척?!' : '으악!' });
+            if (player.invuln <= 0 && (fighting || it.fromMini) && occupies(player, it.lane) && Math.abs(it.s - player.s) < player.len / 2 + 1.6) {
+              events.push({ type: it.fromMini ? 'miniHit' : 'playerHit', cause: it.kind, text: it.kind === 'cup' ? '커피 테러!' : it.kind === 'butt' ? '앗 뜨거!' : it.kind === 'phone' ? '폰 투척?!' : '으악!' });
             }
             this._burstItem(it);
             this.items.splice(i, 1);
@@ -589,7 +702,7 @@ export class BossManager {
           continue;
         }
         if (it.s > player.s + 6 && it.marker) { this._releaseMarker(it.marker); it.marker = null; }
-        if (it.s > player.s + 30 || !fighting) {
+        if (it.s > player.s + 30 || (!fighting && !it.fromMini)) {
           if (it.marker) { this._releaseMarker(it.marker); it.marker = null; }
           this._releaseItem(o);
           this.items.splice(i, 1);

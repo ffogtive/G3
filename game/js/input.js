@@ -5,7 +5,7 @@ const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left',
   ArrowRight: 'right', KeyD: 'right',
   ArrowDown: 'brake', KeyS: 'brake',
-  Space: 'fire', KeyJ: 'fire', ArrowUp: 'fire', KeyW: 'fire',
+  Space: 'fire', KeyJ: 'fire', ArrowUp: 'jump', KeyW: 'jump',
   KeyR: 'super', ShiftLeft: 'super', ShiftRight: 'super', KeyK: 'super', KeyE: 'super',
   KeyH: 'horn',
   KeyP: 'pause', Escape: 'pause',

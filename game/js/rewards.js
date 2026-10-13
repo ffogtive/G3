@@ -23,8 +23,8 @@ function pick(arr, n, seed) {
 export function computeReward(stage, r, seed = 1) {
   const fine = stage.fine || 30000;
   const mult = [1, 1, 1.5, 2][r.stars] || 1;
-  const bonus = (r.cheaters || 0) * 10000;
-  const payout = Math.round((fine * mult + bonus) / 100) * 100;
+  const bonus = (r.cheaters || 0) * 10000 + (r.miniFines || 0);
+  const payout = Math.round(((fine * mult + bonus) * (r.payMult || 1)) / 100) * 100;
   const views = Math.round((r.freed * 38 + r.cath * 950) * (0.85 + ((seed * 7919) % 100) / 300));
   const subsGain = Math.max(12, Math.round(views * 0.011));
   const vName = stage.villains.map((v) => v.name).join(' & ');

@@ -78,7 +78,7 @@ export const STAGES = [
     fine: 40000,               // 범칙금(원) → 포상금 기준
     sky: 'day',
     jamLength: 170,          // 실제 시뮬 거리(m). 연출상 표시 거리는 displayKm
-    displayKm: 3.2,
+    displayKm: 2.4,
     density: 1.0,
     jamSpeed: 2.4,           // 정체 기본 속도 m/s (~9km/h)
     villainSpeedLabel: '정속 80km/h',
@@ -107,7 +107,7 @@ export const STAGES = [
     fine: 50000,               // 범칙금(원) → 포상금 기준
     sky: 'sunset',
     jamLength: 190,
-    displayKm: 5.8,
+    displayKm: 4.1,
     density: 1.0,
     jamSpeed: 2.4,
     villainSpeedLabel: '나란히 60km/h',
@@ -137,7 +137,7 @@ export const STAGES = [
     fine: 30000,               // 범칙금(원) → 포상금 기준
     sky: 'morning',
     jamLength: 200,
-    displayKm: 7.1,
+    displayKm: 3.0,
     density: 1.02,
     jamSpeed: 2.4,
     villainSpeedLabel: '두 차선 점유',
@@ -166,7 +166,7 @@ export const STAGES = [
     fine: 60000,               // 범칙금(원) → 포상금 기준
     sky: 'night',
     jamLength: 200,
-    displayKm: 9.4,
+    displayKm: 2.6,
     density: 1.04,
     jamSpeed: 2.4,
     villainSpeedLabel: '시속 ??km',
@@ -195,7 +195,7 @@ export const STAGES = [
     fine: 30000,               // 범칙금(원) → 포상금 기준
     sky: 'day',
     jamLength: 220,
-    displayKm: 12.7,
+    displayKm: 5.8,
     density: 1.05,
     jamSpeed: 2.4,
     villainSpeedLabel: '시속 15km',
@@ -255,9 +255,13 @@ export const TUNE = {
   superCost: 1 / 5,        // 분노 게이지 1칸 (정체: 분노의 경적 / 보스전: 분노 폭탄)
   hitRage: 0.08,           // 원흉 공격 맞으면 분노 +
   releaseWaveSpeed: 70,    // m/s, 해방 물결이 뒤로 퍼지는 속도
-  releaseSpeed: [27, 36],  // 해방 후 NPC 목표 속도 m/s (~100~130km/h)
+  releaseSpeed: [25, 30],  // 해방 후 NPC 목표 속도 m/s (90~108km/h, 고속도로 제한 100~110km/h)
+  cruiseSpeed: 30.5,       // 질주 = 제한속도 110km/h (참교육 했다고 과속하면 안 됨)
+  // 정체 밀도: 교통류 이론의 정체 밀도 ≈ 140 PCU/km/차로 → 대형차 혼입 보정 ≈ 125대/km/차로
+  // 해방 대수 = 정체 길이(km) × 차로 × 정체 밀도 (결과 화면에 근거 표시)
+  jamDensity: 125,
   releaseLaneDelay: 0.45,  // 해방 순서: 1차선 먼저 → 차선마다 이만큼 늦게 (인과가 보이도록)
-  truckFreeSpeed: [20, 23],// 해방 후 화물차/버스 속도 (원래 느린 차들)
+  truckFreeSpeed: [22, 25],// 해방 후 화물차/버스 속도 (화물차 제한 80~90km/h)
   cruiseTime: 4.2,         // 해방 후 질주 시간
 };
 

@@ -158,7 +158,7 @@ export function stageFromEntry(e) {
     fine: e.fine_krw || 30000,
     sky: SKY_OF[e.time] || 'day',
     jamLength: Math.min(215, 150 + diff * 6.5),
-    displayKm: +(1.8 + diff * 1.2 + rng() * 1.5).toFixed(1),
+    displayKm: +(1.4 + diff * 0.45 + rng() * 0.8).toFixed(1),   // 실제 병목 정체 규모 (1.8~6.6km)
     density: 1 + diff * 0.008,
     jamSpeed,
     villains: lay.villains.map((v) => ({ ...v, stopped: !!lay.stopped })),

@@ -1,27 +1,49 @@
 // 플레이어 "참교육 머신": 차선 홉 이동, 자동 가속, 추돌 처리, 연출(롤/요/홉/바퀴 회전)
 import * as THREE from 'three';
 import { laneX, TUNE, SHOULDER_LANE } from './config.js';
-import { buildVehicle, setBrake } from './vehicles.js';
+import { buildVehicle, setBrake, setHeadlights } from './vehicles.js';
 
 const MAX_LANE = SHOULDER_LANE; // 0~3 차선 + 4 갓길
 
 export class Player {
   constructor(scene) {
-    this.mesh = buildVehicle('player', { detailed: true });
-    scene.add(this.mesh);
+    this.scene = scene;
+    this.kind = 'player';
+    this.isPlayer = true;
+    this.stats = { speed: 1, armor: 0 };
+    this.beaconOff = new THREE.MeshBasicMaterial({ color: 0x5a3a00 });
+    this.beaconOn = new THREE.MeshBasicMaterial({ color: 0xffa000 });
+    this._build('player');
+    this.reset(0, 2);
+  }
+
+  _build(vkind) {
+    if (this.mesh) this.scene.remove(this.mesh);
+    this.vkind = vkind;
+    this.mesh = buildVehicle(vkind, { detailed: true });
+    this.scene.add(this.mesh);
     const ud = this.mesh.userData;
     this.len = ud.length || 4.0;
     this.w = ud.width || 1.85;
-    this.kind = 'player';
-    this.isPlayer = true;
     // 지붕 긴급 경광등 (주황, 깜빡) — 갓길 통행 명분: 참교육 긴급차량
     const h = ud.height || 1.7;
-    this.beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.32), new THREE.MeshBasicMaterial({ color: 0xffa000 }));
+    this.beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.32), this.beaconOn);
     this.beacon.position.set(-0.55, h - 0.05, 0.55);
     (ud.body || this.mesh).add(this.beacon);
-    this.beaconOff = new THREE.MeshBasicMaterial({ color: 0x5a3a00 });
-    this.beaconOn = this.beacon.material;
-    this.reset(0, 2);
+  }
+
+  // 상점에서 산 차로 교체 (스테이지 시작 시)
+  setKind(vkind, night = false) {
+    if (vkind && vkind !== this.vkind) this._build(vkind);
+    setHeadlights(this.mesh, night);
+  }
+
+  // 참교육 점프: 앞차 한 대를 훌쩍 (0.75초 동안 충돌 무시)
+  jump() {
+    if (this.jumpT > 0) return false;
+    this.jumpT = 0.75;
+    this.v = Math.max(this.v, 10);
+    return true;
   }
 
   reset(s, lane) {
@@ -33,6 +55,8 @@ export class Player {
     this.roll = 0; this.yaw = 0; this.hop = 0;
     this.mode = 'jam';
     this.ghost = false;
+    this.jumpT = 0;
+    this.boostT = 0;
     this.brakeOn = false;
     this.slowTime = 0;
     this.mesh.visible = true;
@@ -79,11 +103,14 @@ export class Player {
     if (ctx.mode === 'jam') {
       const braking = ctx.brake;
       if (braking) this.v = Math.max(0, this.v - TUNE.playerBrake * dt);
-      else this.v = Math.min(this.lane === SHOULDER_LANE ? TUNE.shoulderMaxV : TUNE.playerMaxV, this.v + TUNE.playerAccel * dt * (this.v < 0 ? 2.2 : 1));
+      else {
+        const vmax = (this.lane === SHOULDER_LANE ? TUNE.shoulderMaxV : TUNE.playerMaxV) * (this.stats?.speed || 1) * (ctx.boostT > 0 ? 1.4 : 1);
+        this.v = Math.min(vmax, this.v + TUNE.playerAccel * (ctx.boostT > 0 ? 2 : 1) * dt * (this.v < 0 ? 2.2 : 1));
+      }
       // 소프트 추종: 앞차를 고속으로 들이받지 않게 자동 감속 (부술 수 있는 콘·낙하물은 예외 → 날려버림)
       const L0 = ctx.traffic ? ctx.traffic.leaderOf(this) : null;
       let auto = false;
-      if (L0 && !L0.car.smash) {
+      if (L0 && !L0.car.smash && !(this.jumpT > 0) && !(this.stats?.tow && L0.car.isObstacle)) {
         const vSafe = Math.max(0, L0.car.v + Math.max(0, L0.gap - 0.9) * 2.4);
         if (this.v > vSafe) { this.v = Math.max(vSafe, this.v - TUNE.playerBrake * dt); auto = true; }
       }
@@ -113,11 +140,14 @@ export class Player {
 
     // ── 추돌 (정체 구간만)
     if (ctx.mode === 'jam' && ctx.traffic && !this.ghost) {
-      const L = ctx.traffic.leaderOf(this);
+      const L = this.jumpT > 0 ? null : ctx.traffic.leaderOf(this);
       if (L && L.gap < 0 && L.car.smash) {
-        // 콘·낙하물: 날려버리고 살짝 감속
+        // 콘·낙하물: 날려버리고 살짝 감속 (분노 가속 중엔 감속 없음)
         events.push({ type: 'smash', other: L.car });
-        this.v *= 0.62;
+        if (!(ctx.boostT > 0)) this.v *= 0.62;
+      } else if (L && L.gap < 0 && L.car.isObstacle && this.stats?.tow) {
+        // 레커차: 고장차 즉시 견인
+        events.push({ type: 'tow', other: L.car });
       } else if (L && L.gap < 0) {
         const other = L.car;
         this.s = other.s - other.len / 2 - this.len / 2 - 0.35;
@@ -154,6 +184,12 @@ export class Player {
       wig = Math.sin(Math.PI * this.wiggleT) * 0.55 * this.wiggleDir;
     }
 
+    // 점프 아치
+    if (this.jumpT > 0) {
+      this.jumpT = Math.max(0, this.jumpT - dt);
+      const p = 1 - this.jumpT / 0.75;
+      this.hop = Math.max(this.hop, Math.sin(Math.PI * p) * 3.4);
+    }
     // ── 메시 반영
     this.bumpKick = Math.max(0, this.bumpKick - dt * 3.2);
     const m = this.mesh;

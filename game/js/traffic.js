@@ -505,26 +505,27 @@ export class Traffic {
   }
 
   // 경적. 반환: { car, kind: 'cheater'|'yield'|'letin'|'noway'|'villain' } | null
-  honk(player) {
+  honk(player, opts = {}) {
     const pl = player.lane;
+    const range = opts.siren ? 45 : opts.trot ? 24 : 18;  // 사이렌(암행차)·트로트 경적은 더 멀리·잘 비켜줌
     const { gap, who } = this.gapAhead(pl, player.s + player.len / 2 - 0.5, player);
     if (who && who.isVillain && gap < 30) return { car: who, kind: 'villain' };
     if (pl === SHOULDER_LANE) {
       // 갓길 얌체 → 4차선으로 복귀 (4차선 뒤차가 멈칫해서 자리 줌)
-      if (who && who.isCheater && gap < 30) {
+      if (who && who.isCheater && gap < (opts.siren ? 50 : 30)) {
         this.letIn(NUM_LANES - 1, who);
         this._startLaneChange(who, NUM_LANES - 1, 1.1);
         who.cheaterV = 0;
         return { car: who, kind: 'cheater' };
       }
       // 장애물이 앞에 있으면 4차선이 끼워줌
-      if (who && who.isObstacle && gap < 18) {
+      if (who && who.isObstacle && gap < range) {
         const c = this.letIn(NUM_LANES - 1, player);
         return c ? { car: c, kind: 'letin' } : { car: who, kind: 'noway' };
       }
       return null;
     }
-    if (!who || gap > 16 || !who.mesh || who.released) return null;
+    if (!who || gap > range - 2 || !who.mesh || who.released) return null;
     // 앞차가 옆으로 비켜줄 수 있으면 비켜줌
     if (this.cars.includes(who) && !who.isWall && who.lcT >= 1) {
       const opts = [who.lane - 1, who.lane + 1].filter((l) => l >= 0 && l < NUM_LANES);
