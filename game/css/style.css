@@ -1920,6 +1920,8 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .ui-card__panel.has-mis .ui-card__jam { margin-top: 3px; padding: 3px 12px 4px 4px; }
   .ui-card__panel.has-mis .ui-card__jam b { font-size: 20px; }
   .ui-card__panel.has-mis .ui-card__tap { display: none; }
+  .ui-card__panel.has-mis.has-honk .ui-card__line { display: none; }
+  .ui-card__honk { margin-top: 4px; }
   .ui-result__body > .ui-mis { grid-area: stars; margin: 6px 0 0; }
   .ui-mis--result .ui-mis__t { font-size: 11.5px; }
 
