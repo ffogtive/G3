@@ -2393,8 +2393,8 @@ function instantiate(kind, E, detailed) {
   (E.blink || []).forEach((b, i) => {
     if (!b) return;
     const m = new THREE.Mesh(b.geo, MAT.blinkOn);
-    m.name = i ? 'blinkR' : 'blinkL'; m.visible = false; m.castShadow = false; m.receiveShadow = false;
-    if (b.halo && blinkHaloTex()) { const pt = new THREE.Points(b.halo, MAT.blinkHalo); pt.name = 'blinkHalo'; pt.renderOrder = 3; m.add(pt); }
+    m.name = i ? 'blinkR' : 'blinkL'; m.visible = false; m.castShadow = false; m.receiveShadow = false; m.matrixAutoUpdate = false; // 차체 로컬 원점 고정
+    if (b.halo && blinkHaloTex()) { const pt = new THREE.Points(b.halo, MAT.blinkHalo); pt.name = 'blinkHalo'; pt.renderOrder = 3; pt.matrixAutoUpdate = false; m.add(pt); }
     body.add(m); blinkers[i] = m;
   });
   // 오토바이 라이더 (body 자식, 원점 = 엉덩이/시트 접점). setPose 로 지오메트리 교체

@@ -240,9 +240,15 @@ function refreshLabels() {
       // 실제 바운딩 vs userData 치수 비교 (사이드미러 제외 못 하므로 ±0.5m 허용)
       const bb = new THREE.Box3();
       e.obj.updateMatrixWorld(true);
-      e.obj.traverse((o) => { if (o.isMesh && o.name !== 'beam' && !/^blink/.test(o.name) && o.name !== 'flag') { o.geometry.boundingBox || o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
-      const bl = bb.max.z - bb.min.z, bw = bb.max.x - bb.min.x, bh = bb.max.y;
-      const bad = Math.abs(bl - ud.length) > 0.5 || Math.abs(bh - ud.height) > 0.05 || bw - ud.width > 0.7 || bw < ud.width - 0.05;
+      let flagTop = 0; // 깃발(오토바이)은 길이 검사에서 빼고 높이에만 넣는다 (length = 충돌용 차체 길이)
+      e.obj.traverse((o) => {
+        if (!o.isMesh || o.name === 'beam' || /^blink/.test(o.name)) return;
+        o.geometry.boundingBox || o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+        if (o.name === 'flag') flagTop = Math.max(flagTop, b.max.y); else bb.union(b);
+      });
+      const bl = bb.max.z - bb.min.z, bw = bb.max.x - bb.min.x, bh = Math.max(bb.max.y, flagTop);
+      const posed = ud.rider && ud.rider.userData.pose !== 'ride'; // 라이더 포즈에 따라 높이가 달라짐 (height = ride 기준)
+      const bad = Math.abs(bl - ud.length) > 0.5 || (!posed && Math.abs(bh - ud.height) > 0.05) || bw - ud.width > 0.7 || bw < ud.width - 0.05;
       txt = `<b>${e.kind}</b>${ud.detailed ? ' ★' : ''}  ${ud.length}×${ud.width}×${ud.height}m  r${ud.wheelRadius}\n${s.tris}▲  ${s.meshes} meshes (${s.casters} cast)` + (bad ? `\nBBOX ${bl.toFixed(2)}×${bw.toFixed(2)}×${bh.toFixed(2)}` : '');
       t.el.classList.toggle('bad', bad);
       lines.push(`${e.kind.padEnd(13)} ${String(s.tris).padStart(5)} tris  ${s.meshes} meshes  [${s.names.join(',')}]`);
@@ -507,11 +513,12 @@ function setupBikes() {
     for (const [pose, v, ry] of [['tumble', 0, 0.4], ['sprawl', 1, 0.3], ['sit', 2, -0.6], ['sprawl', 3, -0.3]]) add(pose + ' v' + v, riderOnGround(v, pose, ry), 3, [6, 5, 7], 0.9, true);
     // 우르르: 넘어진 바이크 + 라이더 + 들이받는 세단
     const g = new THREE.Group();
-    const sd = V.buildVehicle('starSedan'); sd.position.set(0, 0, 3.4); sd.rotation.y = 0.12; g.add(sd);
-    [[-1.3, -0.2, 1, 0, 0.5], [0.6, -0.9, -1, 1, -0.4], [1.9, 0.8, 1, 2, 0.9]].forEach(([x, z, s, v, ry]) => { const b = fallenBike(v, s); b.position.set(x, 0, z); b.rotation.y = ry; g.add(b); });
-    const rr = riderOnGround(3, 'sprawl', 2.5); rr.position.set(-0.4, 0, -2.6); g.add(rr);
-    const rt = riderOnGround(0, 'tumble', 1); rt.position.set(2.2, 0.6, -2.2); g.add(rt);
-    add('들이받기 → 우르르', g, 3, [7, 6, 9], 1.6, true);
+    const sd = V.buildVehicle('starSedan'); sd.position.set(-0.2, 0, 3.6); sd.rotation.y = 0.1; g.add(sd);
+    [[-0.9, 0.0, 1, 0, 0.6], [0.7, -0.5, -1, 1, -0.5], [1.6, 0.9, 1, 2, 1.1]].forEach(([x, z, s, v, ry]) => { const b = fallenBike(v, s); b.position.set(x, 0, z); b.rotation.y = ry; g.add(b); });
+    const rr = riderOnGround(3, 'sprawl', 2.5); rr.position.set(-0.6, 0, -1.6); g.add(rr);
+    const rt = riderOnGround(0, 'tumble', 1); rt.position.set(1.8, 0.5, -1.4); g.add(rt);
+    const rs = riderOnGround(2, 'sit', -0.4); rs.position.set(-2.0, 0, 0.9); g.add(rs);
+    add('들이받기 → 우르르', g, 3, [6, 5.5, 7], 1.6, true);
   }
   for (const e of entries) if (!e.isProj) V.setBlinker(e.obj, e.obj.userData.__blink ?? null, blinkT());
   applyLights();
