@@ -1850,12 +1850,13 @@ function buildMotorbike(c, p) {
   if (V.flag === 'big') {
     const base = V.scooter ? [0.2, 1.72, 0.84] : [0, 0.92 + 0.22 + 0.2 * Math.max(0, V.tiers - 1), 0.82], tip = [base[0] + 0.02, 2.62, base[2] - (V.scooter ? 0.06 : -0.02)];
     B.beam(base, tip, 0.035, 0.035, C.chrome);
-    flags.push({ pos: tip, len: 0.64, h: 0.46, cols: V.flagCols, tri: false });
+    flags.push({ pos: tip, len: V.scooter ? 0.56 : 0.64, h: 0.46, cols: V.flagCols, tri: false, yaw: -1.0 });
   } else if (V.flag === 'twin') {
-    for (const s of SIDES) { const b = [s * 0.2, 0.78, 0.98], t = [s * 0.25, 2.28, 1.02]; B.beam(b, t, 0.03, 0.03, C.chrome); flags.push({ pos: t, len: 0.58, h: 0.32, cols: s < 0 ? V.flagCols : [V.flagCols[1], V.flagCols[0]], tri: true }); }
+    for (const s of SIDES) { const b = [s * 0.2, 0.78, 0.98], t = [s * 0.25, 2.28, 1.02]; B.beam(b, t, 0.03, 0.03, C.chrome); flags.push({ pos: t, len: 0.58, h: 0.32, cols: s < 0 ? V.flagCols : [V.flagCols[1], V.flagCols[0]], tri: true, yaw: s < 0 ? -1.0 : 0.7 }); }
   }
   flags.forEach((f, i) => {
-    const gb = new GB(); flagParts(gb, f.len, f.h, f.cols, f.tri);
+    // 깃발은 옆바람에 비스듬히 날리게 yaw 를 굽는다 → 뒤-위 추격캠에서 면이 보임 (곧장 뒤로 날리면 칼날처럼 안 보임)
+    const gb = new GB(); gb.with(_m4().makeRotationY(f.yaw || 0), (q) => flagParts(q, f.len, f.h, f.cols, f.tri));
     c.extra.push({ key: 'flags', idx: i, gb, mat: 'body', pos: f.pos, name: 'flag', inDims: true });
     top = Math.max(top, f.pos[1] + 0.06); // 길이(충돌용)에는 깃발·죽창 머플러 끝을 넣지 않는다
   });
@@ -1900,9 +1901,9 @@ function riderJoints(name, S) {
   const G = S.G.map(va), P = S.P.map(va);
   const J = { pelvis: v3(0, 0.04, 0), up: lean(S.lean), face: v3(0, 0, -1), hands: G, feet: P, coat: 'flow', armPole: (s) => v3(s * 0.9, -0.5, 0.4), legPole: (s) => v3(s * 0.3, 0.4, -1), dizzy: false };
   switch (name) {
-    case 'stand': J.pelvis = v3(0, 0.36, -0.08); J.up = lean(S.lean * 0.45); break;
-    case 'oneHand': J.up = lean(S.lean * 0.45); J.hands = [G[0], { raise: v3(0.1, 0.56, 0.06) }]; break;
-    case 'noHands': J.up = lean(-0.1); J.hands = [{ raise: v3(-0.16, 0.54, 0.08) }, { raise: v3(0.16, 0.54, 0.08) }]; J.armPole = (s) => v3(s, 0.2, 0.3); break;
+    case 'stand': J.pelvis = v3(0, 0.44, -0.1); J.up = lean(S.lean * 0.2 - 0.06); J.legPole = (s) => v3(s * 0.2, 0.2, -1); break; // 스텝 위에 꼿꼿이 일어섬
+    case 'oneHand': J.up = lean(S.lean * 0.45); J.hands = [G[0], { raise: v3(0.14, 0.58, 0.1) }]; J.armPole = (s) => (s > 0 ? v3(1, 0, 0.4) : v3(-0.9, -0.5, 0.4)); break;
+    case 'noHands': J.up = lean(-0.12); J.hands = [{ raise: v3(-0.24, 0.56, 0.1) }, { raise: v3(0.24, 0.56, 0.1) }]; J.armPole = (s) => v3(s, 0, 0.3); break; // 만세
     case 'lie': J.pelvis = v3(0, 0.1, 0.04); J.up = v3(0, 0.26, -1); J.headUp = v3(0, 1, -0.35); J.feet = [v3(-0.14, 0.14, 0.82), v3(0.14, 0.14, 0.82)]; J.legPole = () => v3(0, 1, 0); break;
     case 'tumble':
       J.pelvis = v3(0, 0, 0); J.up = v3(0, 0.42, -1); J.headUp = v3(0, -0.35, -1); J.coat = 'hang'; J.dizzy = true; // 공처럼 웅크림 (코어가 굴림)

@@ -138,7 +138,10 @@ function mkVehicle(kind) {
   const [k, vs] = kind.split(':'); kind = k; // 'motorbike:2' = 변형 직접 지정 (v0.4)
   const det = state.detailed || DETAILED.has(kind);
   const color = VILLAIN_COLOR[kind] ?? (kind === 'sedan' ? 0xf4f4f2 : kind === 'compact' ? 0xd8342c : kind === 'suv' ? 0x2b2d31 : kind === 'van' ? 0xe9ecef : kind === 'truck' ? 0xf4f4f2 : kind === 'bus' ? 0x2f6fd6 : undefined);
-  return V.buildVehicle(kind, { color, detailed: det, seed, variant: vs !== undefined ? +vs : undefined });
+  const v = V.buildVehicle(kind, { color, detailed: det, seed, variant: vs !== undefined ? +vs : undefined });
+  if (Q.has('pose')) V.setPose(v, Q.get('pose'));           // 오토바이 라이더 포즈 (?pose=stand)
+  if (Q.has('blink')) V.setBlinker(v, Q.get('blink'), true); // 깜빡이 고정 켬 (?blink=left|right|hazard)
+  return v;
 }
 function applyLights() {
   for (const e of entries) {
