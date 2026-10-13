@@ -231,6 +231,21 @@ export function stageFromEntry(e) {
   return stage;
 }
 
+// 손제작 스테이지의 frontRow는 빈 차로가 있을 수 있다 → 빌런이 안 막는 모든 차로에 저속차 벽을 채워 '보이지 않는 벽'을 없앤다
+function fillFrontRow(hm) {
+  const blocked = new Set();
+  for (const v of hm.villains || []) {
+    if (Number.isInteger(v.lane)) blocked.add(v.lane); else { blocked.add(Math.floor(v.lane)); blocked.add(Math.ceil(v.lane)); }
+  }
+  if (hm.zig || hm.attacks?.zigzag) { const c = hm.zigCenter ?? 1; [c - 1, c, c + 1].forEach((l) => blocked.add(l)); }
+  const fr = { ...(hm.frontRow || {}) };
+  for (const l of [0, 1, 2, 3]) {
+    if (blocked.has(l)) delete fr[l];
+    else if (!fr[l]) fr[l] = 'truck';
+  }
+  return fr;
+}
+
 // 카탈로그 전체 → 스테이지 배열. 손으로 만든 스테이지는 handmade_id가 가리키는 카탈로그 자리에 들어가고,
 // 금액·카드·챕터·보스 정보는 카탈로그(리서치) 값을 쓴다.
 export function buildStages(catalog, handmade = []) {
@@ -241,7 +256,7 @@ export function buildStages(catalog, handmade = []) {
     if (hm) {
       const g = stageFromEntry(e);
       out.push({
-        ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id,
+        ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id, frontRow: fillFrontRow(hm),
         fine: g.fine, payout: g.payout, card: g.card, violation: g.violation,
         defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty,
       });

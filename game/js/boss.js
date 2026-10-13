@@ -406,9 +406,13 @@ export class BossManager {
     this.intervalMul *= 0.85;
     for (const v of this.villains) {
       if (!v.alive) continue;
-      if (ph.stopped) { v.stopped = true; v.vNominal = 0; v.lunge = null; v.lungeOff = 0; }
-      if (ph.zig) { v.zig = true; v.zigC = Math.max(1, Math.min(2, Math.round(v.lanePos))); }
-      if (ph.slow && !v.stopped) v.vNominal *= 0.7;
+      // 페이즈의 이동 성격을 그대로 적용 (켜기만이 아니라 끄기도): 정차 ↔ 서행 ↔ 정속, 지그재그 on/off
+      v.stopped = !!ph.stopped;
+      if (v.stopped) { v.vNominal = 0; v.lunge = null; v.lungeOff = 0; }
+      else v.vNominal = (this.stage.jamSpeed || 2.4) * (ph.slow ? 0.7 : 1);
+      if (ph.zig && !v.stopped) { v.zig = true; v.zigC = Math.max(1, Math.min(2, Math.round(v.lanePos))); }
+      else if (v.zig) { v.zig = false; v.targetLanePos = v.homeLane; }
+      if (!v.stopped) setHazard(v.mesh, false);
       v.flash = 1;
     }
     this.attackT = 1.2;

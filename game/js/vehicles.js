@@ -58,7 +58,11 @@ export const MAT = {
   strobeB: new THREE.MeshBasicMaterial({ vertexColors: true }),
   strobeA: new THREE.MeshBasicMaterial({ vertexColors: true }),
   dome: new THREE.MeshLambertMaterial({ color: 0x8feaff, transparent: true, opacity: 0.42, flatShading: true, depthWrite: false }), // UFO 돔
+  // 방향지시등(깜빡이) — setBlinker. 램프 = 테두리+코어 버텍스색 발광, 후광 = 화면을 향하는 점 스프라이트(가독성 과장)
+  blinkOn: new THREE.MeshBasicMaterial({ vertexColors: true }),
+  blinkHalo: new THREE.PointsMaterial({ size: 2.6, sizeAttenuation: true, transparent: true, depthWrite: false, alphaTest: 0.02 }),
 };
+MAT.blinkOn.name = 'blinkOn'; MAT.blinkHalo.name = 'blinkHalo';
 MAT.body.name = 'vehicleBody';
 
 // ────────────────────────────────────────────────────────────────────────
@@ -315,6 +319,8 @@ function newCtx(detailed, variant, color) {
     cannon: null, wheels: [], signs: [], info: {},
     // 확장 파츠: [{ key, idx?, gb, mat: 'body'|MAT 키, pos?, name, visible? }] → body 자식 메시, userData[key] (idx 있으면 배열)
     extra: [], points: {}, ud: {},   // points: { name: [x,y,z] } → body 자식 Object3D. ud: userData 에 그대로 복사할 값
+    blinks: [],    // 방향지시등(깜빡이) 원본 박스 기록 — lamp(c,'hazard') 가 자동 기록, compile 에서 좌/우 과장 발광 메시로 굽는다
+    rider: null,   // 오토바이 라이더 사양 (포즈별 지오메트리)
   };
 }
 // 라이트: 발광 메시엔 전체 박스, 차체엔 1cm 안쪽으로 "꺼진 색" 구워넣기 (켜지면 발광 박스가 덮음 → z-fight 없음)
@@ -334,6 +340,12 @@ function lamp(c, which, x0, x1, y0, y1, z0, z1, bake, o = {}) {
   }
   const e = 0.01;
   c.body.box(x0 + e, x1 - e, y0 + e, y1 - e, z0 + e, z1 - e, bake ?? OFF_BAKE[which]);
+  // 깜빡이 기록 (차체/라이트 지오메트리에는 영향 없음). o.blink === false → 차폭등·표시등 등 방향지시등 아님
+  if (which === 'hazard' && o.blink !== false) c.blinks.push({ b: [x0, x1, y0, y1, z0, z1], m: G.m ? G.m.clone() : null, top: !!o.top, dir: o.dir ?? (z0 + z1 > 0 ? 1 : -1) });
+}
+// 꺼진 모습이 없는 "켜질 때만 보이는" 깜빡이 (원래 앞 깜빡이가 없는 차종 보강용). 차체에는 아무것도 굽지 않는다
+function blinkOnly(c, x0, x1, y0, y1, z0, z1, o = {}) {
+  c.blinks.push({ b: [x0, x1, y0, y1, z0, z1], m: c.hazard.m ? c.hazard.m.clone() : null, top: !!o.top, dir: o.dir ?? (z0 + z1 > 0 ? 1 : -1) });
 }
 // 캐빈 사다리꼴 면(주로 D필러 세로 램프). 코어는 뒷면(v=1)에만 1cm 솟음
 function lampSub(c, which, F, u0, u1, v0, v1, w0, w1, bake) {
@@ -1075,7 +1087,7 @@ function truckCab(c, col, hl, opts = {}) {
   B.box(F.t[0] - 0.03, F.t[1] + 0.03, roofY, roofY + 0.12, F.t[2] - 0.05, F.t[3] + 0.02, col);
   B.frustum({ b: [-hw + 0.1, hw - 0.1, F.t[2] + 0.3, zB - 0.04], t: [-hw + 0.22, hw - 0.22, zB - 0.6, zB - 0.04], y0: roofY + 0.12, y1: 3.5 }, shade(col, 0.95), 'D');
   B.box(F.t[0] + 0.02, F.t[1] - 0.02, roofY - 0.05, roofY + 0.03, F.t[2] - 0.24, F.t[2], C.dark);
-  for (let i = 0; i < 5; i++) { const x = -0.6 + i * 0.3; lamp(c, 'hazard', x - 0.05, x + 0.05, roofY + 0.05, roofY + 0.11, F.t[2] - 0.08, F.t[2] - 0.02); }
+  for (let i = 0; i < 5; i++) { const x = -0.6 + i * 0.3; lamp(c, 'hazard', x - 0.05, x + 0.05, roofY + 0.05, roofY + 0.11, F.t[2] - 0.08, F.t[2] - 0.02, undefined, { blink: false }); } // 캡 마커등 (깜빡이 아님)
   // 큰 미러 (팔 + 거울)
   for (const s of SIDES) {
     B.box(...xr(s, hw - 0.02, hw + 0.24), 2.34, 2.38, zF + 0.24, zF + 0.29, C.dark);
@@ -1337,6 +1349,7 @@ function buildTractor(c, p) { // 경운기 + 트레일러 + 할배 + 건초 + �
   for (const s of SIDES) {
     lamp(c, 'brake', ...xr(s, 0.4, 0.82), 0.66, 0.97, z1 - 0.02, z1 + 0.06);
     lamp(c, 'hazard', ...xr(s, 0.6, 0.84), 0.98, 1.1, z1 - 0.14, z1 + 0.04, undefined, { top: true }); // 뒤 기둥 위 호박색
+    blinkOnly(c, ...xr(s, 0.6, 0.8), 1.05, 1.15, -1.52, -1.38, { top: true, dir: -1 }); // 앞 펜더 위 (켜질 때만 보임)
   }
   // ── 할배 (트레일러 앞에 앉음)
   const shirt = 0xe9e4d4, vest = 0x6f6248, pants = 0x4a4f5a;
@@ -1543,7 +1556,7 @@ function buildPlayerWrecker(c, p) {
   // 붐 끝 도르래 (빨강 테 + 검정)
   B.prism(8, 0.17, 0.17, 0.2, 'x', 0, P1.y, P1.z, 0x2b2d32, { a0: Math.PI / 8, capA: 0xe2231a, capB: 0xe2231a });
   B.box(-0.03, 0.03, P1.y + 0.17, P1.y + 0.3, P1.z - 0.03, P1.z + 0.03, 0x2b2d32);
-  lamp(c, 'hazard', -0.1, 0.1, P1.y + 0.28, P1.y + 0.38, P1.z - 0.06, P1.z + 0.06, 0xc0700e, { top: true }); // 붐 끝 호박 표시등
+  lamp(c, 'hazard', -0.1, 0.1, P1.y + 0.28, P1.y + 0.38, P1.z - 0.06, P1.z + 0.06, 0xc0700e, { top: true, blink: false }); // 붐 끝 호박 표시등
   // 갈고리 (별도 메시: 피벗 = 도르래 뒤쪽 줄 내려오는 점)
   const H = new GB(), cl = 0.92;
   H.box(-0.018, 0.018, -cl, 0, -0.018, 0.018, 0x2b2d32);                       // 와이어
@@ -1640,6 +1653,88 @@ function buildPlayerPatrol(c, p) {
 }
 
 // ────────────────────────────────────────────────────────────────────────
+// 방향지시등(깜빡이) 지오메트리
+//  lamp(c,'hazard') 가 기록한 박스를 좌(-X)/우(+X)로 나눠 "켜졌을 때만 보이는" 과장 램프로 굽는다.
+//  - 원래 램프보다 바깥으로 6cm·위아래 4cm·바라보는 면으로 6cm 크게 + 거의 흰 노랑 코어가 1.2cm 솟음 → 꺼진 모습(차체 굽기)은 그대로
+//  - 앞/뒤 끝 램프마다 후광 점(Points, 항상 화면을 향함) → 추격캠 30~50m 에서도 주황 번쩍임이 차폭 밖으로 번져 보인다
+//  - 중앙(|x|<0.18) 램프는 제외 (붐 끝 표시등 등)
+// ────────────────────────────────────────────────────────────────────────
+const BLINK_COL = [0xff8a00, 0xfff4b8]; // [테두리, 코어]
+const _I4 = new THREE.Matrix4();
+function blinkGeos(list) {
+  const recs = [];
+  for (const r of list) {
+    const [x0, x1, y0, y1, z0, z1] = r.b;
+    const ctr = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    if (r.m) ctr.applyMatrix4(r.m);
+    if (Math.abs(ctr.x) < 0.18) continue;
+    recs.push({ ...r, ctr, s: Math.sign(ctr.x) });
+  }
+  const out = [null, null];
+  SIDES.forEach((s, si) => {
+    const R = recs.filter((r) => r.s === s);
+    if (!R.length) return;
+    const g = new GB(), halo = [];
+    const zs = R.map((r) => r.ctr.z), zMin = Math.min(...zs), zMax = Math.max(...zs), spread = zMax - zMin > 0.6;
+    for (const r of R) {
+      const [x0, x1, y0, y1, z0, z1] = r.b, dir = r.dir;
+      const small = (x1 - x0) < 0.2 && (y1 - y0) < 0.08;            // 사이드미러 리피터 등 얇은 램프 → 두께 보강
+      const ox = small ? 0.04 : 0.06, ix = 0.02, ey = small ? 0.03 : 0.04, ez = 0.06, iz = 0.02;
+      const X0 = s > 0 ? x0 - ix : x0 - ox, X1 = s > 0 ? x1 + ox : x1 + ix;
+      const Y0 = y0 - ey, Y1 = y1 + ey;
+      const Z0 = z0 - (dir < 0 ? ez : iz), Z1 = z1 + (dir > 0 ? ez : iz);
+      g.with(r.m || _I4, (q) => {
+        q.box(X0, X1, Y0, Y1, Z0, Z1, BLINK_COL[0]);
+        const cx = Math.min(0.1, (X1 - X0) * 0.24), cy = Math.min(0.08, (Y1 - Y0) * 0.24), p = 0.012;
+        const cy1 = r.top || small ? Y1 + p : Y1 - cy;
+        if (dir > 0) q.box(X0 + cx, X1 - cx, Y0 + cy, cy1, Z0 + (Z1 - Z0) * 0.3, Z1 + p, BLINK_COL[1]);
+        else q.box(X0 + cx, X1 - cx, Y0 + cy, cy1, Z0 - p, Z1 - (Z1 - Z0) * 0.3, BLINK_COL[1]);
+        // 바깥 옆면 코어 (옆에서 봐도 켜짐)
+        const sx0 = s > 0 ? X1 : X0 - p, sx1 = s > 0 ? X1 + p : X0;
+        q.box(sx0, sx1, Y0 + cy, Y1 - cy, Z0 + (Z1 - Z0) * 0.25, Z1 - (Z1 - Z0) * 0.25, BLINK_COL[1]);
+      });
+      // 후광: 앞/뒤 끝 램프에만
+      const rear = spread ? r.ctr.z >= zMax - 0.6 : dir > 0, front = spread ? r.ctr.z <= zMin + 0.6 : dir < 0;
+      if (!rear && !front) continue;
+      const hp = new THREE.Vector3(s > 0 ? X1 : X0, (Y0 + Y1) / 2 + 0.02, rear ? Z1 + 0.14 : Z0 - 0.14);
+      if (r.m) hp.applyMatrix4(r.m);
+      hp.x += s * 0.04;
+      if (!halo.some((h) => h.distanceTo(hp) < 0.55)) halo.push(hp);
+    }
+    const geo = g.build();
+    let hg = null;
+    if (halo.length) {
+      hg = new THREE.BufferGeometry();
+      hg.setAttribute('position', new THREE.Float32BufferAttribute(halo.flatMap((h) => [h.x, h.y, h.z]), 3));
+      hg.computeBoundingSphere();
+    }
+    out[si] = { geo, halo: hg };
+  });
+  return out;
+}
+// 후광 텍스처 (캔버스, 첫 인스턴스에서 1회): 흰 노랑 중심 → 주황 → 투명 + 4방향 반짝 살
+function blinkHaloTex() {
+  if (MAT.blinkHalo.map || typeof document === 'undefined') return MAT.blinkHalo.map;
+  const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const x = cv.getContext('2d'), h = S / 2;
+  const g = x.createRadialGradient(h, h, 0, h, h, h);
+  g.addColorStop(0, 'rgba(255,255,236,1)'); g.addColorStop(0.16, 'rgba(255,238,150,1)'); g.addColorStop(0.34, 'rgba(255,168,30,0.8)');
+  g.addColorStop(0.62, 'rgba(255,128,0,0.26)'); g.addColorStop(1, 'rgba(255,110,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+  x.globalCompositeOperation = 'lighter';
+  for (const [w, l] of [[0.07, 0.98], [0.045, 0.62]]) for (let k = 0; k < (l > 0.9 ? 2 : 2); k++) {
+    x.save(); x.translate(h, h); x.rotate(l > 0.9 ? k * Math.PI / 2 : Math.PI / 4 + k * Math.PI / 2);
+    const lg = x.createLinearGradient(-h * l, 0, h * l, 0);
+    lg.addColorStop(0, 'rgba(255,200,80,0)'); lg.addColorStop(0.5, 'rgba(255,245,200,0.9)'); lg.addColorStop(1, 'rgba(255,200,80,0)');
+    x.fillStyle = lg; x.beginPath(); x.moveTo(-h * l, 0); x.lineTo(0, -S * w); x.lineTo(h * l, 0); x.lineTo(0, S * w); x.closePath(); x.fill();
+    x.restore();
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  MAT.blinkHalo.map = t; MAT.blinkHalo.needsUpdate = true;
+  return t;
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // 차종 테이블
 // ────────────────────────────────────────────────────────────────────────
 const KINDS = {
@@ -1673,14 +1768,33 @@ function wheelGeo(w) {
   if (!g) { const gb = new GB(); wheelParts(gb, 0, 0, 0, w.r, w.w, { spoke: !w.o?.lugs, ...w.o, side: 0 }); g = gb.build(false); WHEEL_CACHE.set(k, g); }
   return g;
 }
+// 형광 휠: 림 가장자리 발광 고리 (양면). merged 바퀴는 c.glow 에, 분리 바퀴는 바퀴 메시 자식(MAT.glow)으로
+function rimRing(g, x, y, z, r, w, col) {
+  const a0 = Math.PI / 8, k = 1 / Math.cos(a0), ro = r * 0.74 * k, ri = r * 0.5 * k;
+  for (const s of SIDES) {
+    const xs = x + s * (w / 2 + 0.028);
+    const P = (rr, a) => g._x(xs, y + Math.cos(a) * rr, z + Math.sin(a) * rr), ctr = g._x(xs - s, y, z);
+    for (let i = 0; i < 8; i++) { const a = a0 + (i / 8) * Math.PI * 2, b = a0 + ((i + 1) / 8) * Math.PI * 2; g.quad(P(ro, a), P(ro, b), P(ri, b), P(ri, a), col, ctr); }
+  }
+}
+const RIM_CACHE = new Map();
+function rimGlowGeo(w) {
+  const k = `${w.r}|${w.w}|${w.o.glowRim}`;
+  let g = RIM_CACHE.get(k);
+  if (!g) { const gb = new GB(); rimRing(gb, 0, 0, 0, w.r, w.w, w.o.glowRim); g = gb.build(false); RIM_CACHE.set(k, g); }
+  return g;
+}
 function compile(kind, def, p) {
   const c = newCtx(p.detailed, p.variant, p.color);
   const info = def.build(c, p);
   const E = { info, wheels: [] };
   const main = p.detailed ? c.wheels.slice(0, 4) : [];
   const merged = p.detailed ? c.wheels.slice(4) : c.wheels;
-  for (const w of merged) wheelParts(c.body, w.x, w.y, w.z, w.r, w.w, { ...w.o, side: Math.sign(w.x) || 1 });
-  for (const w of main) E.wheels.push({ x: w.x, y: w.y, z: w.z, r: w.r, geo: wheelGeo(w) });
+  for (const w of merged) {
+    wheelParts(c.body, w.x, w.y, w.z, w.r, w.w, { ...w.o, side: w.o?.both ? 0 : Math.sign(w.x) || 1 }); // both: 가운데 바퀴(오토바이) 양면
+    if (w.o?.glowRim) rimRing(c.glow, w.x, w.y, w.z, w.r, w.w, w.o.glowRim);
+  }
+  for (const w of main) E.wheels.push({ x: w.x, y: w.y, z: w.z, r: w.r, geo: wheelGeo(w), glow: w.o?.glowRim ? rimGlowGeo(w) : null });
   E.body = c.body.build(true);
   E.brake = c.brake.tris ? c.brake.build() : null;
   E.hazard = c.hazard.tris ? c.hazard.build() : null;
@@ -1696,11 +1810,14 @@ function compile(kind, def, p) {
   E.signs = c.signs;
   E.extra = c.extra.map((x) => ({ key: x.key, idx: x.idx, mat: x.mat, pos: x.pos, name: x.name, visible: x.visible, geo: x.gb.build(false) }));
   E.points = c.points; E.ud = c.ud;
+  E.blink = blinkGeos(c.blinks);                  // [좌, 우] { geo, halo } | null
+  E.rider = c.rider ? riderGeos(c.rider) : null;  // 오토바이 라이더: { pos, geos: {pose: geo}, groundY }
   // 치수: 길이/폭 = 차체 공칭값(충돌용), 높이 = 실제 최고점
   const bb = E.body.boundingBox;
   let top = bb.max.y;
   if (E.cannon) top = Math.max(top, c.cannonPos[1] + E.cannon.boundingBox.max.y);
   if (E.driver) top = Math.max(top, c.driverPos[1] + E.driver.boundingBox.max.y);
+  if (E.rider) top = Math.max(top, E.rider.pos[1] + E.rider.geos.ride.boundingBox.max.y);
   E.dims = { length: info.L, width: info.W, height: Math.round(top * 100) / 100 };
   E.wheelRadius = (E.wheels[0] || c.wheels[0])?.r ?? 0.4;
   E.wheelRadii = c.wheels.slice(0, 4).map((w) => w.r);
@@ -1796,7 +1913,26 @@ function instantiate(kind, E, detailed) {
   for (const w of E.wheels) {
     const wm = new THREE.Mesh(w.geo, bodyMat);
     wm.name = 'wheel'; wm.castShadow = true; wm.position.set(w.x, w.y, w.z);
+    if (w.glow) { const gm = new THREE.Mesh(w.glow, MAT.glow); gm.name = 'rimGlow'; wm.add(gm); }
     g.add(wm); wheels.push(wm);
+  }
+  // 방향지시등 (좌 = -X, 우 = +X). 꺼짐 = visible:false → draw call 0. 켜짐 = 램프 1 + 후광 1
+  const blinkers = [null, null];
+  (E.blink || []).forEach((b, i) => {
+    if (!b) return;
+    const m = new THREE.Mesh(b.geo, MAT.blinkOn);
+    m.name = i ? 'blinkR' : 'blinkL'; m.visible = false; m.castShadow = false; m.receiveShadow = false;
+    if (b.halo && blinkHaloTex()) { const pt = new THREE.Points(b.halo, MAT.blinkHalo); pt.name = 'blinkHalo'; pt.renderOrder = 3; m.add(pt); }
+    body.add(m); blinkers[i] = m;
+  });
+  // 오토바이 라이더 (body 자식, 원점 = 엉덩이/시트 접점). setPose 로 지오메트리 교체
+  let rider = null;
+  if (E.rider) {
+    rider = new THREE.Group(); rider.name = 'rider'; rider.position.set(...E.rider.pos);
+    const rm = new THREE.Mesh(E.rider.geos.ride, bodyMat); rm.name = 'riderMesh'; rm.castShadow = true; rider.add(rm);
+    rider.userData = { pose: 'ride', poses: RIDER_POSES, groundY: E.rider.groundY, mesh: rm, seat: E.rider.pos.slice() };
+    rider.userData.setPose = (name) => { const geo = E.rider.geos[name]; if (!geo) return false; rm.geometry = geo; rider.userData.pose = name; return true; };
+    body.add(rider);
   }
   g.userData = {
     kind, detailed,
@@ -1805,8 +1941,10 @@ function instantiate(kind, E, detailed) {
     driver, flashMats,
     // 확장
     glass, screen, siren, cannon, muzzle, exhaust,
+    blinkers, blinkSide: null,   // setBlinker(v, 'left'|'right'|'hazard'|null, t)
     ...(E.ud || {}), ...ext,   // 상점 차량: strobe[], strobePattern, hook, towPoint, beaconPos
   };
+  if (rider) Object.assign(g.userData, { rider, driver: rider, bike: body, setPose: rider.userData.setPose, poses: RIDER_POSES });
   return g;
 }
 
@@ -1815,10 +1953,10 @@ export function buildVehicle(kind, opts = {}) {
   if (!KINDS[kind]) kind = 'sedan';
   const detailed = opts.detailed ?? !!def.detailed;
   const nv = def.variants || 1;
-  const raw = Math.floor(Math.abs(opts.seed ?? 0)) % nv;
-  let color = (opts.livery ?? (def.livery ? def.livery(def.canon ? def.canon(raw) : raw) : (opts.color ?? def.color))) >>> 0;
+  const raw = opts.variant !== undefined ? Math.floor(Math.abs(opts.variant)) % nv : Math.floor(Math.abs(opts.seed ?? 0)) % nv; // opts.variant: 변형 직접 지정
+  let color = (opts.livery ?? (def.livery ? def.livery(def.canon ? def.canon(raw) : raw) : (opts.color ?? (def.variantColor ? def.variantColor(raw) : def.color)))) >>> 0;
   // colorVariant: seed 없이 색만 다르게 주면 변형도 색으로 갈림 (나란히 달리는 두 트럭의 운전자가 다르게)
-  const variant = def.colorVariant && opts.seed === undefined ? color % nv : def.canon ? def.canon(raw) : raw;
+  const variant = def.colorVariant && opts.seed === undefined && opts.variant === undefined ? color % nv : def.canon ? def.canon(raw) : raw;
   const key = `${kind}|${color}|${detailed ? 1 : 0}|${variant}`;
   let E = GEO_CACHE.get(key);
   if (!E) { E = compile(kind, def, { color, detailed, variant, seed: opts.seed ?? 0 }); GEO_CACHE.set(key, E); }
@@ -1859,6 +1997,21 @@ export function setStrobe(vehicle, t) {
     s[0].visible = f(0) || f(0.15); s[1].visible = f(0.5) || f(0.65);
   } else { const ph = Math.floor(t * 5) % 2 === 0; s[0].visible = ph; s[1].visible = !ph; }
 }
+// 방향지시등(깜빡이). side: 'left'(-X) | 'right'(+X) | 'hazard'(양쪽 동시) | null/false(끔)
+//  t: 초(number) → 실제 차처럼 BLINK_PERIOD 주기(0.333s 켜짐 / 0.333s 꺼짐, ≈1.5Hz), true(기본) → 켜짐 고정(스틸컷)
+//  반환: 지금 켜져 있는지 (딸깍 사운드 동기화용: false→true 바뀔 때 audio 'blink').
+//  setHazard(기존 비상등 메시)와 독립 — 둘 다 켜도 깜빡이 램프가 비상등을 감싸 덮을 뿐 z-fight 없음.
+export const BLINK_PERIOD = 2 / 3;
+export function setBlinker(vehicle, side, t = true) {
+  const ud = vehicle?.userData, B = ud?.blinkers; if (!B) return false;
+  const on = !!side && (t === true || (typeof t === 'number' && ((t % BLINK_PERIOD) + BLINK_PERIOD) % BLINK_PERIOD < BLINK_PERIOD / 2));
+  if (B[0]) B[0].visible = on && (side === 'left' || side === 'hazard');
+  if (B[1]) B[1].visible = on && (side === 'right' || side === 'hazard');
+  ud.blinkSide = side || null;
+  return on;
+}
+// 오토바이 라이더 포즈 (userData.setPose 와 같음). 반환: 성공 여부
+export function setPose(vehicle, name) { return vehicle?.userData?.setPose ? vehicle.userData.setPose(name) : false; }
 // 확장: detailed 차량의 per-vehicle 재질 해제 (지오메트리는 캐시 공유 → dispose 금지)
 export function disposeVehicle(vehicle) { for (const m of vehicle?.userData?.flashMats || []) m.dispose(); }
 

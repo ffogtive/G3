@@ -110,6 +110,7 @@ export class Traffic {
     this.clear();
     this.night = night;
     this.rng = rng;
+    this.nextCheater = null;   // 스테이지마다 첫 얌체는 시작 후 6초 뒤 (G.time은 전역 시계라 이전 판 마감이 남으면 안 됨)
     const sFront = Math.max(...villains.map((v) => v.s));
     this.frontLine = sFront;
     this.frontV = stage.jamSpeed;
@@ -315,7 +316,8 @@ export class Traffic {
     // 갇힘 보조 (갓길 장애물 앞 등): 옆 차선이 끼워준다
     if (!this.released && ctx.phase === 'jam') this._stuckAssist(dt, player);
     // 갓길 얌체 등장 이벤트: 4차선 차가 플레이어 앞 갓길로 튀어나옴
-    if (ctx.allowEvents && player.lane === SHOULDER_LANE && player.v > 8 && t > (this.nextCheater || 6)) {
+    if (this.nextCheater == null) this.nextCheater = t + 6;
+    if (ctx.allowEvents && player.lane === SHOULDER_LANE && player.v > 8 && t > this.nextCheater) {
       this.nextCheater = t + 7 + rng() * 5;
       this._spawnCheaterAhead(player);
     }
