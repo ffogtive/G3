@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>scenery 하네스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #111; font-family: "Jua", sans-serif; }
+  canvas { display: block; }
+  #info { position: fixed; left: 8px; top: 8px; color: #fff; font: 12px/1.4 monospace; background: rgba(0,0,0,.55); padding: 6px 8px; border-radius: 6px; pointer-events: none; white-space: pre; }
+  #nav { position: fixed; right: 8px; top: 8px; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 60vw; }
+  #nav a { color: #fff; background: #0b7a4b; padding: 4px 8px; border-radius: 6px; text-decoration: none; font-size: 13px; }
+  #nav a.on { background: #ffb400; color: #222; }
+</style>
+<script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="info">loading…</div>
+<div id="nav"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SKY, SEG_LEN, laneX, OPP_LANE_X, STAGES } from '../js/config.js';
+import {
+  buildRoadSegment, buildProp, buildGantrySign, buildVMS, buildBanner, makeSkyDome, makeGround,
+  preloadFonts, LAYOUT,
+} from '../js/scenery.js';
+
+const Q = new URLSearchParams(location.search);
+const view = Q.get('view') || 'chase';
+const night = Q.get('night') === '1' || Q.get('sky') === 'night';
+const skyKey = night ? 'night' : (Q.get('sky') || 'day');
+const sky = SKY[skyKey] || SKY.day;
+const stage = STAGES[(+Q.get('stage') || 1) - 1] || STAGES[0];
+const focusS = +(Q.get('s') || 20);
+
+// 네비 링크
+const nav = document.getElementById('nav');
+for (const [label, qs] of [['chase', 'view=chase'], ['wide', 'view=wide'], ['signs', 'view=signs'], ['barrier', 'view=barrier'], ['props', 'view=props'],
+  ['night', 'view=chase&night=1'], ['night wide', 'view=wide&night=1'], ['sunset', 'view=chase&sky=sunset'], ['morning', 'view=chase&sky=morning'], ['fly', 'view=chase&fly=1'], ['orbit', 'view=chase&orbit=1']]) {
+  const a = document.createElement('a'); a.href = '?' + qs; a.textContent = label;
+  if (location.search.replace('?', '') === qs) a.className = 'on';
+  nav.appendChild(a);
+}
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(sky.fog, sky.fogNear, sky.fogFar);
+scene.background = new THREE.Color(sky.fog);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 2000);
+
+const hemi = new THREE.HemisphereLight(sky.hemiSky, sky.hemiGround, sky.hemiI);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(sky.sun, sky.sunI);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera; sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 1; sc.far = 300;
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
+
+const t0 = performance.now();
+const fontsOk = await preloadFonts();
+const tFont = performance.now() - t0;
+
+const dome = makeSkyDome(sky.top, sky.bottom);
+scene.add(dome);
+const ground = makeGround({ night });
+scene.add(ground);
+
+const world = new THREE.Group();
+scene.add(world);
+const at = (o, x, s, y = 0, ry = 0) => { o.position.set(x, y, -s); o.rotation.y = ry; world.add(o); return o; };
+
+const t1 = performance.now();
+let segCount = 0;
+if (view === 'props') {
+  buildPropsGallery();
+} else {
+  buildHighway();
+}
+const tBuild = performance.now() - t1;
+
+function buildHighway() {
+  // 도로: s = -80 .. 400
+  for (let s = -80; s < 400; s += SEG_LEN) {
+    const k = Math.round(s / SEG_LEN);
+    const sb = (s >= 120 && s < 240) ? (s >= 200 ? 'both' : 'right') : null;
+    at(buildRoadSegment(SEG_LEN, { night, soundBarrier: sb, seed: k + 10 }), 0, s);
+    segCount++;
+  }
+  // 문형 표지판 / VMS / 구간단속 / 현수막
+  at(buildGantrySign(stage.signs, { night, route: stage.route }), 0, 75);
+  const vms = at(buildVMS(stage.vms, { night }), 0, 175);
+  window.__vms = vms;
+  at(buildProp('cctv', 0, { night }), 0, 265);
+  at(buildBanner('졸음운전! 자면 죽는다', { seed: 1 }), LAYOUT.bannerR, 48, 0, -0.35);
+  at(buildBanner('졸음쉼터 2km', { seed: 2 }), LAYOUT.bannerR, 300, 0, -0.35);
+  // 가로등
+  for (let s = 10; s < 400; s += 40) at(buildProp('streetLight', 0, { night }), LAYOUT.streetLightR, s);
+  // 광고판
+  at(buildProp('billboard', 0, { night }), 26, 120, 0, -0.5);
+  at(buildProp('billboard', 2, { night }), -40, 230, 0, 0.4);
+  // 아파트 단지 (좌: 반대편 너머, 우: 방음벽 너머)
+  for (let i = 0; i < 7; i++) at(buildProp('apartment', i + (i % 3) * 12, { night }), -52 - (i % 2) * 6, 110 + i * 24);
+  for (let i = 0; i < 6; i++) at(buildProp('apartment', 5 + i + 24, { night }), 40 + (i % 2) * 8, 150 + i * 24);
+  // 논 & 시골집 & 교회
+  for (let i = 0; i < 4; i++) at(buildProp('paddy', i), 26 + (i % 2) * 21, -10 + Math.floor(i / 2) * 21);
+  at(buildProp('paddy', 7), -45, 20); at(buildProp('paddy', 8), -45, 41);
+  at(buildProp('house', 0, { night }), 66, 30, 0, -0.3);
+  at(buildProp('house', 3, { night }), 64, 60, 0, 0.2);
+  at(buildProp('house', 5, { night }), -40, 75, 0, Math.PI * 0.5);
+  at(buildProp('church', 0, { night }), 58, 105, 0, -0.4);
+  // 나무
+  const r = mulberry(7);
+  for (let i = 0; i < 70; i++) {
+    const right = r() < 0.6;
+    const x = right ? 15 + r() * 40 : -31 - r() * 25;
+    const s = -60 + r() * 440;
+    if (right && x < 55 && s > -15 && s < 40 && x > 22) continue; // 논 자리
+    const k = r();
+    const kind = k < 0.45 ? 'tree' : k < 0.8 ? 'pine' : 'bush';
+    at(buildProp(kind, (r() * 100) | 0, { night }), x, s, 0, r() * 6);
+  }
+  // 산
+  const mtn = [[-150, 330], [-230, 220], [165, 300], [250, 180], [-90, 420], [95, 440], [10, 520], [-260, 400], [290, 380]];
+  mtn.forEach(([x, s], i) => at(buildProp('mountain', i, {}), x, s));
+  // 구름
+  for (let i = 0; i < 10; i++) at(buildProp('cloud', i), -180 + r() * 360, 60 + r() * 600, 55 + r() * 30);
+  // 스케일 확인용 차량
+  addCars();
+}
+
+async function addCars() {
+  let V = null;
+  try { V = await import('../js/vehicles.js'); } catch (e) { V = null; }
+  const cars = [];
+  const r = mulberry(3);
+  for (let i = 0; i < 26; i++) {
+    const lane = i % 4, s = 6 + Math.floor(i / 4) * 9 + r() * 2;
+    cars.push([laneX(lane), s, false]);
+  }
+  for (let j = 0; j < 4; j++) cars.push([OPP_LANE_X(j), 30 + j * 25, true]);
+  for (const [x, s, opp] of cars) {
+    let o;
+    if (V && V.buildVehicle) {
+      const kinds = ['sedan', 'suv', 'compact', 'truck', 'bus', 'taxi', 'pickup1t'];
+      o = V.buildVehicle(kinds[(r() * kinds.length) | 0], { color: [0xf4f4f2, 0x2b2d31, 0x9aa1a9, 0xc3c8ce][(r() * 4) | 0] });
+      if (night && V.setHeadlights) V.setHeadlights(o, true);
+      if (V.setBrake) V.setBrake(o, true);
+    } else {
+      o = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.0, 4.4), new THREE.MeshLambertMaterial({ color: [0xf4f4f2, 0x2b2d31, 0x9aa1a9, 0xc3c8ce][(r() * 4) | 0] }));
+      body.position.y = 0.75; body.castShadow = true;
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.7, 2.2), new THREE.MeshLambertMaterial({ color: 0x23324a }));
+      cab.position.set(0, 1.55, 0.2); cab.castShadow = true;
+      const brake = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.18, 0.05), new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
+      brake.position.set(0, 0.95, 2.22);
+      o.add(body, cab, brake);
+    }
+    at(o, x, s, 0, opp ? Math.PI : 0);
+  }
+}
+
+function buildPropsGallery() {
+  for (let s = -80; s < 200; s += SEG_LEN) { at(buildRoadSegment(SEG_LEN, { night, soundBarrier: s === 40 ? 'right' : null, seed: s / 40 }), 0, s); segCount++; }
+  const kinds = ['tree', 'pine', 'bush', 'house', 'church', 'streetLight', 'billboard', 'paddy', 'apartment', 'cloud'];
+  let x = 16;
+  const row = (kind, seeds, x, spacing, y = 0) => seeds.forEach((sd, i) => at(buildProp(kind, sd, { night }), x, 10 + i * spacing, y));
+  row('tree', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 15, 5);
+  row('pine', [0, 1, 2, 3, 4, 5, 6, 7], 21, 6);
+  row('bush', [0, 1, 2, 3, 4, 5], 26, 4);
+  row('house', [0, 1, 2, 3], 34, 14);
+  row('church', [0, 1], 50, 22);
+  row('streetLight', [0], LAYOUT.streetLightR, 0);
+  row('billboard', [0, 1, 2, 3, 4, 5, 6], -40, 16);
+  row('paddy', [0, 1, 2], 70, 22);
+  row('apartment', [0, 13, 26, 39], -60, 22);
+  at(buildProp('cctv', 0, { night }), 0, 60);
+  at(buildProp('mountain', 3), 120, 160);
+  row('cloud', [0, 1, 2], 0, 30, 30);
+  at(buildGantrySign(stage.signs, { night, route: stage.route }), 0, 100);
+  at(buildVMS(stage.vms, { night }), 0, 140);
+  at(buildBanner('졸음운전! 자면 죽는다', { seed: 1 }), LAYOUT.bannerR, 20, 0, -0.35);
+}
+
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// 카메라 프리셋
+const focus = new THREE.Vector3(0, 0, -focusS);
+function placeCamera(fs) {
+  focus.set(0, 0, -fs);
+  if (view === 'wide') { camera.position.set(focus.x + 70, 95, focus.z + 40); camera.lookAt(focus.x - 10, 0, focus.z - 110); }
+  else if (view === 'signs') { camera.position.set(3, 8, -75 + 32); camera.lookAt(0, 7.5, -75); }
+  else if (view === 'barrier') { camera.position.set(2, 3.5, -150); camera.lookAt(14, 2.5, -190); }
+  else if (view === 'props') { camera.position.set(10, 38, 60); camera.lookAt(10, 0, -60); }
+  else { camera.position.set(focus.x + 4, 16, focus.z + 18); camera.lookAt(focus.x, 0, focus.z - 14); }
+}
+placeCamera(focusS);
+let controls = null;
+if (Q.get('orbit') === '1') { controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 0, -focusS - 14); }
+
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+const info = document.getElementById('info');
+let frame = 0, last = performance.now(), fps = 0, flyS = focusS;
+function tick() {
+  const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+  fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+  if (Q.get('fly') === '1') { flyS += dt * 30; if (flyS > 300) flyS = 0; placeCamera(flyS); }
+  if (controls) controls.update();
+  dome.position.copy(camera.position);
+  sun.position.set(focus.x + sky.sunPos[0], sky.sunPos[1], focus.z + sky.sunPos[2]);
+  sun.target.position.copy(focus);
+  renderer.render(scene, camera);
+  if ((frame++ % 20) === 0) {
+    const ri = renderer.info.render;
+    info.textContent = `view=${view} sky=${skyKey} fonts=${fontsOk ? 'ok' : 'fallback'} (${tFont.toFixed(0)}ms)\n` +
+      `segments=${segCount}  build=${tBuild.toFixed(0)}ms\n` +
+      `drawCalls=${ri.calls}  tris=${(ri.triangles / 1000).toFixed(1)}k  geoms=${renderer.info.memory.geometries} tex=${renderer.info.memory.textures}\n` +
+      `fps≈${fps.toFixed(0)}`;
+    window.__info = { calls: ri.calls, tris: ri.triangles, build: tBuild, fonts: fontsOk, tFont, segs: segCount, geoms: renderer.info.memory.geometries, tex: renderer.info.memory.textures };
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+window.__scenery = { THREE, renderer, scene, camera, world, placeCamera };
+</script>
+</body>
+</html>

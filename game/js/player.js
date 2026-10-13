@@ -1,0 +1,155 @@
+// 플레이어 "참교육 머신": 차선 홉 이동, 자동 가속, 추돌 처리, 연출(롤/요/홉/바퀴 회전)
+import { laneX, NUM_LANES, TUNE } from './config.js';
+import { buildVehicle, setBrake } from './vehicles.js';
+
+export class Player {
+  constructor(scene) {
+    this.mesh = buildVehicle('player', { detailed: true });
+    scene.add(this.mesh);
+    const ud = this.mesh.userData;
+    this.len = ud.length || 4.0;
+    this.w = ud.width || 1.85;
+    this.kind = 'player';
+    this.isPlayer = true;
+    this.reset(0, 2);
+  }
+
+  reset(s, lane) {
+    this.s = s; this.lane = lane; this.x = laneX(lane);
+    this.v = 0; this.a = 0;
+    this.lcFrom = lane; this.lcT = 1; this.lcDir = 0;
+    this.wiggleT = 1; this.wiggleDir = 0;
+    this.invuln = 0; this.bumpKick = 0;
+    this.roll = 0; this.yaw = 0; this.hop = 0;
+    this.mode = 'jam';
+    this.ghost = false;
+    this.brakeOn = false;
+    this.slowTime = 0;
+    this.mesh.visible = true;
+    this.mesh.position.set(this.x, 0, -s);
+  }
+
+  get changingLane() { return this.lcT < 1; }
+
+  // dir: -1 왼쪽(1차선 쪽), +1 오른쪽. 반환: 'ok' | 'edge' | {blocked: entity}
+  requestLane(dir, traffic) {
+    const tl = this.lane + dir;
+    if (tl < 0 || tl >= NUM_LANES) { this._wiggle(dir); return 'edge'; }
+    if (this.lcT < 0.65) return 'busy';
+    if (!this.ghost && traffic) {
+      const blocker = traffic.laneBlocked(tl, this.s - this.len / 2 - 0.35, this.s + this.len / 2 + 0.35, this);
+      if (blocker) { this._wiggle(dir); return { blocked: blocker }; }
+    }
+    this.lcFrom = this.x;
+    this.lane = tl;
+    this.lcT = 0;
+    this.lcDir = dir;
+    return 'ok';
+  }
+
+  _wiggle(dir) { this.wiggleT = 0; this.wiggleDir = dir; }
+
+  // 외부 충격 (원흉 공격 등)
+  knock(back = 3, kick = 1) {
+    this.s -= back;
+    this.v = Math.min(this.v, 0) - 1.5;
+    this.bumpKick = kick;
+    this.invuln = 0.9;
+  }
+
+  // ctx: { input, traffic, mode, bossRefS, bossRefV, cruiseV, brake }
+  // 반환: 이벤트 배열 [{type:'bump', other}]
+  update(dt, ctx) {
+    const events = [];
+    this.mode = ctx.mode;
+    this.invuln = Math.max(0, this.invuln - dt);
+    const prevV = this.v;
+
+    // ── 종방향 속도
+    if (ctx.mode === 'jam') {
+      const braking = ctx.brake;
+      if (braking) this.v = Math.max(0, this.v - TUNE.playerBrake * dt);
+      else this.v = Math.min(TUNE.playerMaxV, this.v + TUNE.playerAccel * dt * (this.v < 0 ? 2.2 : 1));
+      this.brakeOn = braking;
+    } else if (ctx.mode === 'boss') {
+      const target = ctx.bossRefS - TUNE.bossFollowGap;
+      const vCmd = ctx.bossRefV + Math.max(-7, Math.min(9, (target - this.s) * 1.6));
+      const dv = vCmd - this.v;
+      this.v += Math.max(-14 * dt, Math.min(12 * dt, dv));
+      this.brakeOn = dv < -0.5;
+    } else if (ctx.mode === 'cruise') {
+      // 해방 후 질주: 앞차가 가까우면 속도를 맞춘다 (뚫고 지나가지 않게)
+      let vt = ctx.cruiseV;
+      const L = ctx.traffic ? ctx.traffic.leaderOf(this) : null;
+      if (L && L.gap < 12) vt = Math.min(vt, L.car.v + Math.max(-3, (L.gap - 5) * 0.6));
+      const dv = vt - this.v;
+      this.v += Math.max(-14 * dt, Math.min(7 * dt, dv));
+      this.brakeOn = dv < -1;
+    } else { // 'idle' (인트로/결과)
+      const dv = (ctx.cruiseV ?? 0) - this.v;
+      this.v += Math.max(-8 * dt, Math.min(6 * dt, dv));
+      this.brakeOn = this.v < 0.5;
+    }
+    this.a = (this.v - prevV) / Math.max(dt, 1e-4);
+    this.s += this.v * dt;
+
+    // ── 추돌 (정체 구간만)
+    if (ctx.mode === 'jam' && ctx.traffic && !this.ghost) {
+      const L = ctx.traffic.leaderOf(this);
+      if (L && L.gap < 0) {
+        const other = L.car;
+        this.s = other.s - other.len / 2 - this.len / 2 - 0.35;
+        if (this.invuln <= 0) {
+          this.v = Math.min(this.v, other.v) * 0.2 - 2.6;
+          this.bumpKick = 1;
+          this.invuln = 0.45;
+          events.push({ type: 'bump', other });
+        } else {
+          this.v = Math.min(this.v, other.v);
+        }
+      }
+    }
+    if (ctx.mode === 'jam' && this.v < 5) this.slowTime += dt;
+
+    // ── 횡방향 (차선 홉)
+    if (this.lcT < 1) {
+      this.lcT = Math.min(1, this.lcT + dt / TUNE.laneChangeTime);
+      const e = 1 - Math.pow(1 - this.lcT, 3);
+      this.x = this.lcFrom + (laneX(this.lane) - this.lcFrom) * e;
+      const arc = Math.sin(Math.PI * this.lcT);
+      this.hop = 0.28 * arc;
+      this.roll = -this.lcDir * 0.16 * arc;
+      this.yaw = -this.lcDir * 0.16 * arc;
+    } else {
+      this.x = laneX(this.lane);
+      this.hop *= Math.exp(-dt * 20);
+      this.roll *= Math.exp(-dt * 14);
+      this.yaw *= Math.exp(-dt * 14);
+    }
+    let wig = 0;
+    if (this.wiggleT < 1) {
+      this.wiggleT = Math.min(1, this.wiggleT + dt / 0.22);
+      wig = Math.sin(Math.PI * this.wiggleT) * 0.55 * this.wiggleDir;
+    }
+
+    // ── 메시 반영
+    this.bumpKick = Math.max(0, this.bumpKick - dt * 3.2);
+    const m = this.mesh;
+    m.position.set(this.x + wig, this.hop, -this.s);
+    m.rotation.y = this.yaw - wig * 0.08;
+    const body = m.userData.body;
+    if (body) {
+      const accPitch = Math.max(-0.06, Math.min(0.06, this.a * 0.004));
+      body.rotation.x = accPitch - this.bumpKick * 0.14 * Math.sin(this.bumpKick * 9);
+      body.rotation.z = this.roll;
+      body.position.y = (ctx.mode === 'jam' && this.v < 0.5 ? Math.sin(performance.now() * 0.03) * 0.012 : 0);
+    }
+    const r = m.userData.wheelRadius || 0.42;
+    for (const w of m.userData.wheels || []) w.rotation.x -= (this.v * dt) / r;
+    setBrake(m, this.brakeOn);
+
+    // 무적 깜빡임
+    m.visible = !(this.invuln > 0.05 && Math.floor(this.invuln * 16) % 2 === 0 && ctx.mode === 'boss');
+    return events;
+  }
+}

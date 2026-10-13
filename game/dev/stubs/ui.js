@@ -1,0 +1,4 @@
+const L = []; window.__uiLog = L; let H = {};
+export function initUI(h) { H = h; window.__uiHandlers = h; }
+const rec = (n) => (...a) => { L.push([n, ...a.map((x) => (typeof x === 'object' ? JSON.stringify(x).slice(0, 80) : x))]); if (L.length > 400) L.splice(0, 100); };
+export const ui = { showTitle: rec('title'), hideTitle: rec('hideTitle'), showStageCard: (s) => { rec('card')(s.title); return new Promise((r) => setTimeout(r, 300)); }, setHUD: (h) => { window.__hud = h; }, setNav: (n) => { window.__nav = n; }, showBoss: (b) => { window.__boss = b; }, hideBoss: rec('hideBoss'), bubble: () => {}, removeBubble: () => {}, clearBubbles: () => {}, popText: rec('pop'), banner: rec('banner'), setReleaseCounter: (n) => { window.__rel = n; }, showResult: rec('result'), hideResult: () => {}, setTouchVisible: () => {}, setMuted: () => {}, flash: () => {}, vignette: () => {}, setPausedVisible: () => {} };

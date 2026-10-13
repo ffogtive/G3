@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>vehicles 하네스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6f7378; font-family: "Jua", sans-serif; }
+  canvas { display: block; position: fixed; inset: 0; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  .lb { position: absolute; color: #fff; font: 11px/1.25 monospace; background: rgba(0,0,0,.55); padding: 2px 5px; border-radius: 4px; white-space: pre; }
+  .lb b { font: 13px "Jua", sans-serif; color: #ffd23a; }
+  .lb.bad { background: rgba(170,0,0,.8); }
+  #ui { position: fixed; right: 6px; top: 6px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 70vw; font: 12px monospace; }
+  #ui a, #ui label { color: #fff; background: rgba(11,122,75,.9); padding: 3px 7px; border-radius: 5px; text-decoration: none; cursor: pointer; user-select: none; }
+  #ui a.on { background: #ffb400; color: #222; }
+  #ui label { background: rgba(31,79,163,.9); }
+  #ui input { vertical-align: middle; margin: 0 3px 0 0; }
+  #sum { position: fixed; left: 6px; bottom: 6px; color: #fff; font: 11px/1.3 monospace; background: rgba(0,0,0,.6); padding: 4px 6px; border-radius: 5px; white-space: pre; pointer-events: none; display: none; }
+</style>
+<script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="ui"></div>
+<pre id="sum"></pre>
+<script type="module">
+// ════════════════════════════════════════════════════════════════════════
+// vehicles.js 검증 하네스
+//  ?view=rear (기본, 게임 추격캠 각도) | front (앞 3/4) | side | top | lineup (측면 정사영 비율 비교) | jam (실제 정체 장면)
+//  ?night=1  ?brake=1 ?hazard=1 ?head=1 ?flash=0..1 ?detailed=1(NPC도 detailed) ?anim=1(바퀴/비상등 애니)
+//  ?kinds=sedan,bus  ?proj=0(투사체 줄 숨김)  ?stats=1(콘솔/하단 요약)  ?stage=N (jam 뷰 원흉)  ?seed=N
+//  window.__veh = { stats, scene, ... } 노출 (스크린샷 --eval 용)
+// ════════════════════════════════════════════════════════════════════════
+import * as THREE from 'three';
+import * as V from '../js/vehicles.js';
+import { SKY, laneX, NUM_LANES, LANE_W, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, STAGES, OPP_LANE_X } from '../js/config.js';
+
+const Q = new URLSearchParams(location.search);
+const view = Q.get('view') || 'rear';
+const night = Q.get('night') === '1';
+const flag = (k, d = false) => (Q.has(k) ? Q.get(k) !== '0' : d);
+const state = {
+  brake: flag('brake', view === 'jam'), hazard: flag('hazard'), head: flag('head', night), flash: +(Q.get('flash') || 0),
+  detailed: flag('detailed'), anim: flag('anim'), proj: flag('proj', view !== 'jam' && view !== 'lineup'), siren: flag('siren'),
+};
+const ALL_KINDS = ['compact', 'sedan', 'suv', 'taxi', 'van', 'pickup1t', 'truck', 'bus', 'police', 'player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor'];
+const DETAILED = new Set(['player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor']);
+const VILLAIN_COLOR = { villainSedan: 0xd9c9a3, villainTruck: 0x2f6fd6, villainSuv: 0x1d1f22, villainPhone: 0xe85d9a, tractor: 0x3f8f3a };
+const kinds = (Q.get('kinds') || ALL_KINDS.join(',')).split(',').filter(Boolean);
+const seed = +(Q.get('seed') || 0);
+const sky = night ? SKY.night : SKY.day;
+
+// ── UI
+const ui = document.getElementById('ui');
+const base = new URLSearchParams(location.search);
+for (const v of ['rear', 'front', 'side', 'top', 'lineup', 'jam']) {
+  const p = new URLSearchParams(base); p.set('view', v);
+  const a = document.createElement('a'); a.href = '?' + p; a.textContent = v; if (v === view) a.className = 'on'; ui.appendChild(a);
+}
+{ const p = new URLSearchParams(base); p.set('night', night ? '0' : '1'); const a = document.createElement('a'); a.href = '?' + p; a.textContent = night ? 'day' : 'night'; ui.appendChild(a); }
+for (const k of ['brake', 'hazard', 'head', 'detailed', 'anim', 'siren']) {
+  const l = document.createElement('label'); const i = document.createElement('input'); i.type = 'checkbox'; i.checked = state[k];
+  i.onchange = () => { state[k] = i.checked; if (k === 'detailed') { const p = new URLSearchParams(location.search); p.set('detailed', i.checked ? '1' : '0'); location.search = p; } applyLights(); dirty = true; };
+  l.append(i, k); ui.appendChild(l);
+}
+{
+  const l = document.createElement('label'); const i = document.createElement('input'); i.type = 'range'; i.min = 0; i.max = 1; i.step = 0.05; i.value = state.flash; i.style.width = '60px';
+  i.oninput = () => { state.flash = +i.value; applyLights(); dirty = true; }; l.append('flash ', i); ui.appendChild(l);
+}
+
+// ── 렌더러 / 씬
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setScissorTest(true);
+const scene = new THREE.Scene();
+const bg = new THREE.Color(night ? 0x1c2148 : 0xbcd6e6);
+scene.background = bg;
+const hemi = new THREE.HemisphereLight(sky.hemiSky ?? 0xbfe4ff, sky.hemiGround ?? 0x8a9a6a, sky.hemiI ?? 1.25);
+const sun = new THREE.DirectionalLight(sky.sun ?? 0xfff4dc, sky.sunI ?? 2.6);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
+const sunDir = new THREE.Vector3(...(sky.sunPos || [-40, 80, 30])).normalize();
+scene.add(hemi, sun, sun.target);
+function aimSun(cx, cz, half) {
+  const sc = sun.shadow.camera;
+  sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 1; sc.far = 260; sc.updateProjectionMatrix();
+  sun.target.position.set(cx, 0, cz); sun.position.set(cx, 0, cz).addScaledVector(sunDir, 120);
+}
+
+// 도로: 진회색 아스팔트 + 차선 점선
+const asphalt = night ? 0x2a2d33 : 0x5b5f66;
+function makeRoad(w, l, cz = 0) {
+  const g = new THREE.Group();
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshLambertMaterial({ color: asphalt }));
+  p.rotation.x = -Math.PI / 2; p.position.z = cz; p.receiveShadow = true; g.add(p);
+  const dash = new THREE.MeshLambertMaterial({ color: 0xe8e8e2 });
+  const dg = new THREE.PlaneGeometry(0.16, 3); dg.rotateX(-Math.PI / 2);
+  for (let i = 1; i < NUM_LANES; i++) for (let z = cz - l / 2; z < cz + l / 2; z += 9) { const d = new THREE.Mesh(dg, dash); d.position.set(laneX(i) - LANE_W / 2, 0.01, z); d.receiveShadow = true; g.add(d); }
+  const yl = new THREE.Mesh(new THREE.PlaneGeometry(0.18, l), new THREE.MeshLambertMaterial({ color: 0xf2c21c })); yl.rotation.x = -Math.PI / 2; yl.position.set(-LANE_W * 2 + 0.2, 0.01, cz); g.add(yl);
+  return g;
+}
+
+// ── 통계
+const tris = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3;
+function visibleChain(o) { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; }
+function visBox(obj) { // 보이는 메시만 (숨은 헤드라이트 빔 13m 제외)
+  const bb = new THREE.Box3(); obj.updateMatrixWorld(true);
+  obj.traverse((o) => { if (o.isMesh && visibleChain(o) && o.name !== 'beam') { o.geometry.boundingBox || o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
+  if (bb.isEmpty()) bb.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
+  return bb;
+}
+function statOf(obj) {
+  let meshes = 0, t = 0, casters = 0; const names = [];
+  obj.traverse((o) => { if (o.isMesh && visibleChain(o)) { meshes++; t += tris(o.geometry); if (o.castShadow) casters++; names.push(o.name || '?'); } });
+  return { meshes, tris: t, casters, names };
+}
+
+// ── 차량
+const entries = []; // { kind, obj, label, isProj }
+function mkVehicle(kind) {
+  const det = state.detailed || DETAILED.has(kind);
+  const color = VILLAIN_COLOR[kind] ?? (kind === 'sedan' ? 0xf4f4f2 : kind === 'compact' ? 0xd8342c : kind === 'suv' ? 0x2b2d31 : kind === 'van' ? 0xe9ecef : kind === 'truck' ? 0xf4f4f2 : kind === 'bus' ? 0x2f6fd6 : undefined);
+  return V.buildVehicle(kind, { color, detailed: det, seed });
+}
+function applyLights() {
+  for (const e of entries) {
+    if (e.isProj) continue;
+    V.setBrake(e.obj, state.brake); V.setHazard(e.obj, state.hazard); V.setHeadlights(e.obj, state.head); V.setFlash(e.obj, state.flash);
+    if (V.setSiren) V.setSiren(e.obj, state.siren ? performance.now() / 1000 : null);
+  }
+  if (jamCars) for (const c of jamCars) { V.setBrake(c, state.brake); V.setHeadlights(c, state.head); V.setHazard(c, state.hazard); }
+}
+let jamCars = null;
+
+// 카메라 오프셋 (차량 중심 기준) — rear = 게임 추격캠 (main.js chaseTarget: +2.4, 12.5, +16 → 시선 0, 0.4, −11)
+const OFFS = { rear: [2.4, 12.5, 16], front: [-5.5, 3.4, -8.5], side: [12, 2.2, 0.01], top: [0.01, 30, 0.6] };
+
+window.__veh = { scene, entries, V, state, statOf };
+const labels = document.getElementById('labels');
+const sumEl = document.getElementById('sum');
+let tiles = [];
+let dirty = true;
+
+
+function setupTiles() {
+  const road = makeRoad(40, 60); scene.add(road);
+  for (const k of kinds) { const obj = mkVehicle(k); scene.add(obj); entries.push({ kind: k, obj }); }
+  if (state.proj) {
+    for (const k of V.PROJECTILE_KINDS) {
+      const obj = V.buildProjectile(k); obj.position.y = k === 'hay' ? 0.6 : 0.45; scene.add(obj);
+      if (k === 'missile') obj.lookAt(obj.position.x + 0.6, obj.position.y + 0.25, obj.position.z - 1); // 앞(−Z)으로 날아가는 중 → 코가 화면 안쪽
+      if (k === 'tack') obj.rotation.x = 0.5;
+      entries.push({ kind: k, obj, isProj: true });
+    }
+    { const obj = V.buildProjectile('cup'); obj.position.y = 0.45; obj.scale.set(1.6, 0.25, 1.6); scene.add(obj); entries.push({ kind: 'cup(웅덩이)', obj, isProj: true }); }
+    for (const p of [0.25, 0.85]) { const m = V.buildWarningMarker(); m.position.y = 0.04; m.userData.setProgress(p); scene.add(m); entries.push({ kind: `marker ${p}`, obj: m, isProj: true, marker: true }); }
+  }
+  applyLights();
+  layout();
+}
+
+function layout() {
+  labels.innerHTML = '';
+  tiles = [];
+  const W = innerWidth, H = innerHeight;
+  const veh = entries.filter((e) => !e.isProj), prj = entries.filter((e) => e.isProj);
+  const projH = prj.length ? Math.round(H * (veh.length ? 0.2 : 1)) : 0;
+  const cols = +(Q.get('cols') || Math.min(veh.length, Math.max(1, Math.round(Math.sqrt(veh.length * (W / Math.max(1, H - projH)) / 1.25)))));
+  const rows = Math.ceil(veh.length / Math.max(1, cols));
+  const tw = W / Math.max(1, cols), th = (H - projH) / Math.max(1, rows);
+  veh.forEach((e, i) => tiles.push({ e, x: (i % cols) * tw, y: Math.floor(i / cols) * th, w: tw, h: th }));
+  if (prj.length) {
+    const pc = Math.min(prj.length, +(Q.get('pcols') || prj.length)); const pr = Math.ceil(prj.length / pc);
+    const pw = W / pc, ph = projH / pr;
+    prj.forEach((e, i) => tiles.push({ e, x: (i % pc) * pw, y: H - projH + Math.floor(i / pc) * ph, w: pw, h: ph }));
+  }
+  for (const t of tiles) {
+    const el = document.createElement('div'); el.className = 'lb';
+    el.style.left = t.x + 3 + 'px'; el.style.top = t.y + 3 + 'px';
+    labels.appendChild(el); t.el = el;
+    t.cam = new THREE.PerspectiveCamera(20, t.w / t.h, 0.3, 400);
+  }
+  refreshLabels();
+}
+
+function refreshLabels() {
+  const lines = [];
+  for (const t of tiles) {
+    const e = t.e, ud = e.obj.userData, s = statOf(e.obj);
+    let txt;
+    if (e.isProj) txt = `<b>${e.kind}</b> ${s.tris}▲ ${s.meshes}dc`;
+    else {
+      // 실제 바운딩 vs userData 치수 비교 (사이드미러 제외 못 하므로 ±0.5m 허용)
+      const bb = new THREE.Box3();
+      e.obj.updateMatrixWorld(true);
+      e.obj.traverse((o) => { if (o.isMesh && o.name !== 'beam') { o.geometry.boundingBox || o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
+      const bl = bb.max.z - bb.min.z, bw = bb.max.x - bb.min.x, bh = bb.max.y;
+      const bad = Math.abs(bl - ud.length) > 0.5 || Math.abs(bh - ud.height) > 0.05 || bw - ud.width > 0.7 || bw < ud.width - 0.05;
+      txt = `<b>${e.kind}</b>${ud.detailed ? ' ★' : ''}  ${ud.length}×${ud.width}×${ud.height}m  r${ud.wheelRadius}\n${s.tris}▲  ${s.meshes} meshes (${s.casters} cast)` + (bad ? `\nBBOX ${bl.toFixed(2)}×${bw.toFixed(2)}×${bh.toFixed(2)}` : '');
+      t.el.classList.toggle('bad', bad);
+      lines.push(`${e.kind.padEnd(13)} ${String(s.tris).padStart(5)} tris  ${s.meshes} meshes  [${s.names.join(',')}]`);
+    }
+    t.el.innerHTML = txt;
+  }
+  window.__veh.stats = lines;
+  if (flag('stats')) { sumEl.style.display = 'block'; sumEl.textContent = lines.join('\n'); }
+}
+
+function renderTiles(time) {
+  const H = innerHeight;
+  const off = OFFS[view] || OFFS.rear;
+  for (const t of tiles) {
+    for (const e of entries) e.obj.visible = e === t.e;
+    const o = t.e.obj;
+    // 맞춤: 같은 각도(추격캠 오프셋)에서 FOV 만 좁혀 확대 → 원근은 게임과 동일
+    const bb = visBox(o);
+    if (t.e.marker) bb.set(new THREE.Vector3(-1.6, 0, -1.6), new THREE.Vector3(1.6, 0.1, 1.6));
+    const c = bb.getCenter(new THREE.Vector3()); const R = Math.max(0.35, bb.getSize(new THREE.Vector3()).length() / 2);
+    const cam = t.cam; const dir = new THREE.Vector3(...off);
+    const dist = Math.max(dir.length(), R * 3);
+    cam.position.copy(c).addScaledVector(dir.normalize(), dist);
+    cam.lookAt(c);
+    const fitV = 2 * Math.atan((R * 1.1) / dist), fitH = 2 * Math.atan((R * 1.1) / dist / cam.aspect);
+    cam.fov = THREE.MathUtils.radToDeg(Math.max(fitV, fitH));
+    cam.updateProjectionMatrix();
+    aimSun(c.x, c.z, Math.max(4, R * 1.4));
+    renderer.setViewport(t.x, H - t.y - t.h, t.w, t.h);
+    renderer.setScissor(t.x, H - t.y - t.h, t.w, t.h);
+    renderer.render(scene, cam);
+  }
+  for (const e of entries) e.obj.visible = true;
+}
+
+// ── 측면 정사영 라인업 (비율 비교)
+let lineupCam = null;
+function setupLineup() {
+  // 여러 줄로 감싸기 (줄마다 y 를 내려 쌓음 — 정사영 측면이라 원근 왜곡 없음)
+  const maxW = +(Q.get('rowW') || 34), gap = 1.0, rowH = 5.2;
+  let x = 0, row = 0, maxX = 0;
+  for (const k of kinds) {
+    const obj = mkVehicle(k); obj.rotation.y = -Math.PI / 2; // 앞(−Z) → 화면 왼쪽
+    const L = obj.userData.length;
+    if (x > 0 && x + L > maxW) { row++; x = 0; }
+    obj.position.set(x + L / 2, -row * rowH, 0); x += L + gap; maxX = Math.max(maxX, x);
+    scene.add(obj); entries.push({ kind: k, obj });
+  }
+  const rows = row + 1;
+  const strip = new THREE.MeshLambertMaterial({ color: asphalt });
+  const tick = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+  for (let r = 0; r < rows; r++) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(maxX + 4, 0.1, 8), strip); p.position.set(maxX / 2 - 1, -r * rowH - 0.05, 0); p.receiveShadow = true; scene.add(p);
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.05, 4, 0.05), tick); pole.position.set(-1.6, -r * rowH + 2, 4); scene.add(pole);
+    for (let i = 1; i <= 4; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.05), tick); b.position.set(-1.6, -r * rowH + i, 4); scene.add(b); }
+  }
+  const aspect = innerWidth / innerHeight;
+  const top = 4.4, bottom = -(rows - 1) * rowH - 0.6, cy = (top + bottom) / 2;
+  let hh = (top - bottom) / 2, hw = hh * aspect;
+  if (hw < (maxX + 3) / 2) { hw = (maxX + 3) / 2; hh = hw / aspect; }
+  lineupCam = new THREE.OrthographicCamera(-hw, hw, hh, -hh, 0.1, 200);
+  lineupCam.position.set(maxX / 2 - 1, cy, 40); lineupCam.lookAt(maxX / 2 - 1, cy, 0);
+  sun.shadow.camera.left = -60; sun.shadow.camera.right = 60; sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
+  aimSun(maxX / 2, 0, Math.max(maxX, rows * rowH) / 2 + 4);
+  applyLights();
+  for (const e of entries) {
+    const el = document.createElement('div'); el.className = 'lb';
+    const p = e.obj.position.clone().setY(e.obj.position.y + e.obj.userData.height + 0.25).project(lineupCam);
+    el.style.left = ((p.x + 1) / 2) * innerWidth - 40 + 'px'; el.style.top = ((1 - p.y) / 2) * innerHeight - 32 + 'px';
+    el.innerHTML = `<b>${e.kind}</b>\n${e.obj.userData.length}×${e.obj.userData.width}×${e.obj.userData.height}`; labels.appendChild(el);
+  }
+}
+
+// ── 정체 장면 (게임 추격캠 그대로)
+let jamCam = null, jamPlayer = null, jamVillain = null;
+function setupJam() {
+  jamCars = [];
+  let rs = 1234 + seed; const rnd = () => ((rs = (rs * 16807) % 2147483647) / 2147483647);
+  const pick = () => { let tot = 0; for (const [, w] of NPC_KINDS) tot += w; let r = rnd() * tot; for (const [k, w] of NPC_KINDS) if ((r -= w) <= 0) return k; return 'sedan'; };
+  const road = makeRoad(60, 360, -120); scene.add(road);
+  const stage = STAGES[(+(Q.get('stage') || 1)) - 1] || STAGES[0];
+  const pLane = 2;
+  jamPlayer = V.buildVehicle('player', { detailed: true }); jamPlayer.position.set(laneX(pLane), 0, 0); scene.add(jamPlayer);
+  // 원흉 (앞 45m)
+  const vs = stage.villains[0];
+  jamVillain = V.buildVehicle(vs.kind, { color: vs.color, detailed: true });
+  jamVillain.position.set(laneX(0) + (vs.lane - 0) * LANE_W, 0, -48); scene.add(jamVillain);
+  for (let l = 0; l < NUM_LANES; l++) {
+    let s = l === pLane ? 9 : -14 + rnd() * 6;
+    while (s < 150) {
+      const k = pick(); const pal = rnd() < 0.68 ? NPC_COLORS_MONO : NPC_COLORS_POP;
+      const car = V.buildVehicle(k, { color: pal[Math.floor(rnd() * pal.length)], seed: Math.floor(rnd() * 1e6) });
+      const L = car.userData.length; s += L / 2;
+      if (l === 0 && s > 38 && s < 58) { s = 58; }
+      car.position.set(laneX(l), 0, -s); scene.add(car); jamCars.push(car);
+      s += L / 2 + 2 + rnd() * 3.5;
+    }
+  }
+  // 반대편 차로
+  for (let i = 0; i < 10; i++) {
+    const k = pick(); const car = V.buildVehicle(k, { color: NPC_COLORS_MONO[i % NPC_COLORS_MONO.length], seed: i });
+    car.rotation.y = Math.PI; car.position.set(OPP_LANE_X(i % 4), 0, -i * 22 + 10); scene.add(car); jamCars.push(car);
+  }
+  // 투하 경고 + 떨어진 투척물
+  const m1 = V.buildWarningMarker(); m1.position.set(laneX(pLane), 0.04, -11); m1.userData.setProgress(0.35); scene.add(m1);
+  const m2 = V.buildWarningMarker(); m2.position.set(laneX(pLane - 1), 0.04, -13); m2.userData.setProgress(0.85); scene.add(m2);
+  const cup = V.buildProjectile('cup'); cup.position.set(laneX(pLane + 1), 0.45, -16); cup.scale.set(1.6, 0.25, 1.6); scene.add(cup);
+  const wm = V.buildProjectile('watermelon'); wm.position.set(laneX(pLane), 0.45, -24); scene.add(wm);
+  const fly = V.buildProjectile(stage.throwItem || 'cup'); fly.position.set(laneX(1), 4.5, -28); fly.rotation.set(0.7, 0, 0.4); scene.add(fly);
+  for (let i = 0; i < 4; i++) { const t = V.buildProjectile('tack'); t.position.set(laneX(pLane) + (i - 1.5) * 0.3, 2.2 + i * 0.5, -3 - i * 2.2); t.rotation.x = i; scene.add(t); }
+  const ms = V.buildProjectile('missile'); ms.position.set(laneX(pLane) - 2, 6, -18); ms.lookAt(ms.position.clone().add(new THREE.Vector3(-0.5, -0.4, -1))); scene.add(ms);
+  entries.push({ kind: 'player', obj: jamPlayer });
+  const boss = Q.get('cam') === 'boss';
+  jamCam = new THREE.PerspectiveCamera(boss ? 46 : 42, innerWidth / innerHeight, 0.5, 1400);
+  const px = laneX(pLane);
+  if (boss) { jamCam.position.set(px * 0.4 + 3.4, 11.5, 12); jamCam.lookAt((px + jamVillain.position.x) * 0.45, 0.6, -(24 + 3)); }
+  else { jamCam.position.set(px * 0.45 + 2.4, 12.5, 16); jamCam.lookAt(px * 0.6, 0.4, -11); }
+  aimSun(0, -30, 60);
+  if (night) { scene.fog = new THREE.Fog(sky.fog, sky.fogNear, sky.fogFar); } else scene.fog = new THREE.Fog(sky.fog, sky.fogNear, sky.fogFar);
+  applyLights();
+  V.setHeadlights(jamPlayer, state.head); V.setHeadlights(jamVillain, state.head);
+  const tot = statOf(scene);
+  window.__veh.jam = { cars: jamCars.length, meshes: tot.meshes, tris: tot.tris };
+  if (flag('stats')) { sumEl.style.display = 'block'; sumEl.textContent = `jam: ${jamCars.length} NPC  ${tot.meshes} visible meshes  ${tot.tris} tris`; }
+}
+
+if (view === 'jam') setupJam();
+else if (view === 'lineup') setupLineup();
+else setupTiles();
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state.anim) {
+    const t = now / 1000;
+    const blink = Math.floor(t * 2) % 2 === 0;
+    for (const e of entries) {
+      if (e.isProj) { if (e.kind === 'tack') e.obj.rotation.x += dt * 6; if (e.marker) e.obj.userData.setProgress((t * 0.5) % 1); continue; }
+      const ud = e.obj.userData, r = ud.wheelRadius || 0.4;
+      for (const w of ud.wheels || []) w.rotation.x -= (6 * dt) / r;
+      if (ud.body) { ud.body.position.y = Math.sin(t * 30) * 0.012; ud.body.rotation.x = Math.sin(t * 1.7) * 0.04; ud.body.rotation.z = Math.sin(t * 1.3) * 0.03; }
+      if (state.hazard) V.setHazard(e.obj, blink);
+      if (state.siren && V.setSiren) V.setSiren(e.obj, t);
+    }
+    dirty = true;
+  }
+  if (dirty) {
+    renderer.setScissorTest(view !== 'jam' && view !== 'lineup');
+    if (view === 'jam') { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, jamCam); }
+    else if (view === 'lineup') { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, lineupCam); }
+    else { renderTiles(now); refreshLabels(); }
+    dirty = false;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (view !== 'jam' && view !== 'lineup') layout(); dirty = true; });
+// 폰트 로드 후 (꿀수박 간판) 다시 그리기
+document.fonts?.ready.then(() => { dirty = true; });
+</script>
+</body>
+</html>
