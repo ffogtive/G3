@@ -362,7 +362,7 @@ export class Traffic {
       if (c.released) {
         v0 = c.vFree; T = 0.5; s0 = 2.0; aMax = c.slow ? 2.6 : 4.6;
       } else if (c.isWall) {
-        const target = this.frontLine + c.wallOffset;
+        const target = this.frontLine + c.wallOffset - (c.wallBack || 0);
         v0 = Math.max(0, this.frontV + (target - c.s) * 0.9);
         T = 0.5; s0 = 1.5; aMax = 3.0;
       } else if (c.isCheater) {
@@ -475,6 +475,11 @@ export class Traffic {
     }
   }
 
+  // 구조형 마무리: 원인 차량이 갓길로 빠질 때 그 사이 차로의 앞줄 벽이 뒤로 물러나 길을 터 줌
+  dropWalls(lanes, meters = 9) {
+    for (const c of this.cars) if (c.isWall && lanes.includes(c.lane)) c.wallBack = meters;
+  }
+
   // 차선 tl 이 플레이어 옆에 자리를 만든다: 앞쪽 차는 살짝 당기고 뒤쪽 차는 멈칫
   letIn(tl, player) {
     let who = null;
@@ -525,7 +530,8 @@ export class Traffic {
     if (who && who.isVillain && gap < 30) return { car: who, kind: 'villain' };
     if (pl === SHOULDER_LANE) {
       // 갓길 얌체 → 4차선으로 복귀 (4차선 뒤차가 멈칫해서 자리 줌)
-      if (who && who.isCheater && gap < (opts.siren ? 50 : 30)) {
+      // 갓길에 완전히 들어온 얌체만 (진입·복귀 중엔 순간이동·이중 보상 방지 — rageHorn과 같은 가드)
+      if (who && who.isCheater && who.lcT >= 1 && who.lane === SHOULDER_LANE && gap < (opts.siren ? 50 : 30)) {
         this.letIn(NUM_LANES - 1, who);
         this._startLaneChange(who, NUM_LANES - 1, 1.1);
         who.cheaterV = 0;

@@ -55,7 +55,7 @@ export class Player {
     this.v = 0; this.a = 0;
     this.lcFrom = lane; this.lcT = 1; this.lcDir = 0;
     this.wiggleT = 1; this.wiggleDir = 0;
-    this.invuln = 0; this.bumpKick = 0;
+    this.invuln = 0; this.bumpKick = 0; this.landGrace = 0;
     this.roll = 0; this.yaw = 0; this.hop = 0;
     this.mode = 'jam';
     this.ghost = false;
@@ -155,7 +155,10 @@ export class Player {
       } else if (L && L.gap < 0) {
         const other = L.car;
         this.s = other.s - other.len / 2 - this.len / 2 - 0.35;
-        if (this.invuln <= 0) {
+        if (this.landGrace > 0) {
+          // 점프 착지 직후: 다음 차 뒤 틈에 '쏙' 내려앉는 것으로 처리 (추돌·분노·감속 페널티 없음)
+          this.v = Math.min(this.v, other.v);
+        } else if (this.invuln <= 0) {
           this.v = Math.min(this.v, other.v) * 0.2 - 2.6;
           this.bumpKick = 1;
           this.invuln = 0.45;
@@ -189,10 +192,12 @@ export class Player {
     }
 
     // 점프 아치
+    this.landGrace = Math.max(0, (this.landGrace || 0) - dt);
     if (this.jumpT > 0) {
       this.jumpT = Math.max(0, this.jumpT - dt);
       const p = 1 - this.jumpT / 0.75;
       this.hop = Math.max(this.hop, Math.sin(Math.PI * p) * 3.4);
+      if (this.jumpT === 0) this.landGrace = 0.35;
     }
     // ── 메시 반영
     this.bumpKick = Math.max(0, this.bumpKick - dt * 3.2);

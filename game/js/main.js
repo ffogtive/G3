@@ -36,9 +36,14 @@ const SAVE_KEY = 'lane1.progress.v1';
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-    if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, stars: p.stars || {}, best: p.best || {}, wallet: p.wallet || 0, subs: p.subs || 0, album: p.album || {}, owned: p.owned || [], equip: { ...SHOP_DEFAULT, ...(p.equip || {}) } };
+    // v0.2 세이브(손제작 5판 id 1~5) → v0.3 카탈로그 자리로 재매핑 (제자리 수정 금지: 3→4, 4→9가 새 id와 겹침)
+    if (p && !p.ver) {
+      const M = { 1: 1, 2: 11, 3: 4, 4: 9, 5: 50 };
+      for (const k of ['stars', 'best', 'album']) p[k] = Object.fromEntries(Object.entries(p[k] || {}).map(([id, v]) => [M[id] ?? id, v]));
+    }
+    if (p && typeof p.unlocked === 'number') return { ver: 3, unlocked: p.unlocked, stars: p.stars || {}, best: p.best || {}, wallet: p.wallet || 0, subs: p.subs || 0, album: p.album || {}, owned: p.owned || [], equip: { ...SHOP_DEFAULT, ...(p.equip || {}) } };
   } catch { /* 저장소 없음 */ }
-  return { unlocked: 1, stars: {}, best: {}, wallet: 0, subs: 0, album: {}, owned: [], equip: { ...SHOP_DEFAULT } };
+  return { ver: 3, unlocked: 1, stars: {}, best: {}, wallet: 0, subs: 0, album: {}, owned: [], equip: { ...SHOP_DEFAULT } };
 }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.progress)); }
@@ -202,6 +207,7 @@ function onEquip(id) {
 // 잔챙이 빌런 행동 (꽁초·쓰레기 투척 / 갓길 칼치기)
 // 얼어붙은 정체 옆 고장차: 레커가 와서 견인 (소프트락 방지)
 traffic.onAutoTow = (o) => { flingObstacle(o, true); hud.popAt(new THREE.Vector3(o.x, 3.2, -o.s), '레커 출동!', 'warn'); audio.play('whoosh'); };
+boss.onPullover = (v, lanes) => traffic.dropWalls(lanes, 9);
 traffic.onMiniAct = (c, type) => {
   if (!['jam', 'boss'].includes(G.phase)) return;
   const T = MINI_TYPES[type];
@@ -569,8 +575,10 @@ function onWeaponHit(v, dmg, pos, kind, fromRear = false) {
     G.hitstop = Math.max(G.hitstop, 0.07);
     fx.shake(0.8, 0.35);
     ui.flash('#ffe08a', 90);
-    hud.popAt(pos, `분노 폭발! -${dmg}`, 'crit');
+    hud.popAt(pos, G.stage.honkOnly ? '사이렌!! 정신 번쩍!' : `분노 폭발! -${dmg}`, 'crit');
     audio.play('superHit');
+  } else if (kind === 'honk') {
+    // 구조 경적: 데미지 숫자·타격음·물풍선 효과 없이 '깨우기' 게이지만 (문구는 rescueHonk가 띄움)
   } else {
     if (G.hits % 2 === 0) audio.play('hit', { volume: 0.55, pitch: 0.9 + Math.random() * 0.3 });
     fx.hitFlash(pos);
@@ -586,9 +594,9 @@ function onWeaponHit(v, dmg, pos, kind, fromRear = false) {
       enterPhase('kill');
     } else {
       boss.startDeath(v, false);
-      ui.banner('1대 참교육!', 'warn', 1000);
+      ui.banner(G.stage.honkOnly ? '1대 구조!' : '1대 참교육!', 'warn', 1000);
       const other = boss.alive[0];
-      if (other) other.taunt = { text: v.index === 0 ? '형님!!!' : '아우야!!!', until: G.time + 2 };
+      if (other && !G.stage.honkOnly) other.taunt = { text: v.index === 0 ? '형님!!!' : '아우야!!!', until: G.time + 2 };
       fx.shake(0.7, 0.4);
     }
   }
@@ -633,13 +641,12 @@ function updateDrone(dt, jamLike, miniT) {
   for (const r of drone.userData.rotors || []) r.rotation.y += dt * 40;
   G.droneT -= dt;
   if (G.droneT > 0 || !['jam', 'boss'].includes(G.phase)) return;
-  const tgt = miniT || (G.phase === 'boss' ? boss.targetFor(player) || boss.alive[0] : null);
+  // 구조형(압정 금지) 정면전에서는 드론도 원인 차량을 쏘지 않는다 (정체 구간 잔챙이는 그대로)
+  const tgt = miniT || (G.phase === 'boss' && !G.stage?.honkOnly ? boss.targetFor(player) || boss.alive[0] : null);
   if (!tgt) return;
   G.droneT = 0.7;
-  const save = { x: player.x, hop: player.hop };
-  player.hop = 3.4; // 드론 위치에서 던지는 것처럼 (총구 높이만 빌림)
-  weapons.fireAt(player, tgt);
-  player.hop = save.hop;
+  const from = (drone.userData.muzzle || drone).getWorldPosition(new THREE.Vector3());
+  weapons.fireAt(player, tgt, from);   // 드론에서 발사
 }
 
 // 콘·낙하물 날려버리기: 조각들이 하늘로 튀고(파편 물리는 boss.debris 재사용) 점수 소폭
@@ -894,7 +901,7 @@ function update(realDt) {
 
   // 확인 키 (타이틀/결과)
   if (input.consume('confirm')) {
-    if (ph === 'title') { audio.init(); startStage(Math.min(G.progress.unlocked - 1, STAGES.length - 1)); }
+    if (ph === 'title' && !ui.isOverlayOpen?.()) { audio.init(); startStage(Math.min(G.progress.unlocked - 1, STAGES.length - 1)); }
     else if (ph === 'result') { const n = G.stageIdx + 1; if (n < STAGES.length) startStage(n); else goTitle(); }
   }
 
@@ -962,7 +969,7 @@ function update(realDt) {
   for (const e of pev) {
     if (e.type === 'bump') onBump(e.other);
     else if (e.type === 'smash') onSmash(e.other);
-    else if (e.type === 'tow') { traffic.obstacles.splice(traffic.obstacles.indexOf(e.other), 1); flingObstacle(e.other, true); audio.play('whoosh'); }
+    else if (e.type === 'tow') { const oi = traffic.obstacles.indexOf(e.other); if (oi >= 0) { traffic.obstacles.splice(oi, 1); flingObstacle(e.other, true); audio.play('whoosh'); } }
   }
   player.boostT = Math.max(0, (player.boostT || 0) - dt);
   updateDrone(dt, jamLike, miniT);

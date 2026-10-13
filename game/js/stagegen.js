@@ -19,8 +19,10 @@ const ROUTES = {
 };
 const URBAN = ['올림픽대로', '강변북로', '동부간선도로', '내부순환로', '서부간선도로', '경인고속도로'];
 
+// '남해 해안도로'·'영동대로' 같은 부분 일치를 막기 위해 'XX고속도로' 전체로 매칭, 긴 이름 먼저(중부내륙 > 중부)
+const ROUTE_KEYS = Object.keys(ROUTES).sort((a, b) => b.length - a.length);
 function routeOf(road) {
-  for (const k of Object.keys(ROUTES)) if (road.includes(k)) return { key: k, route: ROUTES[k][0], signs: ROUTES[k][1] };
+  for (const k of ROUTE_KEYS) if (road.includes(k + '고속도로')) return { key: k, route: ROUTES[k][0], signs: ROUTES[k][1] };
   return null;
 }
 
@@ -116,11 +118,12 @@ function attackMap(list, lay, diff) {
 }
 
 // 보스·엘리트 2~3페이즈: HP 비율에서 공격표·이동 성격 교체 (차 대수 변경은 엔진 미지원 → 공격표로 표현)
-function phasesFor(e, diff) {
+function phasesFor(e, diff, baseZig = false) {
   if (!Array.isArray(e.phases) || !e.phases.length) return null;
   return e.phases.map((ph) => {
     const mv = mvOf(ph.movement);
-    const lay = { zig: ZIG_MV.has(mv), stopped: STOPPED_MV.has(mv), villains: { length: ph.count || 1 } };
+    // 페이즈 지그재그는 스테이지 자체가 지그재그 배치(중심 ±1 차로에 벽 없음)일 때만. 아니면 공격표만 바뀐다
+    const lay = { zig: ZIG_MV.has(mv) && !!baseZig, stopped: STOPPED_MV.has(mv), villains: { length: ph.count || 1 } };
     return {
       hp: ph.hp ?? 0.5,
       attacks: attackMap(ph.attacks, lay, diff),
@@ -151,12 +154,21 @@ function shoulderFor(diff, rng, setting) {
 function roadInfo(e, rng) {
   const road = String(e.road || '').trim();
   const km = () => `${Math.round(3 + rng() * 25)}km`;
-  const r = routeOf(road);
+  const nat = road.match(/^국도\s*(\d+)호선\s*(.*)$/);   // 국도 먼저 ('국도 77호선 남해 해안도로'가 남해고속도로로 잡히지 않게)
+  const r = nat ? null : routeOf(road);
   if (r) {
-    const m = road.match(/(\S+고속도로)\s*(.*)/);
-    return { highway: m ? m[1] : `${r.key}고속도로`, direction: (m && m[2]) || r.signs[0][0] + ' 방향', route: r.route, signs: r.signs };
+    // 'X톨게이트(경부고속도로)'처럼 괄호 안이 노선이면: 노선 = 괄호 안, 방향 칸 = 괄호 밖 장소
+    const paren = road.match(/^(.*?)\((\S+고속도로)\)\s*(.*)$/);
+    const m = paren ? null : road.match(/(\S+고속도로)\s*(.*)/);
+    const highway = paren ? paren[2] : m ? m[1] : `${r.key}고속도로`;
+    const direction = (paren ? [paren[1], paren[3]].filter(Boolean).join(' ') : m && m[2]) || r.signs[0][0] + ' 방향';
+    // 표지판 도시는 진행 방향과 맞춘다 ('서울 방향'인데 '부산 387km' 금지)
+    let signs = r.signs;
+    const dm = direction.match(/^(\S+) 방향/);
+    if (dm && dm[1] !== r.signs[0][0] && dm[1] !== r.signs[1][0]) signs = [[dm[1], km()], ['졸음쉼터', `${Math.round(2 + rng() * 6)}km`]];
+    else if (dm && dm[1] === r.signs[1][0]) signs = [r.signs[1], ['졸음쉼터', `${Math.round(2 + rng() * 6)}km`]];
+    return { highway, direction, route: r.route, signs };
   }
-  const nat = road.match(/^국도\s*(\d+)호선\s*(.*)$/);
   if (nat) {
     const rest = nat[2].replace(/\s*구간$/, '').trim();
     const place = (rest.split(/[\s~]/)[0] || '읍내').replace(/[()]/g, '');
@@ -186,7 +198,8 @@ export function stageFromEntry(e) {
   for (const v of lay.villains) v.hp = Math.round(v.hp * hpMul);
   const { highway, direction, route, signs } = roadInfo(e, rng);
   // 정체 길이: 리서치 문장에 km가 있으면 그 값(사실 근거), 없으면 난이도로 추정
-  const kmHit = String(e.jam_causality || '').match(/(\d+(?:\.\d+)?)\s*km/);
+  // '시속 10km'(속도)·'3km째'(주행 거리)는 정체 길이가 아니다. 숫자 중간부터 잡히지 않게 앞에 숫자·점 금지
+  const kmHit = String(e.jam_causality || '').match(/(?<!시속\s*)(?<![\d.])(\d+(?:\.\d+)?)\s*km(?!\/h|째)/);
   const kmFromText = kmHit ? +kmHit[1] : NaN;
   const displayKm = kmFromText >= 0.5 && kmFromText <= 15 ? kmFromText : +(1.4 + diff * 0.45 + rng() * 0.8).toFixed(1);
   const jamSpeed = lay.stopped ? 1.2 : lay.slow ? 1.8 : 2.4;
@@ -214,7 +227,7 @@ export function stageFromEntry(e) {
     zig: lay.zig, zigCenter: lay.zigCenter,
     shoulder: shoulderFor(diff, rng, e.setting),
     attacks: attackMap(e.attacks, lay, diff),
-    phases: phasesFor(e, diff),
+    phases: phasesFor(e, diff, lay.zig),
     honkOnly,
     throwItem: throwItemFor(e, kind),
     attackInterval: [Math.max(1.3, 2.7 - diff * 0.12), Math.max(2.0, 3.8 - diff * 0.14)],
@@ -257,6 +270,7 @@ export function buildStages(catalog, handmade = []) {
       const g = stageFromEntry(e);
       out.push({
         ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id, frontRow: fillFrontRow(hm),
+        zig: hm.zig ?? !!hm.attacks?.zigzag, zigCenter: hm.zigCenter ?? (hm.attacks?.zigzag ? 1 : undefined),
         fine: g.fine, payout: g.payout, card: g.card, violation: g.violation,
         defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty,
       });

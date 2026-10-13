@@ -156,6 +156,7 @@ export class BossManager {
     this.intervalMul = 1;
     this.phases = (stage.phases || []).slice().sort((a, b) => b.hp - a.hp);
     this.phaseIdx = 0;
+    this.parked = 0;   // 구조형: 갓길에 정차시킨 대수 (겹치지 않게 앞뒤로 비켜 세움)
   }
 
   get alive() { return this.villains.filter((v) => v.alive); }
@@ -166,13 +167,19 @@ export class BossManager {
   }
   tiresLeft() { return this.villains.reduce((a, v) => a + v.tires, 0); }
   // 정속 기준 위치 (돌진 중에도 흔들리지 않게 baseS)
-  refS() {
-    const a = this.villains.filter((v) => v.alive || v.dying);
-    const src = a.length ? a : this.villains;
-    if (!src.length) return 0;
-    return src.reduce((acc, v) => acc + (v.dying ? v.baseS : v.baseS), 0) / src.length;
+  // 기준: 살아 있는 빌런 → (없으면) 연출 중인 빌런 → 전체. 날아가는 1호가 기준을 끌고 가지 않게
+  _refSet() {
+    const alive = this.villains.filter((v) => v.alive);
+    if (alive.length) return alive;
+    const dying = this.villains.filter((v) => v.dying);
+    return dying.length ? dying : this.villains;
   }
-  refV() { return this.villains.length ? this.villains[0].vNominal : 0; }
+  refS() {
+    const src = this._refSet();
+    if (!src.length) return 0;
+    return src.reduce((acc, v) => acc + v.baseS, 0) / src.length;
+  }
+  refV() { const src = this._refSet(); return src.length ? src[0].vNominal : 0; }
 
   // 압정 투척 대상: 정면(앞) = 플레이어 차선 ±1 이내 / 뒤에서 = 42m 안이면 화물차 너머로 높이 던져 넣기
   targetFor(player) {
@@ -250,7 +257,18 @@ export class BossManager {
     v.finish = this.stage?.honkOnly ? 'pullover' : (this.finishStyle || 'rocket');
     setHazard(v.mesh, true);
     for (const b of this.beams) if (b.v === v) b.life = 0;
-    if (v.finish === 'pullover') { v.pullX = v.x; v.pullV = Math.max(v.v, 1.5); this.audio.play('twinkle'); return; }
+    if (v.finish === 'pullover') {
+      v.baseS = v.s; v.lungeOff = 0; v.lunge = null; v.lungeAt = 0;   // 돌진 중이었어도 그 자리에서 시작 (순간이동 금지)
+      v.pullX = v.x; v.pullS0 = v.baseS;
+      v.parkIdx = this.parked++;
+      v.pullDist = 5 + v.parkIdx * (v.len + 2.5);
+      const own = v.lanes();
+      const right = [];
+      for (let l = Math.max(...own) + 1; l < NUM_LANES; l++) right.push(l);
+      this.onPullover?.(v, right);   // 갓길 쪽 차로의 앞줄 벽이 살짝 물러나 길을 터 줌
+      this.audio.play('twinkle');
+      return;
+    }
     while (v.tires > 0) this._popTire(v);
     const p = v.mesh.position.clone(); p.y += 1;
     this.fx.explosion(p, v.len > 6 ? 1.4 : 1.0);
@@ -293,12 +311,13 @@ export class BossManager {
   _updatePullover(v, dt) {
     v.deathT += dt;
     const t = v.deathT, m = v.mesh;
-    v.pullV = Math.max(0, v.pullV - dt * 1.6);
-    v.baseS += v.pullV * dt;
+    const sm = (x) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
+    // 앞으로 살짝 빠져나간 뒤(벽 차량은 뒤로 물러남) 대각선으로 갓길 진입
+    v.baseS = v.pullS0 + v.pullDist * sm(t / 1.9);
     v.s = v.baseS;
     const tx = laneX(SHOULDER_LANE);
-    const k = Math.min(1, t / 1.8);
-    v.x = v.pullX + (tx - v.pullX) * (k * k * (3 - 2 * k));
+    const k = sm((t - 0.45) / 1.5);
+    v.x = v.pullX + (tx - v.pullX) * k;
     m.position.set(v.x, 0, -v.s);
     m.rotation.set(0, -Math.sin(k * Math.PI) * 0.25, 0);
     setHazard(m, Math.floor(t * 3) % 2 === 0);
@@ -398,7 +417,7 @@ export class BossManager {
   }
 
   // 페이즈 전환: HP 비율이 기준 아래로 → 공격표·이동 성격 교체 (반환: 이벤트 또는 null)
-  _checkPhase() {
+  _checkPhase(ctx = {}) {
     const ph = this.phases[this.phaseIdx];
     if (!ph || this.hpFrac() > ph.hp) return null;
     this.phaseIdx++;
@@ -408,9 +427,13 @@ export class BossManager {
       if (!v.alive) continue;
       // 페이즈의 이동 성격을 그대로 적용 (켜기만이 아니라 끄기도): 정차 ↔ 서행 ↔ 정속, 지그재그 on/off
       v.stopped = !!ph.stopped;
-      if (v.stopped) { v.vNominal = 0; v.lunge = null; v.lungeOff = 0; }
+      if (v.stopped) { v.vNominal = 0; v.lunge = null; v.lungeOff = 0; v.lungeAt = 0; v.returnAt = 0; v.targetLanePos = v.lanePos; }
       else v.vNominal = (this.stage.jamSpeed || 2.4) * (ph.slow ? 0.7 : 1);
-      if (ph.zig && !v.stopped) { v.zig = true; v.zigC = Math.max(1, Math.min(2, Math.round(v.lanePos))); }
+      // 지그재그는 휘젓는 차로(중심 ±1)에 앞줄 벽·다른 빌런이 없을 때만 (없으면 공격표만 바뀜)
+      const zc = Math.max(1, Math.min(2, Math.round(v.lanePos)));
+      const sweepFree = [zc - 1, zc, zc + 1].every((l) => (!ctx.laneFree || ctx.laneFree(l, v))
+        && !this.villains.some((o) => o !== v && (o.alive || o.dying) && Math.abs(o.lanePos - l) < 0.9));
+      if (ph.zig && !v.stopped && sweepFree) { v.zig = true; v.zigC = zc; }
       else if (v.zig) { v.zig = false; v.targetLanePos = v.homeLane; }
       if (!v.stopped) setHazard(v.mesh, false);
       v.flash = 1;
@@ -466,7 +489,13 @@ export class BossManager {
       case 'swerve': {
         let tgt = Math.min(NUM_LANES - 1, player.lane);
         if (v.w > 2.2 || v.kind === 'villainSuv') tgt = Math.max(0.5, Math.min(2.5, tgt + (tgt > v.lanePos ? -0.5 : 0.5)));
-        if (ctx.laneFree && !ctx.laneFree(Math.round(tgt), v)) break; // 옆 차선에 화물차가 있으면 못 감
+        // 옆 차선에 화물차가 있으면 못 감: 목표 위치에서 실제로 걸치는 차로 전부 검사 (반 차로 목표면 두 차로)
+        if (ctx.laneFree) {
+          const probe = { x: laneX(tgt), w: v.w };
+          let blocked = false;
+          for (let i = 0; i < NUM_LANES; i++) if (occupies(probe, i) && !ctx.laneFree(i, v)) blocked = true;
+          if (blocked) break;
+        }
         v.targetLanePos = tgt;
         v.returnAt = this.time + 3.2;
         this.audio.play('brakeScreech', { volume: 0.5 });
@@ -658,7 +687,7 @@ export class BossManager {
     }
 
     // 페이즈 전환 (보스·엘리트)
-    if (fighting && this.anyAlive && this.phases?.length) { const pe = this._checkPhase(); if (pe) events.push(pe); }
+    if (fighting && this.anyAlive && this.phases?.length) { const pe = this._checkPhase(ctx); if (pe) events.push(pe); }
 
     // 공격 스케줄
     if (fighting && this.anyAlive) {

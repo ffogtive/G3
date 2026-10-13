@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import {
-  NUM_LANES, laneX, ROAD_LEFT, ROAD_RIGHT, SHOULDER_W, MEDIAN_GAP, MEDIAN_W, MEDIAN_X,
+  NUM_LANES, LANE_W, laneX, ROAD_LEFT, ROAD_RIGHT, SHOULDER_W, MEDIAN_GAP, MEDIAN_W, MEDIAN_X,
   OPP_LANE_X, OPP_ROAD_LEFT, SEG_LEN, FONT_DISPLAY, FONT_UI, STAGES,
 } from './config.js';
 
@@ -622,6 +622,324 @@ export function makeGround(opts = {}) {
   m.receiveShadow = true;
   m.name = 'ground';
   return m;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 터널 (v0.4) — 갓길 없는 4차로 터널 구간 + 입구 포털
+//
+// 가설: 추격캠(뒤 16m·위 12.5m)은 터널 천장보다 높다 → 천장을 "안쪽만 보이는 단면(단면 컷어웨이)"으로 만들면
+//       밖(위)에서는 백페이스 컬링으로 자동으로 잘려 차가 절대 가려지지 않고, 안쪽 낮은 카메라(인트로·킬캠)에서는
+//       아치·제트팬·천장등이 다 보이는 진짜 터널이 된다. 볼록 단면이라 바깥 카메라→차 시선은 항상 뒷면만 지난다.
+//  - 측벽 안쪽 면 |x| = wallX(8.55): 4차로(±7.2) + 0.35 측방여유 + 1.0m 검사원 보도 → 갓길(x 7.2~10.2)·갓길 차로(4)는 막힘
+//  - 아치 위 바깥은 산(지붕) 단면: 측벽선의 어두운 암반면 + 높이 capY 의 잔디 윗면 → 바깥 소품·반대편 도로가 비치지 않음
+//  - 주황 나트륨 줄조명 = 측벽 위(아치 어깨) 연속 등기구(위에서도 보임) + 천장 2줄(아래에서만 보임) + 노면/벽 가산 빛웅덩이
+//  - 그림자: 셸은 castShadow=false (그림자 카메라 범위 밖이 밝게 튀는 문제 회피). 터널 안 어둠은 굽기 색 + userData.ambience 로
+// ─────────────────────────────────────────────────────────────
+/** 터널 치수 (추가 export). 전부 월드 m. */
+export const TUNNEL = Object.freeze({
+  wallX: 8.55,      // 측벽 안쪽 면 |x|
+  walkX: 7.55,      // 노면 끝 = 보도 연석 |x|
+  walkH: 0.25,      // 보도 높이
+  springY: 3.0,     // 직벽 → 아치 시작
+  crownY: 8.0,      // 천장 꼭대기 (안쪽)
+  capY: 9.2,        // 산 윗면 (컷어웨이 단면 높이)
+  portalTopY: 10.9, // 포털 현판부 꼭대기
+  approach: 14,     // 포털 앞(+Z) 날개벽·비탈 길이
+});
+const TN = TUNNEL;
+const TPAL = {
+  asph: 0x47443f, wheel: 0x3e3c39, oil: 0x413f3c, gutter: 0x5a5650, white: 0xe9e9e2, yellow: 0xe8b81a,
+  walk: 0xa8a398, walkTop: 0xb9b4a8, curbLine: 0xf2c21b,
+  kick: 0x585b60, tile: 0xe4ddca, tileSeam: 0xb9b2a0, band: 0x2f8f5b, upper: 0xb49a78,
+  archLo: 0xa98f6e, archHi: 0x585654, ring: 0x4a4846,
+  rockLo: 0x241f1b, rockHi: 0x3b322a, cut: 0x6e5034, cutDark: 0x4f3926,
+  housing: 0x34363b, lampRim: 0xff9a2e, lampCore: 0xffe2a0, led: 0xc8f4ff, exitG: 0x1fae5a,
+  hydrant: 0xd8342c, fan: 0x8d9298, fanDark: 0x2b2d32,
+  facade: 0xcdc6b6, facadeDark: 0xa8a294, portalRing: 0x8f8a7e, wing: 0xbdb7a9,
+};
+const _qn = (a, b, c) => { const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2]; return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx]; };
+/** 원하는 법선 n 쪽을 앞면으로 하는 사각형 (단색) */
+function qf(G, a, b, c, d, col, n) { const k = _qn(a, b, c); if (k[0] * n[0] + k[1] * n[1] + k[2] * n[2] < 0) G.quad(a, d, c, b, col); else G.quad(a, b, c, d, col); }
+/** 원하는 법선 n 쪽을 앞면으로 하는 사각형 (정점색 a,b,c,d) */
+function qfC(G, a, b, c, d, ca, cb, cc, cd, n) {
+  const k = _qn(a, b, c);
+  if (k[0] * n[0] + k[1] * n[1] + k[2] * n[2] < 0) { G.triC(a, d, c, ca, cd, cc); G.triC(a, c, b, ca, cc, cb); }
+  else { G.triC(a, b, c, ca, cb, cc); G.triC(a, c, d, ca, cc, cd); }
+}
+/** 아치 단면 점 i/N (0 = 왼쪽 직벽 위, N = 오른쪽). 타원: 반폭 wallX, 높이 crownY-springY */
+function archPt(i, N) { const th = Math.PI * (1 - i / N); return [TN.wallX * Math.cos(th), TN.springY + (TN.crownY - TN.springY) * Math.sin(th)]; }
+/** 아치 면 i 의 안쪽 법선 [nx, ny] */
+function archN(i, N) {
+  const a = archPt(i, N), b = archPt(i + 1, N), dx = b[0] - a[0], dy = b[1] - a[1];
+  let nx = -dy, ny = dx; const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  if (nx * (0 - mx) + ny * (TN.springY - my) < 0) { nx = -nx; ny = -ny; }
+  const l = Math.hypot(nx, ny); return [nx / l, ny / l];
+}
+/** 아래(-Y)를 보는 면만 굽는 원기둥 (z 축) → 위(추격캠)에서는 안 보이고 터널 안 낮은 카메라에서만 보임 */
+function undersideCylZ(G, cx, cy, z0, z1, r, n, col, colEnd) {
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2, am = (a0 + a1) / 2;
+    const nx = Math.cos(am), ny = Math.sin(am);
+    if (ny > -0.45) continue;
+    const p = (a, z) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r, z];
+    qf(G, p(a0, z0), p(a1, z0), p(a1, z1), p(a0, z1), i % 2 ? col : colEnd, [nx, ny, 0]);
+  }
+}
+const _tunnelCache = new Map();
+function buildTunnelGeo(length, night, variant, opts) {
+  const r = rng(4049 + variant * 6151);
+  const G = new GB(), S = new GB(), N = new GB(), A = new GB();
+  const z0 = 0, z1 = -length, zc = -length / 2, LY = 0.02, NA = 18;
+  const band = opts.band ?? TPAL.band;
+
+  // ── 1) 노면 (바퀴자국 띠) + 측방 배수로 + 차선 (터널 = 진로변경 제한 흰 실선)
+  const xs = [];
+  for (let i = 0; i < NUM_LANES; i++) {
+    const cx = laneX(i);
+    xs.push([cx - 1.8, cx - 1.2, TPAL.asph], [cx - 1.2, cx - 0.6, TPAL.wheel], [cx - 0.6, cx - 0.15, TPAL.asph],
+      [cx - 0.15, cx + 0.15, TPAL.oil], [cx + 0.15, cx + 0.6, TPAL.asph], [cx + 0.6, cx + 1.2, TPAL.wheel], [cx + 1.2, cx + 1.8, TPAL.asph]);
+  }
+  xs.push([-TN.walkX, ROAD_LEFT, TPAL.gutter], [ROAD_RIGHT, TN.walkX, TPAL.gutter]);
+  for (const [a, b, c] of xs) G.top(a, b, z0, z1, 0, c);
+  G.top(ROAD_LEFT + 0.06, ROAD_LEFT + 0.28, z0, z1, LY, TPAL.yellow);
+  G.top(ROAD_RIGHT - 0.11, ROAD_RIGHT + 0.11, z0, z1, LY, TPAL.white);
+  for (let i = 1; i < NUM_LANES; i++) { const x = laneX(i) - LANE_W / 2; G.top(x - 0.08, x + 0.08, z0, z1, LY, TPAL.white); }
+  for (let s = 5; s < length; s += 10) for (const sd of [-1, 1]) G.top(sd * TN.walkX - (sd > 0 ? 0.3 : 0), sd * TN.walkX + (sd < 0 ? 0.3 : 0), -s, -(s + 0.8), 0.006, 0x2c2b29); // 배수구
+
+  // ── 2) 검사원 보도 (연석 노란 줄 + 호박 반사체)
+  for (const sd of [-1, 1]) {
+    const w = TN.wallX - TN.walkX + 0.05;
+    G.box(sd * (TN.walkX + w / 2), 0, zc, w, TN.walkH, length, TPAL.walk, { top: TPAL.walkTop, nb: true });
+    G.box(sd * (TN.walkX + 0.06), TN.walkH, zc, 0.12, 0.012, length, TPAL.curbLine, { nb: true });
+    for (let s = 2.5; s < length; s += 5) N.box(sd * (TN.walkX - 0.01), 0.08, -s, 0.03, 0.1, 0.18, 0xffb21c);
+  }
+
+  // ── 3) 측벽 (안쪽만): 걸레받이 / 타일 / 색띠 / 타일 / 윗벽(조명 반사로 따뜻하게)
+  const bands = [[TN.walkH, 0.75, TPAL.kick, TPAL.kick], [0.75, 1.2, TPAL.tile, TPAL.tile], [1.2, 1.45, band, band],
+    [1.45, 2.5, TPAL.tile, mixC(TPAL.tile, 0xffb060, 0.18)], [2.5, TN.springY, mixC(TPAL.upper, 0xffa040, 0.15), TPAL.upper]];
+  for (const sd of [-1, 1]) {
+    const x = sd * TN.wallX, n = [-sd, 0, 0];
+    for (const [y0, y1, c0, c1] of bands) qfC(S, [x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], c0, c0, c1, c1, n);
+    for (let s = 0; s < length; s += 2.5) { const xx = x - sd * 0.008; qf(S, [xx, 0.75, -s], [xx, 0.75, -(s + 0.05)], [xx, 2.5, -(s + 0.05)], [xx, 2.5, -s], TPAL.tileSeam, n); }
+    // 시선유도등 (LED, 4m 마다) + 비상구 표지(녹색, 오른쪽) / 소화전함(빨강, 왼쪽)
+    for (let s = 2; s < length; s += 4) N.box(x - sd * 0.04, 0.95, -s, 0.08, 0.1, 0.1, TPAL.led);
+    const se = length * 0.5 + (sd > 0 ? 0 : 10);
+    if (sd > 0) {
+      N.box(x - sd * 0.05, 2.0, -se, 0.08, 0.42, 0.95, TPAL.exitG);
+      N.box(x - sd * 0.1, 2.12, -se + 0.2, 0.02, 0.18, 0.14, 0xffffff);               // 달리는 사람(약식)
+      N.box(x - sd * 0.1, 2.16, -se - 0.12, 0.02, 0.06, 0.36, 0xffffff);              // 화살표
+    } else {
+      S.box(x - sd * 0.12, 0.85, -se, 0.24, 1.0, 0.8, TPAL.hydrant, { top: 0xe8524a });
+      S.box(x - sd * 0.245, 0.98, -se, 0.012, 0.74, 0.6, 0xf4f4f2);
+      S.box(x - sd * 0.25, 1.02, -se, 0.012, 0.66, 0.52, TPAL.hydrant);
+    }
+  }
+
+  // ── 4) 아치 천장 (안쪽만) + 10m 마다 라이닝 이음 띠
+  for (let i = 0; i < NA; i++) {
+    const a = archPt(i, NA), b = archPt(i + 1, NA), [nx, ny] = archN(i, NA), n = [nx, ny, 0];
+    const t0 = Math.abs(a[1] - TN.springY) / (TN.crownY - TN.springY), t1 = Math.abs(b[1] - TN.springY) / (TN.crownY - TN.springY);
+    const ca = mixC(TPAL.archLo, TPAL.archHi, Math.pow(t0, 0.7)), cb = mixC(TPAL.archLo, TPAL.archHi, Math.pow(t1, 0.7));
+    qfC(S, [a[0], a[1], z0], [a[0], a[1], z1], [b[0], b[1], z1], [b[0], b[1], z0], ca, ca, cb, cb, n);
+    for (let s = 0; s < length; s += 10) {
+      const o = 0.02, A0 = [a[0] + nx * o, a[1] + ny * o], B0 = [b[0] + nx * o, b[1] + ny * o];
+      qf(S, [A0[0], A0[1], -s], [A0[0], A0[1], -(s + 0.3)], [B0[0], B0[1], -(s + 0.3)], [B0[0], B0[1], -s], TPAL.ring, n);
+    }
+  }
+
+  // ── 5) 산 단면: 측벽선 암반면(안쪽을 봄) + 윗면(흙 단면 띠 + 잔디) + 바깥 끝 비탈
+  for (const sd of [-1, 1]) {
+    const x = sd * TN.wallX;
+    qfC(S, [x, TN.springY, z0], [x, TN.springY, z1], [x, TN.capY, z1], [x, TN.capY, z0], TPAL.rockLo, TPAL.rockLo, TPAL.rockHi, TPAL.rockHi, [-sd, 0, 0]);
+    const xa = x, xb = x + sd * 0.5, xc = x + sd * 1.6, far = sd * 60;
+    qf(S, [xa, TN.capY, z0], [xb, TN.capY, z0], [xb, TN.capY, z1], [xa, TN.capY, z1], TPAL.cutDark, [0, 1, 0]);
+    qf(S, [xb, TN.capY, z0], [xc, TN.capY, z0], [xc, TN.capY, z1], [xb, TN.capY, z1], TPAL.cut, [0, 1, 0]);
+    for (let s = 0; s < length; s += 20) {
+      const band2 = Math.floor(s / 20) % 2 ? PAL.grassB : PAL.grassA, za = -s, zb = -Math.min(s + 20, length);
+      qf(S, [xc, TN.capY, za], [far, TN.capY, za], [far, TN.capY, zb], [xc, TN.capY, zb], band2, [0, 1, 0]);
+    }
+    qf(S, [far, TN.capY, z0], [far, 0, z0], [far, 0, z1], [far, TN.capY, z1], PAL.tuft, [sd, 0, 0]);
+    // 산 위 소나무·덤불 (바깥쪽, 추격캠 가장자리 장식)
+    for (let k = 0; k < 4; k++) {
+      const x2 = sd * (12 + r() * 40), z2 = -(r() * length), h = 3 + r() * 3;
+      if (r() < 0.65) {
+        S.box(x2, TN.capY, z2, 0.35, h * 0.3, 0.35, 0x7a5a3a, { nb: true });
+        S.geo(PRIM.cone6, M4(x2, TN.capY + h * 0.22, z2, h * 0.36, h * 0.8, h * 0.36, r() * 3), 0x2f6b3a);
+      } else S.box(x2, TN.capY, z2, 1.2 + r(), 0.6, 1.0 + r(), PAL.tuft, { nb: true, ry: r() * 1.5, top: PAL.tuft2 });
+    }
+  }
+
+  // ── 6) 줄조명: 아치 어깨(직벽 바로 위) 연속 등기구 — 위(추격캠)에서도 벽 따라 주황 줄로 읽힘
+  const LA = 0.21; // 아치 어깨 각(rad) ≈ 12°
+  for (const sd of [-1, 1]) {
+    const lx = sd * TN.wallX * Math.cos(LA) - sd * 0.12, ly = TN.springY + (TN.crownY - TN.springY) * Math.sin(LA) - 0.05;
+    const rz = sd * 0.6; // 얼굴이 도로 쪽 아래를 봄
+    for (let s = 1; s < length; s += 2) {
+      S.box(lx + sd * 0.05, ly - 0.16, -s - 0.75, 0.24, 0.32, 1.5, TPAL.housing, { rz });
+      N.box(lx - sd * 0.06, ly - 0.12, -s - 0.75, 0.06, 0.24, 1.36, TPAL.lampRim, { rz });
+      N.box(lx - sd * 0.09, ly - 0.08, -s - 0.75, 0.03, 0.14, 1.2, TPAL.lampCore, { rz });
+    }
+  }
+  // 천장 2줄 등 (아래만 보이는 판) + 제트팬 1쌍 (아래만)
+  for (const sd of [-1, 1]) {
+    const lx = sd * 4.3, ly = TN.springY + (TN.crownY - TN.springY) * Math.sqrt(1 - (4.3 / TN.wallX) ** 2) - 0.12;
+    for (let s = 3; s < length; s += 4) {
+      const za = -s, zb = -(s + 2.2);
+      qf(N, [lx - 0.22, ly, za], [lx + 0.22, ly, za], [lx + 0.22, ly, zb], [lx - 0.22, ly, zb], TPAL.lampRim, [0, -1, 0]);
+      qf(N, [lx - 0.12, ly - 0.01, za - 0.1], [lx + 0.12, ly - 0.01, za - 0.1], [lx + 0.12, ly - 0.01, zb + 0.1], [lx - 0.12, ly - 0.01, zb + 0.1], TPAL.lampCore, [0, -1, 0]);
+    }
+    if (opts.fans !== false) {
+      const fx = sd * 2.6, fy = TN.crownY - 1.05, fz = -length * 0.5;
+      undersideCylZ(S, fx, fy, fz + 1.7, fz - 1.7, 0.52, 12, TPAL.fan, mixC(TPAL.fan, 0x000000, 0.12));
+      undersideCylZ(S, fx, fy, fz + 1.75, fz + 1.45, 0.56, 12, TPAL.fanDark, TPAL.fanDark);
+      undersideCylZ(S, fx, fy, fz - 1.45, fz - 1.75, 0.56, 12, TPAL.fanDark, TPAL.fanDark);
+    }
+  }
+
+  // ── 7) 가산 빛웅덩이 (나트륨 주황): 벽 아래 노면 띠 + 등기구 아래 벽면
+  const glowC = 0x6a3a08, glowW = 0x7a4410, black = 0x000000;
+  for (const sd of [-1, 1]) {
+    const xe = sd * TN.walkX, xi = sd * 3.2;
+    qfC(A, [xe, 0.03, z0], [xe, 0.03, z1], [xi, 0.03, z1], [xi, 0.03, z0], glowC, glowC, black, black, [0, 1, 0]);
+    const xw = sd * (TN.wallX - 0.03);
+    qfC(A, [xw, 1.0, z0], [xw, 1.0, z1], [xw, TN.springY + 1.0, z1], [xw, TN.springY + 1.0, z0], black, black, glowW, glowW, [-sd, 0, 0]);
+  }
+  return { road: G.build(), shell: S.build(), glow: N.build(), add: A.build() };
+}
+
+/**
+ * 터널 구간 1개 (추가 export). buildRoadSegment 와 같은 규약: s ∈ [0,length] (z: 0 → −length), 원점 = 구간 시작 x=0.
+ * 메시 4개 = draw call 4: road(노면·보도, receiveShadow) / shell(측벽·아치·산 단면·제트팬, 안쪽만) / glow(등기구·유도등, 발광) / light(가산 빛웅덩이)
+ * 반대편 차로·중앙분리대·갓길·가드레일 없음 (터널 = 한 방향 단독 터널). |x| > wallX 는 산 단면이 덮는다.
+ * @param {number} length 기본 SEG_LEN
+ * @param {{night?:boolean, seed?:number, band?:number, fans?:boolean}} opts  band: 측벽 색띠 색 (터널마다 다르게), fans: 제트팬(기본 true)
+ * userData: { kind:'tunnelSegment', length, wallX, crownY, capY, shoulder:false, ambience } — ambience = 터널 안 권장 조명(코어가 보간)
+ */
+export function buildTunnelSegment(length = SEG_LEN, opts = {}) {
+  const night = !!opts.night, seed = opts.seed | 0;
+  const variant = ((seed % ROAD_VARIANTS) + ROAD_VARIANTS) % ROAD_VARIANTS;
+  const key = `tunnel|${length}|${night ? 1 : 0}|${variant}|${opts.band ?? '-'}|${opts.fans === false ? 0 : 1}`;
+  const geo = cached(_tunnelCache, key, () => buildTunnelGeo(length, night, variant, opts));
+  const g = new THREE.Group();
+  g.name = 'tunnelSegment';
+  const road = new THREE.Mesh(geo.road, MAT.vc); road.name = 'road'; road.receiveShadow = true;
+  const shell = new THREE.Mesh(geo.shell, MAT.vc); shell.name = 'shell'; shell.receiveShadow = true;
+  const glow = new THREE.Mesh(geo.glow, MAT.glow); glow.name = 'glow';
+  const light = new THREE.Mesh(geo.add, MAT.additive); light.name = 'light'; light.renderOrder = 1;
+  g.add(road, shell, glow, light);
+  g.userData = {
+    kind: 'tunnelSegment', length, night, seed, wallX: TN.wallX, crownY: TN.crownY, capY: TN.capY, shoulder: false,
+    ambience: TUNNEL_AMBIENCE, drawCalls: 4,
+  };
+  return g;
+}
+/** 터널 안 권장 조명 (추가 export): 코어가 플레이어가 터널 안일 때 world.hemi/sun/fog 를 이 값으로 보간 */
+export const TUNNEL_AMBIENCE = Object.freeze({ hemiSky: 0xffc589, hemiGround: 0x4a3626, hemiI: 1.05, sunI: 0.35, fog: 0x3a2c22, fogNear: 40, fogFar: 230 });
+
+// 포털 현판 (캔버스): 녹색 판 + 흰 테두리 + 터널 이름(크게) + 길이
+function tunnelBoardMaterial(name, sub, night) {
+  const key = 'tboard|' + name + '|' + sub + '|' + (night ? 1 : 0);
+  return cached(_matCache, key, () => {
+    const W = 1536, H = 300;
+    const tex = textTexture(W, H, (ctx) => {
+      ctx.fillStyle = '#0b7a4b'; rrect(ctx, 0, 0, W, H, 34); ctx.fill();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 12; rrect(ctx, 18, 18, W - 36, H - 36, 24); ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const spaced = [...name].join(name.length <= 6 ? ' ' : '');
+      fitFont(ctx, spaced, FONT_DISPLAY, 190, sub ? W * 0.62 : W - 120);
+      ctx.fillText(spaced, sub ? W * 0.4 : W / 2, H * 0.54);
+      if (sub) {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(W * 0.745, 62, 6, H - 124);
+        fitFont(ctx, sub, FONT_DISPLAY, 92, W * 0.22);
+        ctx.fillStyle = '#ffffff'; ctx.fillText(sub, W * 0.87, H * 0.54);
+      }
+    }, { aniso: 16 });
+    return new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: night ? 0.6 : 0.25, name: 'scenery.tunnelBoard' });
+  });
+}
+const _portalCache = new Map();
+function buildPortalGeo(night) {
+  const F = new GB(), NA = 18, T = 0.8, ZF = T; // 정면 z = +0.8 (다가오는 차 쪽), 뒷면 z = 0 (터널 시작)
+  const W = 16, topC = TN.portalTopY, topS = TN.capY + 0.5, cw = 4.6;
+  const topAt = (x) => (Math.abs(x) <= cw ? topC : topS);
+  const nF = [0, 0, 1];
+  // 정면: 옆 블록 + 아치 위 띠 (각 아치 면 위로 수직 띠)
+  for (const sd of [-1, 1]) {
+    const xa = sd * TN.wallX, xb = sd * W;
+    qf(F, [xa, 0, ZF], [xb, 0, ZF], [xb, topS, ZF], [xa, topS, ZF], PAL_FACADE(), nF);
+    for (let y = 1.2; y < topS - 0.5; y += 1.2) qf(F, [xa + sd * 0.7, y, ZF + 0.01], [xb, y, ZF + 0.01], [xb, y + 0.06, ZF + 0.01], [xa + sd * 0.7, y + 0.06, ZF + 0.01], TPAL.facadeDark, nF);
+    // 끝면 + 윗면
+    qf(F, [xb, 0, 0], [xb, 0, ZF], [xb, topS, ZF], [xb, topS, 0], TPAL.facadeDark, [sd, 0, 0]);
+    qf(F, [xa, topS, 0], [xb, topS, 0], [xb, topS, ZF], [xa, topS, ZF], TPAL.facade, [0, 1, 0]);
+  }
+  for (let i = 0; i < NA; i++) {
+    const a = archPt(i, NA), b = archPt(i + 1, NA), ta = topAt(a[0]), tb = topAt(b[0]);
+    qf(F, [a[0], a[1], ZF], [b[0], b[1], ZF], [b[0], tb, ZF], [a[0], ta, ZF], PAL_FACADE(), nF);
+    qf(F, [a[0], ta, 0], [b[0], tb, 0], [b[0], tb, ZF], [a[0], ta, ZF], TPAL.facade, [0, 1, 0]); // 윗면
+    // 개구부 안쪽 면 (두께) + 포털 링(정면에 0.6m 띠, 6cm 돌출)
+    const [nx, ny] = archN(i, NA);
+    qf(F, [a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], ZF], [a[0], a[1], ZF], TPAL.facadeDark, [nx, ny, 0]);
+    const o = 0.6, A2 = [a[0] - nx * o, a[1] - ny * o], B2 = [b[0] - nx * o, b[1] - ny * o];
+    qf(F, [a[0], a[1], ZF + 0.06], [b[0], b[1], ZF + 0.06], [B2[0], B2[1], ZF + 0.06], [A2[0], A2[1], ZF + 0.06], TPAL.portalRing, nF);
+    qf(F, [a[0], a[1], ZF], [b[0], b[1], ZF], [b[0], b[1], ZF + 0.06], [a[0], a[1], ZF + 0.06], TPAL.portalRing, [nx, ny, 0]);
+  }
+  for (const sd of [-1, 1]) { // 직벽부 링 + 개구부 직벽 두께 + 아래 노랑/검정 경고띠
+    const x = sd * TN.wallX, xo = sd * (TN.wallX + 0.6);
+    qf(F, [x, 0, ZF + 0.06], [xo, 0, ZF + 0.06], [xo, TN.springY, ZF + 0.06], [x, TN.springY, ZF + 0.06], TPAL.portalRing, nF);
+    qf(F, [x, 0, 0], [x, 0, ZF + 0.06], [x, TN.springY, ZF + 0.06], [x, TN.springY, 0], TPAL.facadeDark, [-sd, 0, 0]);
+    for (let k = 0; k < 6; k++) {
+      const y0 = k * 0.42, y1 = y0 + 0.42, col = k % 2 ? 0x1b1c1f : 0xf2c21b;
+      qf(F, [x, y0, ZF + 0.07], [xo, y0 + 0.2, ZF + 0.07], [xo, y1 + 0.2, ZF + 0.07], [x, y1, ZF + 0.07], col, nF);
+    }
+  }
+  // 날개벽 (도로 쪽 면, 높이 capY → 0.9 로 낮아짐) + 바깥 잔디 비탈 + 소나무
+  const AP = TN.approach;
+  for (const sd of [-1, 1]) {
+    const xw = sd * (TN.wallX + 0.3), xo = sd * (TN.wallX + 0.9);
+    qf(F, [xw, 0, ZF], [xw, 0, ZF + AP], [xw, 0.9, ZF + AP], [xw, topS, ZF], TPAL.wing, [-sd, 0, 0]);
+    qf(F, [xw, topS, ZF], [xw, 0.9, ZF + AP], [xo, 0.9, ZF + AP], [xo, topS, ZF], TPAL.facadeDark, [0, 1, 0.2]);
+    qf(F, [xw, 0, ZF + AP], [xo, 0, ZF + AP], [xo, 0.9, ZF + AP], [xw, 0.9, ZF + AP], TPAL.facadeDark, [0, 0, 1]);
+    const xg = sd * 60;
+    qfC(F, [xo, topS, ZF], [xo, 0.9, ZF + AP], [xg, 0.0, ZF + AP + 30], [xg, topS, ZF], PAL.grassA, PAL.grassB, PAL.grassB, PAL.grassA, [0, 1, 0.3]);
+    qf(F, [xo, topS - 0.01, 0], [xg, topS - 0.01, 0], [xg, topS - 0.01, ZF], [xo, topS - 0.01, ZF], PAL.grassA, [0, 1, 0]);
+    const rr = rng(sd > 0 ? 91 : 17);
+    for (let k = 0; k < 7; k++) {
+      const t = rr(), u = 0.15 + rr() * 0.8, x = xo + (xg - xo) * u * 0.6, z = ZF + (AP + 30 * u * 0.6) * t * 0.9;
+      const yS = topS + (0 - topS) * Math.max(0, Math.min(1, (z - ZF) / (AP + 30 * u))) , h = 3 + rr() * 3;
+      F.box(x, yS - 0.2, z, 0.35, h * 0.3, 0.35, 0x7a5a3a, { nb: true });
+      F.geo(PRIM.cone6, M4(x, yS - 0.2 + h * 0.22, z, h * 0.36, h * 0.8, h * 0.36, rr() * 3), 0x2f6b3a);
+    }
+  }
+  // 현판 받침 (판 뒤 어두운 테두리)
+  F.box(0, 9.15, ZF + 0.03, 7.9, 1.72, 0.06, 0x3a3d42);
+  return F.build();
+}
+function PAL_FACADE() { return TPAL.facade; }
+/**
+ * 터널 입구 포털 (추가 export). 원점 x=0, s=0 = 터널 시작면, 정면은 +Z(다가오는 차)를 봄, 두께 0.8m 는 +Z 쪽.
+ * 구성: 콘크리트 면벽(개구부 = 터널 단면) + 포털 링 + 경고띠 + 현판('○○터널' 캔버스) + 날개벽·잔디 비탈(+Z 로 approach m).
+ * 출구 포털 = 같은 함수 opts.exit=true (현판 없음) 를 rotation.y = π 로 터널 끝 s 에 배치.
+ * 추격캠이 지나갈 때 현판부가 시야를 막으니 world._overhead() 에 등록해 반투명 페이드를 권장 (게이트리와 동일).
+ * @param {string} name 예: '죽령터널'
+ * @param {{night?:boolean, length?:number, exit?:boolean, sub?:string}} opts length(m) → 'L=4,600m' 표기
+ */
+export function buildTunnelPortal(name = '○○터널', opts = {}) {
+  const night = !!opts.night;
+  const geo = cached(_portalCache, 'portal|' + (night ? 1 : 0), () => buildPortalGeo(night));
+  const g = new THREE.Group();
+  g.name = 'tunnelPortal';
+  const body = new THREE.Mesh(geo, MAT.vc); body.name = 'facade'; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  let board = null;
+  if (!opts.exit) {
+    const sub = opts.sub ?? (opts.length ? `L=${Math.round(opts.length).toLocaleString('en-US')}m` : '');
+    const bw = 7.6, bh = 1.5;
+    board = new THREE.Mesh(cached(_propCache, 'tboardGeo', () => new THREE.PlaneGeometry(bw, bh)), tunnelBoardMaterial(name, sub, night));
+    board.name = 'board'; board.position.set(0, 10.0, 0.8 + 0.07);
+    g.add(board);
+  }
+  g.userData = { kind: 'tunnelPortal', name, board, drawCalls: g.children.length, approach: TN.approach };
+  return g;
 }
 
 // ─────────────────────────────────────────────────────────────

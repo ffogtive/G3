@@ -33,6 +33,10 @@
 // vehicles.js 검증 하네스
 //  ?view=rear (기본, 게임 추격캠 각도) | boss (보스전 캠) | intro (원흉 소개 컷) | front (앞 3/4) | side | top | lineup (측면 정사영 비율 비교) | jam (실제 정체 장면)
 //        | items (상점: 플레이어 차 4종 뒤/앞 + 새 탄·연출소품 + 피니시 조합; &rows=0123 &kinds=a,b 필터)   jam&car=playerPorter (정체 속 상점 차)
+//        | blinker (v0.4: 전 차종 깜빡이를 게임 추격캠 그대로 — 4차로 주차장 배치, 브레이크등 바다 속에서 읽히는지)
+//            &side=mix|left|right|hazard|off  &cam=chase|boss  &anim=1(실제 0.33s 점멸)  &brake=0
+//        | bikes (v0.4: 폭주족 바이크 4종 뒤/앞 + 라이더 포즈 8종 + 삼각별 세단 + 넘어짐/들이받기 조합; &rows=0123)
+//        | tunnel (v0.4: 터널 안 정체 + 폭주족 + 삼각별 세단. &cam=chase(기본)|portal(입구 접근)|inside(안쪽 낮은 캠)|all(3분할))
 //  ?off=x,y,z (카메라 방향 오프셋 강제)  ?car=playerPatrol (items 피니시 조합 / jam 의 플레이어 차)
 //  ?night=1  ?brake=1 ?hazard=1 ?head=1 ?flash=0..1 ?detailed=1(NPC도 detailed) ?anim=1(바퀴/비상등 애니)
 //  ?kinds=sedan,bus  ?proj=0(투사체 줄 숨김)  ?stats=1(콘솔/하단 요약)  ?stage=N (jam 뷰 원흉)  ?seed=N
@@ -40,6 +44,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import * as THREE from 'three';
 import * as V from '../js/vehicles.js';
+import * as SC from '../js/scenery.js';
 import { SKY, laneX, NUM_LANES, LANE_W, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, STAGES, OPP_LANE_X } from '../js/config.js';
 
 const Q = new URLSearchParams(location.search);
@@ -47,8 +52,8 @@ const view = Q.get('view') || 'rear';
 const night = Q.get('night') === '1';
 const flag = (k, d = false) => (Q.has(k) ? Q.get(k) !== '0' : d);
 const state = {
-  brake: flag('brake', view === 'jam'), hazard: flag('hazard'), head: flag('head', night), flash: +(Q.get('flash') || 0),
-  detailed: flag('detailed'), anim: flag('anim'), proj: flag('proj', view !== 'jam' && view !== 'lineup'), siren: flag('siren'),
+  brake: flag('brake', view === 'jam' || view === 'blinker' || view === 'tunnel'), hazard: flag('hazard'), head: flag('head', night), flash: +(Q.get('flash') || 0),
+  detailed: flag('detailed'), anim: flag('anim'), proj: flag('proj', view !== 'jam' && view !== 'lineup' && view !== 'bikes'), siren: flag('siren'),
 };
 const SHOP_CARS = ['player', 'playerPorter', 'playerWrecker', 'playerPatrol'];
 const ALL_KINDS = ['compact', 'sedan', 'suv', 'taxi', 'van', 'pickup1t', 'truck', 'bus', 'police', 'player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor', 'playerPorter', 'playerWrecker', 'playerPatrol'];
@@ -61,7 +66,7 @@ const sky = night ? SKY.night : SKY.day;
 // ── UI
 const ui = document.getElementById('ui');
 const base = new URLSearchParams(location.search);
-for (const v of ['rear', 'boss', 'intro', 'front', 'side', 'top', 'lineup', 'jam', 'items']) {
+for (const v of ['rear', 'boss', 'intro', 'front', 'side', 'top', 'lineup', 'jam', 'items', 'blinker', 'bikes', 'tunnel']) {
   const p = new URLSearchParams(base); p.set('view', v);
   const a = document.createElement('a'); a.href = '?' + p; a.textContent = v; if (v === view) a.className = 'on'; ui.appendChild(a);
 }

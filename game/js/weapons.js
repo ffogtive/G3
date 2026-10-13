@@ -50,9 +50,9 @@ export class Weapons {
   fireTack(player, boss) { this.fireAt(player, boss.targetFor(player)); }
 
   // 대상(원흉·잔챙이)에게 투척. 대상이 앞에 있으면 뒷바퀴 쪽, 뒤에 있으면 앞바퀴 쪽 노면을 노린다
-  fireAt(player, target) {
+  fireAt(player, target, fromOverride = null) {
     const W = this.wpn;
-    const from0 = this._muzzle(player, new THREE.Vector3());
+    const from0 = fromOverride ? fromOverride.clone() : this._muzzle(player, new THREE.Vector3());
     const ahead = target ? target.s > player.s : false;
     const lob = target ? Math.abs(target.x - player.x) > 4 : false;   // 화물차 너머로 높이
     const dur = lob ? 0.46 : 0.32;

@@ -2252,6 +2252,7 @@ export function initUI(handlers) {
 }
 
 export const ui = {
+  isOverlayOpen: () => { try { return !!overlayOpen(); } catch { return false; } },   // 차고·앨범이 열려 있으면 Enter로 스테이지 시작 금지
   showTitle: guard(showTitle),
   hideTitle: guard(hideTitle),
   showStageCard: guard((s, m) => showStageCard(s, m), () => Promise.resolve()),
