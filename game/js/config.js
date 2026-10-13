@@ -222,6 +222,12 @@ export const NOWAY_LINES = ['어디로 비켜!', '나도 막혔어!', '틈이 �
 export const LETIN_LINES = ['들어오세요~', '긴급차량 먼저!', '어서 가세요!', '저 놈 좀 혼내줘요!'];
 export const FRONT_RAGE_LINES = ['1차선 좀 비켜!!', '추월 좀 하자!!', '빵빵빵빵!', '앞에 뭐야 진짜…', '추월차선인데?!', '저 차 때문에…'];
 export const CHEATER_LINES = ['죄송합니다~', '아 들켰다', '급해서요ㅠ', '블박 찍혔나?'];
+// 잔챙이 빌런 (정체 구간에서 지나가며 참교육): 범칙금은 포상금 보너스로
+export const MINI_TYPES = {
+  butt: { name: '꽁초 투척러', item: 'butt', fine: 50000, violation: '차량 밖 담배꽁초 투척', lines: ['퉤~', '재떨이가 꽉 차서~'], sorry: ['죄송합니다ㅠ', '다신 안 버릴게요'] },
+  trash: { name: '창밖 쓰레기 투척', item: 'cup', fine: 50000, violation: '차량 밖 쓰레기 투척', lines: ['옛다 커피~', '버릴 데가 없어서~'], sorry: ['주워갈게요ㅠ', '블박 찍혔다…'] },
+  cutin: { name: '갓길 칼치기', item: null, fine: 60000, violation: '갓길 통행 + 끼어들기', lines: ['나 먼저~', '급해 급해!'], sorry: ['제자리로 갈게요', '죄송합니다~'] },
+};
 
 // 게임플레이 튜닝 값 (main/player/boss/weapons 공유)
 export const TUNE = {
@@ -229,22 +235,53 @@ export const TUNE = {
   playerAccel: 9,
   playerBrake: 22,
   laneChangeTime: 0.18,
-  bumpRage: 0.12,
-  timeRage: 0.03,          // 느릴 때(<5m/s) 초당 분노 증가
-  baseRage: 0.009,         // 정체 구간에 있기만 해도 초당 분노 증가
-  cutinRage: 0.1,
-  nowayRage: 0.03,         // 경적 울렸는데 못 비킬 때
-  tauntRage: 0.025,        // 원흉 도발 볼 때마다
+  // 분노: 5칸 (사용자 피드백 v0.2: "중간쯤 이미 MAX" → 칸 늘리고 적립 속도 절반)
+  rageSegs: 5,
+  bumpRage: 0.06,
+  timeRage: 0.016,         // 느릴 때(<5m/s) 초당 분노 증가
+  baseRage: 0.005,         // 정체 구간에 있기만 해도 초당 분노 증가
+  cutinRage: 0.05,
+  nowayRage: 0.015,        // 경적 울렸는데 못 비킬 때
+  tauntRage: 0.015,        // 원흉 도발 볼 때마다
+  miniRage: 0.04,          // 잔챙이 빌런한테 당할 때
+  smashRage: 0.012,        // 콘·낙하물 날릴 때
+  rageHornRange: 48,       // 분노의 경적: 갓길 앞 이 거리까지 싹 쓸어버림
+  boostTime: 2.2,          // 분노의 경적 후 가속 시간
   bossAheadGap: 11,        // 보스전: 플레이어는 원흉 '앞' 이 거리에서 싸운다 (뒤는 정체라 못 감)
   shoulderMaxV: 18,        // 갓길 최고속 m/s
   tackDmg: 4,
   tackRate: 7,             // 초당 발사
-  superDmg: 38,
-  superCost: 1 / 3,        // 분노 게이지 1칸
-  hitRage: 0.14,           // 원흉 공격 맞으면 분노 +
+  superDmg: 28,
+  superCost: 1 / 5,        // 분노 게이지 1칸 (정체: 분노의 경적 / 보스전: 분노 폭탄)
+  hitRage: 0.08,           // 원흉 공격 맞으면 분노 +
   releaseWaveSpeed: 70,    // m/s, 해방 물결이 뒤로 퍼지는 속도
   releaseSpeed: [27, 36],  // 해방 후 NPC 목표 속도 m/s (~100~130km/h)
   releaseLaneDelay: 0.45,  // 해방 순서: 1차선 먼저 → 차선마다 이만큼 늦게 (인과가 보이도록)
   truckFreeSpeed: [20, 23],// 해방 후 화물차/버스 속도 (원래 느린 차들)
   cruiseTime: 4.2,         // 해방 후 질주 시간
 };
+
+// ─────────────────────────────────────────────────────────────
+// 차고/상점 (포상금으로 구매). docs/SHOP.md
+// cat: car(하나 장착) | weapon(하나 장착) | move(보유 시 사용 가능) | finish(하나 장착) | passive(보유 시 적용)
+export const SHOP = [
+  { id: 'car_hatch', cat: 'car', name: '참교육 해치', price: 0, kind: 'player', desc: '기본 차. 작고 빨라서 갓길 질주에 최고.', stats: { speed: 1.0, armor: 0 } },
+  { id: 'car_porter', cat: 'car', name: '1톤 포터', price: 180000, kind: 'playerPorter', desc: '튼튼한 짐칸. 추돌 2회까지 무시.', stats: { speed: 0.93, armor: 2 } },
+  { id: 'car_wrecker', cat: 'car', name: '레커 견인차', price: 450000, kind: 'playerWrecker', desc: '갓길 고장차를 들이받으면 즉시 견인!', stats: { speed: 0.97, armor: 1, tow: true } },
+  { id: 'car_patrol', cat: 'car', name: '암행 순찰차 st.', price: 900000, kind: 'playerPatrol', desc: '경적 = 사이렌. 얌체·4차선이 크게 비켜준다.', stats: { speed: 1.08, armor: 0, siren: true } },
+  { id: 'wpn_tack', cat: 'weapon', name: '압정', price: 0, proj: 'tack', desc: '기본. 밟으면 펑크.', dmg: 4, rate: 7, spread: 1 },
+  { id: 'wpn_caltrop', cat: 'weapon', name: '마름쇠 3연발', price: 150000, proj: 'caltrop', desc: '한 번에 3개 흩뿌려서 잘 맞는다.', dmg: 2.2, rate: 6, spread: 3 },
+  { id: 'wpn_water', cat: 'weapon', name: '물풍선', price: 280000, proj: 'waterBalloon', desc: '앞유리 범벅! 맞으면 빌런 공격이 느려진다.', dmg: 7, rate: 3.5, spread: 1, slow: 0.55 },
+  { id: 'wpn_gum', cat: 'weapon', name: '껌 폭탄', price: 520000, proj: 'gum', desc: '타이어에 껌이 쩍. 데미지 1.6배.', dmg: 6.4, rate: 5, spread: 1 },
+  { id: 'mv_jump', cat: 'move', name: '참교육 점프', price: 220000, desc: '↑(점프 버튼): 앞차를 훌쩍 뛰어넘기. 쿨 4초.' },
+  { id: 'mv_drone', cat: 'move', name: '블박 드론', price: 600000, desc: '드론이 위에서 따라오며 잔챙이 빌런·원흉에 자동 사격.' },
+  { id: 'fin_rocket', cat: 'finish', name: '로켓 발사', price: 0, desc: '하늘 저편으로 반짝★ (기본 피니시)' },
+  { id: 'fin_balloon', cat: 'finish', name: '풍선 둥실', price: 160000, desc: '풍선 다발에 매달려 둥실둥실 날아간다.' },
+  { id: 'fin_heli', cat: 'finish', name: '참교육 헬기', price: 420000, desc: '헬기가 와서 대롱대롱 들고 간다.' },
+  { id: 'fin_ufo', cat: 'finish', name: 'UFO 납치', price: 750000, desc: '빛줄기에 빨려 올라가 우주로.' },
+  { id: 'pas_4k', cat: 'passive', name: '블박 4K 화질', price: 120000, desc: '선명한 증거 → 포상금 +25%' },
+  { id: 'pas_airbag', cat: 'passive', name: '에어백', price: 200000, desc: '스테이지마다 추돌 3회까지 분노·점수 손해 없음' },
+  { id: 'pas_trot', cat: 'passive', name: '트로트 경적', price: 140000, desc: '뽕짝 경적 → 앞차가 더 잘 비켜준다' },
+  { id: 'pas_coffee', cat: 'passive', name: '졸음쉼터 커피', price: 240000, desc: '분노 게이지 1칸 채우고 시작' },
+];
+export const SHOP_DEFAULT = { car: 'car_hatch', weapon: 'wpn_tack', finish: 'fin_rocket' };

@@ -11,8 +11,9 @@
 //  - 갓길: 고정 장애물(고장차/콘/낙하물) + 갓길 얌체(cheater, 경적 울리면 4차선으로 복귀)
 //  - 경적: 갓길에서 → 얌체 복귀 / 장애물 앞에서 4차선이 끼워줌(let-in). 차선에서 → 앞차 양보 or 옆 차선이 끼워줌
 //  - 해방: 1차선부터 차선별 지연 + 앞→뒤 물결, 해방 후 느린 차는 오른쪽, 빠른 차는 1차선으로 추월
+import * as THREE from 'three';
 import {
-  laneX, LANE_W, NUM_LANES, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, TUNE, OPP_LANE_X, SHOULDER_LANE,
+  laneX, LANE_W, NUM_LANES, NPC_KINDS, NPC_COLORS_MONO, NPC_COLORS_POP, TUNE, OPP_LANE_X, SHOULDER_LANE, MINI_TYPES,
 } from './config.js';
 import { buildVehicle, setBrake, setHazard, setHeadlights } from './vehicles.js';
 import { buildShoulderObstacle } from './shoulder.js';
@@ -60,6 +61,9 @@ export class Traffic {
     this.releasedCount = 0;
     this.onReleased = null;   // (car) => void
     this.onCheater = null;    // (car) => void  갓길 얌체 등장
+    this.onMiniAct = null;    // (car, type) => void  잔챙이 빌런 행동 (투척 등)
+    this.miniMat = new THREE.MeshBasicMaterial({ color: 0xff9a1a });
+    this.miniGeo = new THREE.ConeGeometry(0.42, 0.85, 4).rotateX(Math.PI);
     this.night = false;
   }
 
@@ -172,6 +176,24 @@ export class Traffic {
       if (ob.hazardCar && night) setHeadlights(ob.hazardCar, false);
       this.obstacles.push(e);
     });
+
+    // ③-2 잔챙이 빌런: 갓길 바로 옆(4차선) 차 중 몇 대 — 지나가며 압정으로 참교육
+    const nMini = stage.minis ?? Math.min(4, 2 + Math.floor((stage.difficulty ?? stage.id ?? 1) / 3));
+    const types = Object.keys(MINI_TYPES);
+    const lane3 = this.cars.filter((c) => c.lane === NUM_LANES - 1 && !c.isWall && !c.isCheater && c.s > playerStart.s + 30 && c.s < sFront - 30).sort((a, b) => a.s - b.s);
+    for (let i = 0; i < nMini && lane3.length; i++) {
+      const want = playerStart.s + 30 + ((sFront - 30) - (playerStart.s + 30)) * (i + 0.5) / nMini;
+      let best = lane3[0];
+      for (const c of lane3) if (Math.abs(c.s - want) < Math.abs(best.s - want)) best = c;
+      lane3.splice(lane3.indexOf(best), 1);
+      const type = types[Math.floor(rng() * types.length)];
+      best.mini = { type, hp: 12, max: 12, cool: 0.6 + rng(), acted: 0, done: false };
+      best.alive = true;
+      const mk = new THREE.Mesh(this.miniGeo, this.miniMat);
+      mk.position.y = (best.mesh.userData.height || 1.6) + 1.1;
+      best.mesh.add(mk);
+      best.miniMarker = mk;
+    }
 
     // ④ 반대편 차로 (뻥 뚫려서 쌩쌩 — 약 올림)
     for (let i = 0; i < 26; i++) {
@@ -293,6 +315,32 @@ export class Traffic {
     if (ctx.allowEvents && player.lane === SHOULDER_LANE && player.v > 8 && t > (this.nextCheater || 6)) {
       this.nextCheater = t + 7 + rng() * 5;
       this._spawnCheaterAhead(player);
+    }
+
+    // 잔챙이 빌런 행동: 플레이어가 뒤에서 다가오면 꽁초/쓰레기 투척 or 갓길로 칼치기
+    if (!this.released && ctx.phase === 'jam') {
+      for (const c of this.cars) {
+        const m = c.mini;
+        if (!m || m.done) continue;
+        if (c.miniMarker) c.miniMarker.position.y = (c.mesh.userData.height || 1.6) + 1.1 + Math.sin(t * 6 + c.id) * 0.18;
+        const ds = c.s - player.s;
+        if (ds < 4 || ds > 30) continue;
+        m.cool -= dt;
+        if (m.cool > 0) continue;
+        if (m.type === 'cutin') {
+          if (m.acted < 1 && ds > 10 && !this.laneBlocked(SHOULDER_LANE, c.s - c.len / 2 - 2, c.s + c.len / 2 + 2, c)) {
+            m.acted++;
+            c.isCheater = true; c.cheaterV = 3.5;
+            this._startLaneChange(c, SHOULDER_LANE, 0.8);
+            this.onMiniAct?.(c, m.type);
+          }
+          m.cool = 3;
+        } else {
+          m.acted++;
+          m.cool = 2.0 + this.rng() * 1.2;
+          this.onMiniAct?.(c, m.type);
+        }
+      }
     }
 
     for (const c of this.cars) {
@@ -487,6 +535,61 @@ export class Traffic {
     // 아니면 오른쪽(갓길 쪽) 차선이 끼워줌
     const c = this.letIn(Math.min(SHOULDER_LANE, pl + 1), player);
     return c ? { car: c, kind: 'letin' } : { car: who, kind: 'noway' };
+  }
+
+  // 분노의 경적: 갓길 앞 range 까지 싹 쓸어버림. 반환 { smashed:[obstacle], towed:[obstacle], cheaters:[car], startled:[car] }
+  rageHorn(player, range) {
+    const s0 = player.s - 2, s1 = player.s + range;
+    const out = { smashed: [], towed: [], cheaters: [], startled: [] };
+    for (const o of [...this.obstacles]) {
+      if (o.s < s0 || o.s > s1) continue;
+      this.obstacles.splice(this.obstacles.indexOf(o), 1);
+      (o.smash ? out.smashed : out.towed).push(o);
+    }
+    for (const c of this.cars) {
+      if (c.released) continue;
+      if (c.s < s0 || c.s > s1) continue;
+      if ((c.isCheater || c.lane === SHOULDER_LANE) && c.lcT >= 1) {
+        this.letIn(NUM_LANES - 1, c);
+        this._startLaneChange(c, NUM_LANES - 1, 0.7);
+        c.cheaterV = 0;
+        out.cheaters.push(c);
+      } else if (c.lane >= NUM_LANES - 2 && !c.isWall) {
+        c.bumpJolt = 1; c.brakeT = Math.max(c.brakeT, 0.5);
+        out.startled.push(c);
+      }
+    }
+    return out;
+  }
+
+  // 압정 사거리 안의 잔챙이 빌런 (앞쪽, 같은/옆 차선)
+  miniTarget(player) {
+    let best = null, bd = Infinity;
+    for (const c of this.cars) {
+      const m = c.mini;
+      if (!m || m.done) continue;
+      const ds = c.s - player.s;
+      if (ds < -3 || ds > 26) continue;
+      if (Math.abs(c.x - player.x) > LANE_W * 1.2) continue;
+      if (ds < bd) { bd = ds; best = c; }
+    }
+    return best;
+  }
+
+  // 잔챙이 피격. 반환: 'hit' | 'down'
+  miniHit(c, dmg) {
+    const m = c.mini;
+    if (!m || m.done) return null;
+    m.hp -= dmg;
+    c.bumpJolt = 0.6;
+    if (m.hp > 0) return 'hit';
+    m.done = true;
+    c.alive = false;
+    c.brakeT = 2.5;
+    c.hazardUntil = this.time + 4;
+    if (c.isCheater && c.lane === SHOULDER_LANE) { this.letIn(NUM_LANES - 1, c); this._startLaneChange(c, NUM_LANES - 1, 0.9); c.cheaterV = 0; }
+    if (c.miniMarker) { c.mesh.remove(c.miniMarker); c.miniMarker = null; }
+    return 'down';
   }
 
   // 빌런 바로 뒤 몇 대 (짜증 말풍선용)

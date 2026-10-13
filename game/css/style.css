@@ -323,10 +323,11 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .ui-rage__main { display: flex; flex-direction: column; gap: 3px; }
 .ui-rage__l { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #ffc9c2; letter-spacing: .04em; line-height: 1; white-space: nowrap; }
 .ui-rage__key { display: none; font-style: normal; font-family: var(--ui-fd); font-size: 12px; color: var(--ui-ink); background: var(--ui-amber); border-radius: 6px; padding: 2px 6px 1px; border: 2px solid var(--ui-ink); animation: ui-blink .7s steps(2, jump-none) infinite; }
-.ui-root[data-phase="boss"]:not(.ui-root--touch) .ui-rage.is-ready .ui-rage__key { display: inline-block; }
+.ui-root[data-phase="boss"]:not(.ui-root--touch) .ui-rage.is-ready .ui-rage__key,
+.ui-root[data-phase="jam"]:not(.ui-root--touch) .ui-rage.is-ready .ui-rage__key { display: inline-block; }
 .ui-rage__segs { display: flex; gap: 5px; }
 .ui-rage__seg {
-  position: relative; width: 52px; height: 19px; overflow: hidden; box-sizing: border-box;
+  position: relative; width: 34px; height: 19px; overflow: hidden; box-sizing: border-box;
   background: #0f141b; border: 2.5px solid var(--ui-ink); border-radius: 7px;
   box-shadow: inset 0 3px 0 rgba(0, 0, 0, .5), 0 0 0 1.5px rgba(255, 255, 255, .12);
 }
@@ -719,7 +720,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .ui-rage { gap: 6px; padding: 5px 10px 6px 6px; border-radius: 16px; }
   .ui-rage__ico { width: 32px; height: 32px; }
   .ui-rage__l { font-size: 11.5px; }
-  .ui-rage__seg { width: 36px; height: 17px; }
+  .ui-rage__seg { width: 24px; height: 17px; }
   .ui-rage__segs { gap: 4px; }
   .ui-rage__max { font-size: 13px; top: -13px; right: -8px; }
   .ui-release { top: calc(var(--sat) + 108px); }
@@ -843,7 +844,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .ui-root--touch .ui-speedo__u { font-size: 10px; }
 .ui-root--touch .ui-rage { bottom: calc(var(--sab) + 116px); gap: 6px; padding: 5px 10px 6px 6px; }
 .ui-root--touch .ui-rage__ico { width: 32px; height: 32px; }
-.ui-root--touch .ui-rage__seg { width: 32px; height: 17px; }
+.ui-root--touch .ui-rage__seg { width: 21px; height: 17px; }
 .ui-root--touch .ui-rage__segs { gap: 4px; }
 .ui-root--touch .ui-rage__l { font-size: 11.5px; }
 /* 폰 가로(낮은 화면) + 터치: 속도계는 좌상 칩 아래, 분노 게이지는 하단 중앙, 분노 버튼은 발사 왼쪽 */

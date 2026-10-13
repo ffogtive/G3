@@ -21,6 +21,9 @@
 //  - 게임플레이 키는 바인딩하지 않는다 (core 담당). 스테이지 카드 스킵용 keydown 만 잠깐 듣는다.
 
 // ───────────────────────────── 유틸
+// 분노 게이지 칸 수 (config TUNE.rageSegs 와 맞출 것)
+const RAGE_SEGS = 5;
+
 let H = {};
 let R = null;
 let built = false;
@@ -306,7 +309,7 @@ function makeRays() {
 
 function resetCache() {
   Object.assign(C, {
-    hud: false, phase: null, speed: -1, fast: null, dist: -1, rage: -1, segF: [-1, -1, -1], rageInit: false, full: null, ready: null,
+    hud: false, phase: null, speed: -1, fast: null, dist: -1, rage: -1, segF: [-1, -1, -1, -1, -1], rageInit: false, full: null, ready: null,
     score: -1, combo: -1, navP: -1, navR: -1, navDone: null, navFull: null,
     boss: false, bossName: null, hp: -1, lag: 1, lagShown: -1, lastHit: 0, lastBossT: 0, tires: -1,
     rel: null, relShown: 0, vig: -1, muted: null, touch: false, fireMode: null,
@@ -400,8 +403,8 @@ function buildSpeedo() {
 function buildRage() {
   E.rageEl = R.appendChild(el('div', 'ui-rage ui-hudpart',
     `<span class="ui-rage__ico">${SVG.flame}</span>`
-    + '<div class="ui-rage__main"><span class="ui-rage__l">분노<em class="ui-rage__key">R 미사일!</em></span><div class="ui-rage__segs">'
-    + '<span class="ui-rage__seg"><i></i></span><span class="ui-rage__seg"><i></i></span><span class="ui-rage__seg"><i></i></span>'
+    + '<div class="ui-rage__main"><span class="ui-rage__l">분노<em class="ui-rage__key">R 발동!</em></span><div class="ui-rage__segs">'
+    + '<span class="ui-rage__seg"><i></i></span>'.repeat(RAGE_SEGS)
     + '</div></div><b class="ui-rage__max">MAX</b>'));
   E.segs = [...E.rageEl.querySelectorAll('.ui-rage__seg')];
   E.segFill = E.segs.map((s) => s.firstElementChild);
@@ -509,21 +512,21 @@ function setHUD(s) {
     const d = Math.max(0, Math.round(num(s.distM)));
     if (d !== C.dist) { C.dist = d; E.distNum.textContent = fmt(d); }
   }
-  // 분노 3칸
+  // 분노 RAGE_SEGS 칸
   const rq = q(clamp(num(s.rage), 0, 1), 300);
   if (rq !== C.rage) {
-    const prev = C.rageInit ? Math.floor(C.rage * 3 + 1e-6) : 99;
+    const prev = C.rageInit ? Math.floor(C.rage * RAGE_SEGS + 1e-6) : 99;
     C.rage = rq;
     C.rageInit = true;
-    for (let i = 0; i < 3; i++) {
-      const f = q(clamp(rq * 3 - i, 0, 1), 100);
+    for (let i = 0; i < RAGE_SEGS; i++) {
+      const f = q(clamp(rq * RAGE_SEGS - i, 0, 1), 100);
       if (f !== C.segF[i]) {
         C.segF[i] = f;
         E.segFill[i].style.transform = `scaleX(${f})`;
         E.segs[i].classList.toggle('is-on', f >= 1);
       }
     }
-    const segs = Math.floor(rq * 3 + 1e-6);
+    const segs = Math.floor(rq * RAGE_SEGS + 1e-6);
     if (segs > prev && segs >= 1) {
       anim(E.segs[segs - 1], KF.segPulse, { duration: 420, easing: 'cubic-bezier(.3,1.6,.5,1)' });
       bump(E.rageEl.querySelector('.ui-rage__ico'), 'rageico', 0, KF.bump, 380);
