@@ -3,7 +3,7 @@
 // - scanStrings(src): tokenizes JS (comments, strings, template literals with nesting, regex literals) and returns
 //   every string/template literal with its line, the innermost call it is an argument of, and its enclosing array.
 // - extractConst(src, name): returns the source text of the initializer of `const NAME = <expr>;` (bracket matched).
-// - evalLiteral(text, sandbox): evaluates an initializer in an isolated node:vm context.
+// - evalLiteral(text, sandbox): evaluates an initializer in an isolated node:vm context (frozen web tables only).
 import vm from 'node:vm';
 
 const HANGUL = /[ㄱ-ㆎ가-힣]/;
@@ -17,7 +17,7 @@ const REGEX_KEYWORDS = new Set(['return', 'typeof', 'case', 'do', 'else', 'in', 
  */
 export function scanStrings(src) {
   const literals = [];
-  let i = 0, line = 1;
+  let i = 0;
   // bracket stack entries: { ch, callee, start }
   const stack = [];
   let prevSig = null;       // previous significant token text
@@ -98,8 +98,7 @@ export function scanStrings(src) {
     const base = stack.length;
     while (i < src.length) {
       const c = src[i], n = src[i + 1];
-      if (c === '\n') { line++; i++; continue; }
-      if (c === ' ' || c === '\t' || c === '\r') { i++; continue; }
+      if (c === '\n' || c === ' ' || c === '\t' || c === '\r') { i++; continue; }
       if (c === '/' && n === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
       if (c === '/' && n === '*') { const j = src.indexOf('*/', i + 2); i = j < 0 ? src.length : j + 2; continue; }
       if (c === '"' || c === "'") {
@@ -195,11 +194,4 @@ export function extractConst(src, name) {
 export function evalLiteral(text, sandbox = {}) {
   const ctx = vm.createContext({ ...sandbox });
   return vm.runInContext(`(${text})`, ctx, { timeout: 1000 });
-}
-
-/** 1-based line of the first match of `needle` (string or RegExp) in src, else throws. */
-export function lineOf(src, needle, from = 0) {
-  const idx = typeof needle === 'string' ? src.indexOf(needle, from) : src.slice(from).search(needle) + (src.slice(from).search(needle) >= 0 ? from : 0);
-  if (idx < 0 || (typeof needle !== 'string' && src.slice(from).search(needle) < 0)) throw new Error(`lineOf: not found ${needle}`);
-  return src.slice(0, idx).split('\n').length;
 }

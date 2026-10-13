@@ -28,7 +28,7 @@ import { K, TRAFFIC, SETUP, HAPTICS } from './content/lib/tables.mjs';
 import { normalizeStages, denormalizeHandmade, validateStages, STAGE_SCHEMA_VERSION } from './content/lib/stages.mjs';
 import { vehicleKindsTable } from './content/lib/vehicle-kinds.mjs';
 import { spawnGolden, replayTicks, stateHash } from './content/lib/goldens.mjs';
-import { tagOf, parseChromeStack, siteStr } from './content/lib/rng-trace.mjs';
+import { tagOf, parseChromeStack } from './content/lib/rng-trace.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const GAME = resolve(ROOT, 'game/js');

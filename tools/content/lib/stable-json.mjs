@@ -89,20 +89,6 @@ export function stableStringify(value, opts = {}) {
   return walk(value, 0, '$') + '\n';
 }
 
-/** Recursively turn `undefined` object fields into `null` (JS `??` / truthiness treat both the same). Arrays must not hold undefined. */
-export function undefToNull(v, path = '$') {
-  if (Array.isArray(v)) return v.map((x, i) => {
-    if (x === undefined) throw new Error(`undefToNull: undefined array element at ${path}[${i}]`);
-    return undefToNull(x, `${path}[${i}]`);
-  });
-  if (v && typeof v === 'object' && !(v instanceof Raw)) {
-    const o = {};
-    for (const k of Object.keys(v)) o[k] = v[k] === undefined ? null : undefToNull(v[k], `${path}.${k}`);
-    return o;
-  }
-  return v;
-}
-
 /** Order-insensitive deep equality for plain JSON data (object key order ignored, array order respected). */
 export function deepEqual(a, b, path = '$', diffs = [], max = 20) {
   if (diffs.length >= max) return diffs;

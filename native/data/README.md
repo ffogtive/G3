@@ -75,11 +75,11 @@ node tools/export-content.mjs --no-web        # Playwright 없이 (웹 대조·�
 | `traffic_ticks_stage1.json` | 라이브 웹 1-1(`?stage=1&skip=jam`, 플레이어 무입력, 실제 WebGL 렌더)의 `Traffic.update` 600틱: 틱마다 **입력**(dt, time, phase, player, villains, extras, sinLf)과 **출력 전부**(차 s/v/lane, 차선 변경 중 x, 반대편 s, 장애물 수, 상태 해시 `h`, 그 틱의 rng 추첨 [태그, u32]). IDM·stop&go·랜덤 급정거·반대편 재배치 |
 | `traffic_auto_stage1.json` | 웹 오토파일럿 1-1 완주(`?skip=jam&auto=1`) 4800틱 = jam → boss → kill → release → cruise → result. 위와 같은 입력 + **update 밖에서 부른 Traffic 호출 이벤트**(honk 7, miniHit 6, jolt 2, smash, rageHorn, release — 호출 시점 플레이어 상태·인자·반환·rng 포함). 출력은 틱마다 해시 `h` + rng, 60틱마다 전체 상태. 그리기만 생략(렌더가 하던 행렬 갱신은 그대로) |
 
-- 1-1 spawn은 NATIVE_PORT 3-3 기준값(126대, 1차로 버스 s=200.4453, 고장차 109.681 len 7, 콘 147.518, 잔챙이 131.90/66.63, 다음 추첨 0.3714370721)과 같고, 라이브 웹 페이지의 첫 프레임 전 상태와 모든 필드가 같다(export가 매번 검사).
+- 1-1 spawn은 NATIVE_PORT 3-3 기준값(126대, 1차로 버스 s=200.4453, 고장차 109.681 len 7, 콘 147.518, 잔챙이 131.90/66.63, 다음 추첨 0.3714370721)과 같다. 1·5·6판 spawn은 라이브 웹 페이지의 첫 프레임 전 상태와 웹에서 보이는 모든 필드가 같다(export가 매번 검사).
 - **웹 dt는 가변이다.** `main.js frame(now)` → `step(min(0.05, (now−last)/1000))`(rAF마다, `?ff=N`이면 1/30×N). 틱 골든은 가상 시간으로 rAF를 120Hz로 돌려서 dt ≈ 1/120이지만 부동소수 누적 때문에 비트 단위로 일정하지 않다 → **틱마다 `in.dt`를 그대로 쓴다.**
 - 웹의 `Math.random`(보스 공격, 도발, fx)은 녹화 때 시드 mulberry32(`math_random_seed`)로 고정했다. traffic 상태에는 들어가지 않는다.
 - 재생 방법(C++ T0 테스트도 같음, 골든의 `replay` 필드에 정확한 절차): spawn 후 틱마다 ① 그 틱 앞의 `events`를 순서대로 부르고(`player` 상태를 맞춘 뒤 `Traffic[m](args)`, rng·반환 비교) ② `in.obstacleIds`가 있으면 장애물을 거기에 맞추고 ③ player/villains/extras 필드를 `in.*`로 맞춰(객체 identity 유지) `update(in.dt, {time, phase, allowEvents, focusS, player, villains, extras})`를 부른 뒤 `out.rng`·`out.h`(+ 키프레임이면 전체 상태)와 비교한다. **두 골든 모두 Node 재생이 비트 단위로 일치한다**(export가 매번 검사).
 - 상태 해시 `h` = SHA-256(f64le(s[]) ‖ f64le(v[]) ‖ f64le(x[]) ‖ f64le(opp_s[]) ‖ u8(lane[]) ‖ u32le(장애물 수))의 앞 16 hex. Godot `HashingContext`(SHA256)로 같은 바이트를 만들면 된다.
 
 ### 수학 함수
-sim 상태에 들어가는 초월함수는 packed 차로의 stop&go 계수 `sin(t·0.42 + lane·1.9)`(traffic.js:406) 하나뿐이다. 이 값은 엔진·libm마다 마지막 ulp가 다르다(이번 실행 표본 13175개 인자 중 Chromium 141과 Node 22가 96개에서 다름, glibc 2.39 `sin`은 Chromium과 13174개 일치). 그래서 틱 골든은 `in.sinLf[lane]`를 기록하고, 비트 단위 재생은 그 값을 쓴다. IDM의 `Math.pow(x, 2)`는 `x*x`와 같고(표본 10962개), `sqrt`는 정확하며, `atan2`는 화면용 yaw에만 쓰인다.
+traffic 상태에 들어가는 초월함수는 packed 차로의 stop&go 계수 `sin(t·0.42 + lane·1.9)`(traffic.js:406) 하나뿐이다. 이 값은 엔진·libm마다 마지막 ulp가 다르다(이번 실행 표본 13175개 인자 중 Chromium 141과 Node 22가 96개에서 다름, glibc 2.39 `sin`은 Chromium과 13174개 일치). 그래서 틱 골든은 `in.sinLf[lane]`를 기록하고, 비트 단위 재생은 그 값을 쓴다. IDM의 `Math.pow(x, 2)`는 `x*x`와 같고(표본 10962개), `sqrt`는 정확하며, `atan2`는 화면용 yaw에만 쓰인다.

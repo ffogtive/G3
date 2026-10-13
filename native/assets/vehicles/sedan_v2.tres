@@ -1,0 +1,255 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/vehicles/sedan_v2.res" id="1_l0ddn"]
+[ext_resource type="Script" path="res://assets/vehicles/vehicle_template.gd" id="2_nghgr"]
+
+[resource]
+script = ExtResource("2_nghgr")
+kind = &"sedan"
+variant = 2
+npc = true
+npc_weight = 30.0
+length = 4.6
+width = 1.84
+height = 1.51
+wheel_radius = 0.37
+mesh = ExtResource("1_l0ddn")
+surface_names = PackedStringArray("body", "lamps")
+parts = {
+"blink_FL": {
+"aabb": AABB(-1.122, 0.55, -2.352, 0.39199996, 0.552, 1.722),
+"first_index": 720,
+"first_vertex": 480,
+"id": 13,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"blink_FR": {
+"aabb": AABB(0.73, 0.55, -2.352, 0.39199996, 0.552, 1.722),
+"first_index": 936,
+"first_vertex": 624,
+"id": 14,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"blink_RL": {
+"aabb": AABB(-1.006, 0.55, 1.92, 0.29600006, 0.39199996, 0.44200003),
+"first_index": 1152,
+"first_vertex": 768,
+"id": 15,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"blink_RR": {
+"aabb": AABB(0.71, 0.55, 1.92, 0.29600006, 0.39199996, 0.44200003),
+"first_index": 1260,
+"first_vertex": 840,
+"id": 16,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"body": {
+"aabb": AABB(-1.07, 0.13, -2.351, 2.14, 1.38, 4.677),
+"first_index": 0,
+"first_vertex": 0,
+"id": 0,
+"index_count": 1416,
+"surface": 0,
+"vertex_count": 942
+},
+"brake_C": {
+"aabb": AABB(-0.32, 1.438, 0.7, 0.64, 0.07300007, 0.15600002),
+"first_index": 144,
+"first_vertex": 96,
+"id": 3,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"brake_L": {
+"aabb": AABB(-0.73, 0.59, 1.94, 0.53000003, 0.30600005, 0.35599995),
+"first_index": 0,
+"first_vertex": 0,
+"id": 1,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"brake_R": {
+"aabb": AABB(0.2, 0.59, 1.94, 0.53000003, 0.30600005, 0.35599995),
+"first_index": 72,
+"first_vertex": 48,
+"id": 2,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"hazard_FL": {
+"aabb": AABB(-1.07, 0.59, -2.286, 0.32000005, 0.46999997, 1.636),
+"first_index": 360,
+"first_vertex": 240,
+"id": 7,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"hazard_FR": {
+"aabb": AABB(0.75, 0.59, -2.286, 0.32000005, 0.46999997, 1.636),
+"first_index": 468,
+"first_vertex": 312,
+"id": 8,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"hazard_RL": {
+"aabb": AABB(-0.934, 0.59, 1.94, 0.204, 0.30600005, 0.35599995),
+"first_index": 576,
+"first_vertex": 384,
+"id": 9,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"hazard_RR": {
+"aabb": AABB(0.73, 0.59, 1.94, 0.204, 0.30600005, 0.35599995),
+"first_index": 648,
+"first_vertex": 432,
+"id": 10,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_L": {
+"aabb": AABB(-0.75, 0.59, -2.286, 0.332, 0.17000002, 0.085999966),
+"first_index": 216,
+"first_vertex": 144,
+"id": 4,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_R": {
+"aabb": AABB(0.418, 0.59, -2.286, 0.332, 0.17000002, 0.085999966),
+"first_index": 288,
+"first_vertex": 192,
+"id": 5,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"wheel_0": {
+"aabb": AABB(-1.004, 0, -1.79, 0.37399995, 0.74, 0.74),
+"first_index": 1416,
+"first_vertex": 942,
+"id": 32,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_1": {
+"aabb": AABB(0.63, 0, -1.79, 0.37399995, 0.74, 0.74),
+"first_index": 1620,
+"first_vertex": 1057,
+"id": 33,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_2": {
+"aabb": AABB(-1.004, 0, 1.05, 0.37399995, 0.74, 0.74),
+"first_index": 1824,
+"first_vertex": 1172,
+"id": 34,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_3": {
+"aabb": AABB(0.63, 0, 1.05, 0.37399995, 0.74, 0.74),
+"first_index": 2028,
+"first_vertex": 1287,
+"id": 35,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+}
+}
+lamp_groups = {
+"blink_L": PackedStringArray("blink_FL", "blink_RL"),
+"blink_R": PackedStringArray("blink_FR", "blink_RR"),
+"brake": PackedStringArray("brake_L", "brake_R", "brake_C"),
+"hazard": PackedStringArray("hazard_FL", "hazard_FR", "hazard_RL", "hazard_RR"),
+"head": PackedStringArray("head_L", "head_R")
+}
+lamp_off_multiplier = {
+"brake": Color(0.65882355, 0.20392157, 0.20392157, 1),
+"hazard": Color(0.3529412, 0.2901961, 0.1882353, 1),
+"head": Color(0.6039216, 0.6039216, 0.5647059, 1)
+}
+merged_wheels = [{
+"center": Vector3(-0.79, 0.37, -1.42),
+"id": 32,
+"part": "wheel_0",
+"radius": 0.37,
+"width": 0.32
+}, {
+"center": Vector3(0.79, 0.37, -1.42),
+"id": 33,
+"part": "wheel_1",
+"radius": 0.37,
+"width": 0.32
+}, {
+"center": Vector3(-0.79, 0.37, 1.42),
+"id": 34,
+"part": "wheel_2",
+"radius": 0.37,
+"width": 0.32
+}, {
+"center": Vector3(0.79, 0.37, 1.42),
+"id": 35,
+"part": "wheel_3",
+"radius": 0.37,
+"width": 0.32
+}]
+points = {
+"blink_halo_L": PackedVector3Array(-1.034, 0.73, -2.48, -1.034, 0.76, 2.49),
+"blink_halo_R": PackedVector3Array(1.034, 0.73, -2.48, 1.034, 0.76, 2.49),
+"exhaust": Vector3(0.5, 0.3, 2.3),
+"smokePoint": Vector3(0, 0.93, -1.58)
+}
+paint_default = Color(0.95686275, 0.95686275, 0.9490196, 1)
+tintable = true
+js_ref = {
+"ao": {
+"dist": 0.5,
+"ground": false,
+"occluder_tris": 744.0,
+"rays": 222144.0
+},
+"bbox": AABB(-1.122, 0, -2.352, 2.244, 1.511, 4.7139997),
+"paint_fit": {
+"checked_colors": 14.0,
+"default": "#f4f4f2",
+"geometry_varies": false,
+"livery": false,
+"nonfit_vertices": 0.0,
+"paint_vertices": 396.0,
+"tintable": true
+},
+"source": {
+"args": ["sedan", {
+"variant": 2.0
+}],
+"fn": "buildVehicle",
+"module": "vehicles"
+},
+"three": "170",
+"tris": 1200,
+"web_frozen_sha": "753549a",
+"welded_vertices": 2314
+}

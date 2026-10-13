@@ -1,0 +1,18 @@
+; IOSHaptics — Core Haptics + thermal-state GDExtension (docs/NATIVE_PORT.md 1-4, 2 햅틱 맵; M1a).
+; Raw GDExtension C interface (no godot-cpp, no [dependencies]): see README.md "왜 godot-cpp가 아닌가".
+; Built by tools/mac/build_ios_ext.sh:
+;   --host      -> Linux .so (container tests) / macOS .dylib (Mac editor running the export)   null backend
+;   (default)   -> iOS arm64 static library wrapped in an xcframework                           Core Haptics backend
+; The same binary serves debug and release exports (no godot-cpp template split).
+
+[configuration]
+
+entry_symbol = "lane1_haptics_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+
+linux.x86_64 = "res://platform/ios/bin/liblane1_haptics.linux.x86_64.so"
+macos = "res://platform/ios/bin/liblane1_haptics.macos.dylib"
+ios = "res://platform/ios/bin/liblane1_haptics.ios.xcframework"

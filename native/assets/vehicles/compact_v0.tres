@@ -1,0 +1,254 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/vehicles/compact_v0.res" id="1_aylgg"]
+[ext_resource type="Script" path="res://assets/vehicles/vehicle_template.gd" id="2_wroig"]
+
+[resource]
+script = ExtResource("2_wroig")
+kind = &"compact"
+npc = true
+npc_weight = 14.0
+length = 3.6
+width = 1.66
+height = 1.59
+wheel_radius = 0.34
+mesh = ExtResource("1_aylgg")
+surface_names = PackedStringArray("body", "lamps")
+parts = {
+"blink_FL": {
+"aabb": AABB(-1.032, 0.52, -1.852, 0.39199996, 0.56200004, 1.4219999),
+"first_index": 840,
+"first_vertex": 560,
+"id": 13,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"blink_FR": {
+"aabb": AABB(0.64, 0.52, -1.852, 0.39199996, 0.56200004, 1.4219999),
+"first_index": 1056,
+"first_vertex": 704,
+"id": 14,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"blink_RL": {
+"aabb": AABB(-0.916, 0.48, 1.52, 0.296, 0.442, 0.342),
+"first_index": 1272,
+"first_vertex": 848,
+"id": 15,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"blink_RR": {
+"aabb": AABB(0.62, 0.48, 1.52, 0.296, 0.442, 0.342),
+"first_index": 1380,
+"first_vertex": 920,
+"id": 16,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"body": {
+"aabb": AABB(-0.98, 0.13, -1.851, 1.96, 1.455, 3.677),
+"first_index": 0,
+"first_vertex": 0,
+"id": 0,
+"index_count": 1404,
+"surface": 0,
+"vertex_count": 934
+},
+"brake_C": {
+"aabb": AABB(-0.32, 1.528, 1.34, 0.64, 0.072999954, 0.15600002),
+"first_index": 264,
+"first_vertex": 176,
+"id": 3,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"brake_L": {
+"aabb": AABB(-0.81, 0.52, 1.431795, 0.48, 0.625, 0.364205),
+"first_index": 0,
+"first_vertex": 0,
+"id": 1,
+"index_count": 132,
+"surface": 1,
+"vertex_count": 88
+},
+"brake_R": {
+"aabb": AABB(0.33, 0.52, 1.431795, 0.48, 0.625, 0.364205),
+"first_index": 132,
+"first_vertex": 88,
+"id": 2,
+"index_count": 132,
+"surface": 1,
+"vertex_count": 88
+},
+"hazard_FL": {
+"aabb": AABB(-0.98, 0.56, -1.786, 0.32, 0.47999996, 1.336),
+"first_index": 480,
+"first_vertex": 320,
+"id": 7,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"hazard_FR": {
+"aabb": AABB(0.66, 0.56, -1.786, 0.32, 0.47999996, 1.336),
+"first_index": 588,
+"first_vertex": 392,
+"id": 8,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"hazard_RL": {
+"aabb": AABB(-0.844, 0.52, 1.54, 0.204, 0.356, 0.25600004),
+"first_index": 696,
+"first_vertex": 464,
+"id": 9,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"hazard_RR": {
+"aabb": AABB(0.64, 0.52, 1.54, 0.204, 0.356, 0.25600004),
+"first_index": 768,
+"first_vertex": 512,
+"id": 10,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_L": {
+"aabb": AABB(-0.66, 0.56, -1.786, 0.27800003, 0.17000002, 0.085999966),
+"first_index": 336,
+"first_vertex": 224,
+"id": 4,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_R": {
+"aabb": AABB(0.382, 0.56, -1.786, 0.27800003, 0.17000002, 0.085999966),
+"first_index": 408,
+"first_vertex": 272,
+"id": 5,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"wheel_0": {
+"aabb": AABB(-0.924, 0, -1.49, 0.35400003, 0.68, 0.68),
+"first_index": 1404,
+"first_vertex": 934,
+"id": 32,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_1": {
+"aabb": AABB(0.57, 0, -1.49, 0.35400003, 0.68, 0.68),
+"first_index": 1608,
+"first_vertex": 1049,
+"id": 33,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_2": {
+"aabb": AABB(-0.924, 0, 0.79, 0.35400003, 0.68, 0.68),
+"first_index": 1812,
+"first_vertex": 1164,
+"id": 34,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_3": {
+"aabb": AABB(0.57, 0, 0.79, 0.35400003, 0.68, 0.68),
+"first_index": 2016,
+"first_vertex": 1279,
+"id": 35,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+}
+}
+lamp_groups = {
+"blink_L": PackedStringArray("blink_FL", "blink_RL"),
+"blink_R": PackedStringArray("blink_FR", "blink_RR"),
+"brake": PackedStringArray("brake_L", "brake_R", "brake_C"),
+"hazard": PackedStringArray("hazard_FL", "hazard_FR", "hazard_RL", "hazard_RR"),
+"head": PackedStringArray("head_L", "head_R")
+}
+lamp_off_multiplier = {
+"brake": Color(0.65882355, 0.20392157, 0.20392157, 1),
+"hazard": Color(0.3529412, 0.2901961, 0.1882353, 1),
+"head": Color(0.6039216, 0.6039216, 0.5647059, 1)
+}
+merged_wheels = [{
+"center": Vector3(-0.72, 0.34, -1.15),
+"id": 32,
+"part": "wheel_0",
+"radius": 0.34,
+"width": 0.3
+}, {
+"center": Vector3(0.72, 0.34, -1.15),
+"id": 33,
+"part": "wheel_1",
+"radius": 0.34,
+"width": 0.3
+}, {
+"center": Vector3(-0.72, 0.34, 1.13),
+"id": 34,
+"part": "wheel_2",
+"radius": 0.34,
+"width": 0.3
+}, {
+"center": Vector3(0.72, 0.34, 1.13),
+"id": 35,
+"part": "wheel_3",
+"radius": 0.34,
+"width": 0.3
+}]
+points = {
+"blink_halo_L": PackedVector3Array(-0.944, 0.7, -1.98, -0.944, 0.715, 1.99),
+"blink_halo_R": PackedVector3Array(0.944, 0.7, -1.98, 0.944, 0.715, 1.99),
+"exhaust": Vector3(0.45, 0.27, 1.8),
+"smokePoint": Vector3(0, 0.9, -1.23)
+}
+paint_default = Color(0.95686275, 0.95686275, 0.9490196, 1)
+tintable = true
+js_ref = {
+"ao": {
+"dist": 0.5,
+"ground": false,
+"occluder_tris": 740.0,
+"rays": 229056.0
+},
+"bbox": AABB(-1.032, 0, -1.852, 2.064, 1.601, 3.714),
+"paint_fit": {
+"checked_colors": 14.0,
+"default": "#f4f4f2",
+"geometry_varies": false,
+"livery": false,
+"nonfit_vertices": 0.0,
+"paint_vertices": 360.0,
+"tintable": true
+},
+"source": {
+"args": ["compact", {
+"variant": 0.0
+}],
+"fn": "buildVehicle",
+"module": "vehicles"
+},
+"three": "170",
+"tris": 1236,
+"web_frozen_sha": "753549a",
+"welded_vertices": 2386
+}
