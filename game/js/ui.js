@@ -146,6 +146,7 @@ const SVG = {
   garage: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.8 10.2L12 3l10.2 7.2V21.5H1.8z" fill="#ffb400" stroke="#17202b" stroke-width="1.8" stroke-linejoin="round"/><rect x="5.6" y="11.2" width="12.8" height="10.3" fill="#c9d0d8" stroke="#17202b" stroke-width="1.6"/><path d="M5.6 13.8h12.8M5.6 16.4h12.8M5.6 19h12.8" stroke="#6d7682" stroke-width="1.3"/><rect x="9.6" y="6.6" width="4.8" height="2.6" rx=".6" fill="#fff" stroke="#17202b" stroke-width="1.1"/></svg>',
   jump: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 19.5Q6 7.5 15.5 6.5" fill="none" stroke="#17202b" stroke-width="5.4" stroke-linecap="round"/><path d="M3.5 19.5Q6 7.5 15.5 6.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M13.6 1.8l7.4 4.6-7 5.1z" fill="#fff" stroke="#17202b" stroke-width="1.7" stroke-linejoin="round"/></svg>',
   rocket: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 12.2L5 17.6l3.6-1.2zM15.6 12.2L19 17.6l-3.6-1.2z" fill="#ff3b30" stroke="#17202b" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.6 16.2Q12 23.4 14.4 16.2z" fill="#ffb400" stroke="#17202b" stroke-width="1.2" stroke-linejoin="round"/><path d="M12 1.6c4 3.2 5 8.4 3.8 14.6H8.2C7 10 8 4.8 12 1.6z" fill="#fff" stroke="#17202b" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="9.4" r="2.1" fill="#6aa6ff" stroke="#17202b" stroke-width="1.3"/></svg>',
+  tackTab: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.6 17.6v1.6a7.4 2.6 0 0 0 14.8 0v-1.6" fill="#8a929d" stroke="#17202b" stroke-width="1.6" stroke-linejoin="round"/><ellipse cx="12" cy="17.6" rx="7.4" ry="2.6" fill="#e9ecef" stroke="#17202b" stroke-width="1.6"/><path d="M10.2 17.5L12 2.6l1.8 14.9z" fill="#c9d0d8" stroke="#17202b" stroke-width="1.6" stroke-linejoin="round"/><path d="M17.5 4.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" fill="#ffd23f" stroke="#17202b" stroke-width=".9" stroke-linejoin="round"/></svg>',
   shieldOk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2l8.2 3.1v6.1c0 5.2-3.6 8.7-8.2 10.3-4.6-1.6-8.2-5.1-8.2-10.3V5.3z" fill="#fff" stroke="#17202b" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.2 11.8l2.6 2.6 5-5.2" fill="none" stroke="#17a466" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   wrench: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 3.2a5 5 0 0 0-4.5 6.6L3.4 16.5a2.1 2.1 0 0 0 3 3l6.7-6.7a5 5 0 0 0 6.6-4.5l-3 1.6-2.6-.6-.6-2.6z" fill="#fff"/></svg>',
   fuel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5.2A2.2 2.2 0 0 1 6.2 3h6.6A2.2 2.2 0 0 1 15 5.2V21zM6.6 6v4.4h5.8V6z" fill="#fff" fill-rule="evenodd"/><path d="M15 9.2l2.6 1.6v6.6a1.5 1.5 0 0 0 3 0V8.6L18 6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -295,13 +296,16 @@ const ART = {
     + `<circle cx="82" cy="31" r="3.2" fill="#ff3b30" ${so(1.4)}/><path d="M30 28H44" stroke="#fff" stroke-opacity=".3" stroke-width="2.4" stroke-linecap="round"/>`
     + `<g transform="rotate(-8 86 54)"><rect x="70" y="45" width="34" height="19" rx="4" fill="#ffd23f" ${so()}/><text x="87" y="60" text-anchor="middle" font-family="Black Han Sans, Jua, sans-serif" font-size="15" fill="${INK}">4K</text></g>`,
   pas_airbag: () => {
-    const cs = [[44, 47, 15], [60, 37, 18], [76, 47, 15], [60, 55, 15], [50, 34, 11], [71, 33, 11]];
-    return shadow(36)
-      + `<circle cx="60" cy="46" r="27" fill="none" stroke="${INK}" stroke-width="10"/><circle cx="60" cy="46" r="27" fill="none" stroke="#6d7682" stroke-width="5"/>`
+    // 핸들(테두리 + 살 3개) 앞으로 에어백이 '펑' 부풀어 나옴
+    const cs = [[49, 44, 11], [60, 36, 12.5], [71, 44, 11], [60, 51, 11], [52, 35, 8], [68, 35, 8]];
+    return shadow(38)
+      + `<circle cx="60" cy="43" r="31" fill="none" stroke="${INK}" stroke-width="11"/><circle cx="60" cy="43" r="31" fill="none" stroke="#5b6069" stroke-width="5.4"/>`
+      + `<path d="M60 43L60 74M60 43L32 30M60 43L88 30" stroke="${INK}" stroke-width="8" stroke-linecap="round"/><path d="M60 43L60 72M60 43L34 31M60 43L86 31" stroke="#5b6069" stroke-width="3.6" stroke-linecap="round"/>`
       + cs.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${INK}" stroke="${INK}" stroke-width="6"/>`).join('')
       + cs.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/>`).join('')
-      + '<path d="M44 40q4-6 10-7M66 48q5 2 9 0" fill="none" stroke="#c9d0d8" stroke-width="2.6" stroke-linecap="round"/>'
-      + `<circle cx="54" cy="45" r="2.2" fill="${INK}"/><circle cx="66" cy="45" r="2.2" fill="${INK}"/><path d="M55 52q5 4 10 0" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>`;
+      + '<path d="M47 38q3-5 8-6" fill="none" stroke="#c9d0d8" stroke-width="2.4" stroke-linecap="round"/>'
+      + `<circle cx="55.5" cy="43" r="1.9" fill="${INK}"/><circle cx="64.5" cy="43" r="1.9" fill="${INK}"/><path d="M56 48.5q4 3.2 8 0" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>`
+      + '<path d="M26 18l-6-4M94 18l6-4M60 8V2" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>';
   },
   pas_trot: () => shadow(32, 54)
     + `<path d="M22 35H36L70 17V67L36 49H22z" fill="#ffd23f" ${so()}/><ellipse cx="70" cy="42" rx="6.4" ry="25" fill="#ffb400" ${so()}/>`
@@ -643,7 +647,6 @@ function setControls(c) {
       C.jump = on;
       if (!on) releaseTouch('jump');
       E.touch.classList.toggle('has-jump', on);
-      R.classList.toggle('ui-root--jump', on);
     }
   }
   if ('jumpCd' in c) {
@@ -1515,7 +1518,7 @@ function hideAlbum() {
 //  - price 0 아이템은 항상 보유. equip 이 비어 있으면 그 분류의 기본(price 0) 아이템이 장착된 것으로 본다.
 const SHOP_CATS = [
   { id: 'car', label: '차', ico: SVG.car, slot: true },
-  { id: 'weapon', label: '무기', ico: SVG.tack, slot: true },
+  { id: 'weapon', label: '무기', ico: SVG.tackTab, slot: true },
   { id: 'move', label: '날아가는 것', ico: SVG.jump, slot: false },
   { id: 'finish', label: '피니시', ico: SVG.rocket, slot: true },
   { id: 'passive', label: '패시브', ico: SVG.shieldOk, slot: false },
@@ -1590,7 +1593,7 @@ function itemCardHTML(it, k) {
   const rib = s === 'equipped' ? '<span class="ui-item__rib">장착 중</span>' : (s === 'owned' || s === 'active') ? '<span class="ui-item__rib ui-item__rib--have">보유</span>' : '';
   const tag = price > 0 ? (s === 'buy' || s === 'poor' ? `<span class="ui-item__price">${won(price)}</span>` : '') : '<span class="ui-item__price ui-item__price--free">기본</span>';
   return `<div class="ui-item ui-item--${esc(it.cat)} is-${s}" data-id="${id}" style="--i:${k}">
-    <div class="ui-item__show">${itemArt(it)}${rib}${tag}</div>
+    <div class="ui-item__show">${itemArt(it)}${rib}</div>${tag}
     <div class="ui-item__body">
       <b class="ui-item__name">${esc(it.name || it.id)}</b>
       <span class="ui-item__desc">${esc(it.desc || '')}</span>
@@ -1688,6 +1691,7 @@ function renderShopGrid(animate) {
   if (!g) return;
   const its = SH.items.filter((it) => it.cat === SH.tab);
   g.classList.toggle('is-static', !animate);
+  g.style.setProperty('--cols', Math.max(1, Math.min(4, its.length)));
   g.innerHTML = its.length ? its.map((it, k) => itemCardHTML(it, k)).join('') : '<div class="ui-shop__empty">상품 준비 중…</div>';
   if (animate) try { SH.el.shelf.scrollTop = 0; } catch { /* */ }
 }
@@ -2013,7 +2017,7 @@ function showRewardResult(r, w) {
   panel.innerHTML = `
     <div class="ui-sign ui-sign--result">${S ? shieldHTML(S.route, 'ui-shield--chip') : ''}<span class="ui-sign__txt"><b>${esc(r.stageName)}</b></span></div>
     <div class="ui-result__scroll">
-      <div class="ui-rw">
+      <div class="ui-rw${ms ? ' ui-rw--mis' : ''}">
         <div class="ui-rw__col ui-rw__col--l">
           <section class="ui-dash">
             <div class="ui-dash__head"><span class="ui-dash__ico">${SVG.cam}</span><b>블박 제보 접수</b><span class="ui-dash__no">No.${no}</span></div>

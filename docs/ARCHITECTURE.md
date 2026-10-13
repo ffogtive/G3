@@ -179,3 +179,25 @@ export const ui = {
 - 디버그: `window.__game` 노출. URL 파라미터 `?stage=N&skip=boss|release|result&auto=1&mute=1`.
   `auto=1` 이면 오토파일럿(차선 회피 + 자동 사격)으로 끝까지 진행 → 자동 플레이테스트용. `ff=N` 은 프레임당 1/30초 고정 스텝 N회(헤드리스 빨리감기).
 - 회귀 테스트: `node tools/playtest.mjs [--page game/index.html] [--stages 1,2,3,4,5]` (전 스테이지 오토 완주 + 에러 검사).
+
+## 스테이지 데이터 (v0.3, `stagegen.js` ← `data/villain_catalog.json`)
+가설: 빌런 1종 = (이동 템플릿 + lane·count + 공격표 + 차종 + 도로·시간대 + 난이도) 조합이면, 엔진 템플릿 십수 종으로 100스테이지가 서로 다르게 느껴진다.
+
+- 생성: `buildStages(CATALOG, HANDMADE)`.
+  - 카탈로그 100종을 id 순서로 변환한다.
+  - 손제작 5종은 `handmade_id`가 가리키는 자리(#1·#4·#9·#11·#50)에 들어간다. 금액·카드·챕터·보스 정보는 카탈로그 값을 쓴다.
+  - 카탈로그 갱신 후 `node tools/catalog2js.mjs` 실행.
+- 스테이지 필드 (기존 필드 외 추가분):
+
+| 필드 | 의미 |
+|---|---|
+| `fine` / `payout` / `card` | 카드 표시용 실제 범칙금·벌금 / 포상금 기준(게임값) / 카드 종류: 고지서·형사·표창·계도 |
+| `villains[].stopped/zig` | 정차형(비상등, 공격 시 돌진·스워브 없음) / 지그재그형(`zigCenter` ±1 차로를 휘저음) |
+| `frontRow` | 빌런이 막지 않은 차로에만 저속 화물차·버스 벽 |
+| `phases[]` | 보스·엘리트 페이즈. `{hp, attacks, stopped, zig, slow, label}`. `hpFrac() ≤ hp`일 때 공격표와 이동 성격을 바꾸고, 배너와 히트스톱을 낸다(`boss.update` 이벤트 `{type:'phase'}`) |
+| `honkOnly` | 구조형(졸음·고장·대피). 압정·폭탄 대신 경적이 게이지를 깎는다. 타이어 펑크 없음. 마무리는 갓길 비상등 정차(`finish 'pullover'`)이고 하늘로 날리지 않는다 |
+| `boss` / `elite` | HP 1.6배 / 1.3배 |
+| `displayKm` | `jam_causality`에 'Nkm'가 있으면 그 값, 없으면 난이도로 추정. 해방 차량 수 = km × 4 × 125대/km |
+| `wrongWay` | #83 역주행. **현재 미구현**: 일반 정속형 + 경적 전용으로 대체 |
+
+- 엔진 미지원(카탈로그에만 있음): 페이즈별 차 대수 변경, summon(벽 소환 → 굴리기로 대체), 게이트·데칼·터널 소품(`new_assets`).

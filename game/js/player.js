@@ -1,7 +1,7 @@
 // 플레이어 "참교육 머신": 차선 홉 이동, 자동 가속, 추돌 처리, 연출(롤/요/홉/바퀴 회전)
 import * as THREE from 'three';
 import { laneX, TUNE, SHOULDER_LANE } from './config.js';
-import { buildVehicle, setBrake, setHeadlights } from './vehicles.js';
+import { buildVehicle, setBrake, setHeadlights, setStrobe } from './vehicles.js';
 
 const MAX_LANE = SHOULDER_LANE; // 0~3 차선 + 4 갓길
 
@@ -28,7 +28,11 @@ export class Player {
     // 지붕 긴급 경광등 (주황, 깜빡) — 갓길 통행 명분: 참교육 긴급차량
     const h = ud.height || 1.7;
     this.beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.32), this.beaconOn);
-    this.beacon.position.set(-0.55, h - 0.05, 0.55);
+    const bp = ud.beaconPos;
+    if (bp) this.beacon.position.set(bp.x ?? bp[0], bp.y ?? bp[1], bp.z ?? bp[2]);
+    else this.beacon.position.set(-0.55, h - 0.05, 0.55);
+    // 암행 순찰차는 지붕 경광등 대신 숨은 적/청 스트로브
+    this.beacon.visible = !(ud.strobe && ud.strobePattern === 'police');
     (ud.body || this.mesh).add(this.beacon);
   }
 
@@ -206,7 +210,9 @@ export class Player {
     for (const w of m.userData.wheels || []) w.rotation.x -= (this.v * dt) / r;
     setBrake(m, this.brakeOn);
     const blink = Math.floor(performance.now() / 180) % 2 === 0;
-    this.beacon.material = (ctx.mode === 'jam' || ctx.mode === 'boss') && blink ? this.beaconOn : this.beaconOff;
+    const urgent = ctx.mode === 'jam' || ctx.mode === 'boss';
+    this.beacon.material = urgent && blink ? this.beaconOn : this.beaconOff;
+    if (m.userData.strobe) setStrobe(m, urgent ? performance.now() / 1000 : null);
     // 보스전에선 지붕 압정포가 뒤(빌런 쪽)를 본다
     const cannon = m.userData.cannon;
     if (cannon) {

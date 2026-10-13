@@ -40,7 +40,12 @@ export class Weapons {
   }
 
   // 정면 참교육: 지붕 압정포가 뒤(빌런 쪽)를 보고 있다 → 뒤로 던진다
-  _muzzle(player, out) { return out.set(player.x, 1.95 + player.hop, -(player.s - 0.6)); }
+  _muzzle(player, out) {
+    // 차종마다 압정포 위치가 다르다 (포터·레커는 높고 앞쪽) → 모델의 muzzle 기준
+    const mz = player.mesh?.userData?.muzzle;
+    if (mz) { player.mesh.updateMatrixWorld(true); return mz.getWorldPosition(out); }
+    return out.set(player.x, 1.95 + player.hop, -(player.s - 0.6));
+  }
 
   fireTack(player, boss) { this.fireAt(player, boss.targetFor(player)); }
 

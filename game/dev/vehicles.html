@@ -32,6 +32,8 @@
 // ════════════════════════════════════════════════════════════════════════
 // vehicles.js 검증 하네스
 //  ?view=rear (기본, 게임 추격캠 각도) | boss (보스전 캠) | intro (원흉 소개 컷) | front (앞 3/4) | side | top | lineup (측면 정사영 비율 비교) | jam (실제 정체 장면)
+//        | items (상점: 플레이어 차 4종 뒤/앞 + 새 탄·연출소품 + 피니시 조합; &rows=0123 &kinds=a,b 필터)   jam&car=playerPorter (정체 속 상점 차)
+//  ?off=x,y,z (카메라 방향 오프셋 강제)  ?car=playerPatrol (items 피니시 조합 / jam 의 플레이어 차)
 //  ?night=1  ?brake=1 ?hazard=1 ?head=1 ?flash=0..1 ?detailed=1(NPC도 detailed) ?anim=1(바퀴/비상등 애니)
 //  ?kinds=sedan,bus  ?proj=0(투사체 줄 숨김)  ?stats=1(콘솔/하단 요약)  ?stage=N (jam 뷰 원흉)  ?seed=N
 //  window.__veh = { stats, scene, ... } 노출 (스크린샷 --eval 용)
@@ -48,8 +50,9 @@ const state = {
   brake: flag('brake', view === 'jam'), hazard: flag('hazard'), head: flag('head', night), flash: +(Q.get('flash') || 0),
   detailed: flag('detailed'), anim: flag('anim'), proj: flag('proj', view !== 'jam' && view !== 'lineup'), siren: flag('siren'),
 };
-const ALL_KINDS = ['compact', 'sedan', 'suv', 'taxi', 'van', 'pickup1t', 'truck', 'bus', 'police', 'player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor'];
-const DETAILED = new Set(['player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor']);
+const SHOP_CARS = ['player', 'playerPorter', 'playerWrecker', 'playerPatrol'];
+const ALL_KINDS = ['compact', 'sedan', 'suv', 'taxi', 'van', 'pickup1t', 'truck', 'bus', 'police', 'player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor', 'playerPorter', 'playerWrecker', 'playerPatrol'];
+const DETAILED = new Set(['player', 'villainSedan', 'villainTruck', 'villainSuv', 'villainPhone', 'tractor', 'playerPorter', 'playerWrecker', 'playerPatrol']);
 const VILLAIN_COLOR = { villainSedan: 0xd9c9a3, villainTruck: 0x2f6fd6, villainSuv: 0x1d1f22, villainPhone: 0xe85d9a, tractor: 0x3f8f3a };
 const kinds = (Q.get('kinds') || ALL_KINDS.join(',')).split(',').filter(Boolean);
 const seed = +(Q.get('seed') || 0);
@@ -58,7 +61,7 @@ const sky = night ? SKY.night : SKY.day;
 // ── UI
 const ui = document.getElementById('ui');
 const base = new URLSearchParams(location.search);
-for (const v of ['rear', 'boss', 'intro', 'front', 'side', 'top', 'lineup', 'jam']) {
+for (const v of ['rear', 'boss', 'intro', 'front', 'side', 'top', 'lineup', 'jam', 'items']) {
   const p = new URLSearchParams(base); p.set('view', v);
   const a = document.createElement('a'); a.href = '?' + p; a.textContent = v; if (v === view) a.className = 'on'; ui.appendChild(a);
 }
@@ -136,6 +139,7 @@ function applyLights() {
     if (e.isProj) continue;
     V.setBrake(e.obj, state.brake); V.setHazard(e.obj, state.hazard); V.setHeadlights(e.obj, state.head); V.setFlash(e.obj, state.flash);
     if (V.setSiren) V.setSiren(e.obj, state.siren ? performance.now() / 1000 : null);
+    if (V.setStrobe) V.setStrobe(e.obj, state.siren ? (state.anim ? performance.now() / 1000 : true) : null);
   }
   if (jamCars) for (const c of jamCars) { V.setBrake(c, state.brake); V.setHeadlights(c, state.head); V.setHazard(c, state.hazard); }
 }
@@ -144,7 +148,7 @@ let jamCars = null;
 // 카메라 오프셋 (차량 중심 기준) — rear = 게임 추격캠 (main.js chaseTarget: +2.4, 12.5, +16 → 시선 0, 0.4, −11)
 // boss = 보스전 카메라(main.js: 플레이어+(3.4, 11.5, 12), 원흉은 플레이어 15m 앞) → 원흉 기준 (3.4, 11.5, 27)
 // intro = 원흉 소개 컷 (원흉 기준 (6.5, 4.2, −13), 앞-오른쪽에서 뒤돌아봄)
-const OFFS = { rear: [2.4, 12.5, 16], boss: [3.4, 11.5, 27], intro: [6.5, 4.2, -13], front: [-5.5, 3.4, -8.5], side: [12, 2.2, 0.01], top: [0.01, 30, 0.6] };
+const OFFS = { rear: [2.4, 12.5, 16], boss: [3.4, 11.5, 27], intro: [6.5, 4.2, -13], front: [-5.5, 3.4, -8.5], side: [12, 2.2, 0.01], top: [0.01, 30, 0.6], item: [7, 6, 10] };
 
 window.__veh = { scene, entries, V, state, statOf };
 const labels = document.getElementById('labels');
@@ -170,10 +174,22 @@ function setupTiles() {
   layout();
 }
 
+function layoutRows() {
+  const W = innerWidth, H = innerHeight;
+  const rows = [...new Set(entries.map((e) => e.row))].sort((a, b) => a - b);
+  const wts = rows.map((r) => entries.find((e) => e.row === r).rowW ?? 1), tot = wts.reduce((a, b) => a + b, 0);
+  let y = 0;
+  rows.forEach((r, ri) => {
+    const es = entries.filter((e) => e.row === r), h = (H * wts[ri]) / tot, w = W / es.length;
+    es.forEach((e, i) => tiles.push({ e, x: i * w, y, w, h, off: e.off }));
+    y += h;
+  });
+}
 function layout() {
   labels.innerHTML = '';
   tiles = [];
   const W = innerWidth, H = innerHeight;
+  if (entries.some((e) => e.row !== undefined)) { layoutRows(); return finishLayout(); }
   const veh = entries.filter((e) => !e.isProj), prj = entries.filter((e) => e.isProj);
   const projH = prj.length ? Math.round(H * (veh.length ? 0.2 : 1)) : 0;
   const cols = +(Q.get('cols') || Math.min(veh.length, Math.max(1, Math.round(Math.sqrt(veh.length * (W / Math.max(1, H - projH)) / 1.25)))));
@@ -185,6 +201,9 @@ function layout() {
     const pw = W / pc, ph = projH / pr;
     prj.forEach((e, i) => tiles.push({ e, x: (i % pc) * pw, y: H - projH + Math.floor(i / pc) * ph, w: pw, h: ph }));
   }
+  finishLayout();
+}
+function finishLayout() {
   for (const t of tiles) {
     const el = document.createElement('div'); el.className = 'lb';
     el.style.left = t.x + 3 + 'px'; el.style.top = t.y + 3 + 'px';
@@ -199,7 +218,11 @@ function refreshLabels() {
   for (const t of tiles) {
     const e = t.e, ud = e.obj.userData, s = statOf(e.obj);
     let txt;
-    if (e.isProj) txt = `<b>${e.kind}</b> ${s.tris}▲ ${s.meshes}dc`;
+    if (e.isProj) {
+      const bb = visBox(e.obj), sz = bb.getSize(new THREE.Vector3());
+      txt = `<b>${e.kind}</b> ${s.tris}▲ ${s.meshes}dc` + (e.combo ? '' : `\n${sz.x.toFixed(2)}×${sz.y.toFixed(2)}×${sz.z.toFixed(2)}m`);
+      if (!e.combo) lines.push(`${e.kind.padEnd(13)} ${String(s.tris).padStart(5)} tris  ${s.meshes} meshes  ${sz.x.toFixed(2)}x${sz.y.toFixed(2)}x${sz.z.toFixed(2)}  [${s.names.join(',')}]`);
+    }
     else {
       // 실제 바운딩 vs userData 치수 비교 (사이드미러 제외 못 하므로 ±0.5m 허용)
       const bb = new THREE.Box3();
@@ -219,8 +242,8 @@ function refreshLabels() {
 
 function renderTiles(time) {
   const H = innerHeight;
-  const off = OFFS[view] || OFFS.rear;
   for (const t of tiles) {
+    const off = (Q.has('off') ? Q.get('off').split(',').map(Number) : null) || t.off || OFFS[view] || OFFS.rear;
     for (const e of entries) e.obj.visible = e === t.e;
     const o = t.e.obj;
     // 맞춤: 같은 각도(추격캠 오프셋)에서 FOV 만 좁혀 확대 → 원근은 게임과 동일
@@ -290,7 +313,7 @@ function setupJam() {
   const stage = STAGES[(+(Q.get('stage') || 1)) - 1] || STAGES[0];
   const pLane = 2;
   const bossCam = Q.get('cam') === 'boss';
-  jamPlayer = V.buildVehicle('player', { detailed: true }); jamPlayer.position.set(laneX(pLane), 0, 0); scene.add(jamPlayer);
+  jamPlayer = V.buildVehicle(Q.get('car') || 'player', { detailed: true }); jamPlayer.position.set(laneX(pLane), 0, 0); scene.add(jamPlayer);
   // 원흉 (앞 45m)
   const vs = stage.villains[0];
   jamVillain = V.buildVehicle(vs.kind, { color: vs.color, detailed: true });
@@ -336,8 +359,54 @@ function setupJam() {
   if (flag('stats')) { sumEl.style.display = 'block'; sumEl.textContent = `jam: ${jamCars.length} NPC  ${tot.meshes} visible meshes  ${tot.tris} tris`; }
 }
 
+// ── 상점 아이템 (?view=items): 0 = 차 4종 추격캠(뒤) / 1 = 차 4종 앞 3/4 / 2 = 새 탄 + 연출 소품 / 3 = 피니시 조합 (원점 확인)
+function setupItems() {
+  const road = makeRoad(60, 80); scene.add(road);
+  const only = Q.has('kinds') ? new Set(Q.get('kinds').split(',')) : null, want = (k) => !only || only.has(k);
+  const rowsOn = (Q.get('rows') || '0123').split('').map(Number), R = (r) => rowsOn.includes(r);
+  for (const k of SHOP_CARS.filter(want)) { if (!R(0)) break; const o = V.buildVehicle(k, { detailed: true }); scene.add(o); entries.push({ kind: k, obj: o, row: 0, off: OFFS.rear, rowW: 1.15 }); }
+  for (const k of SHOP_CARS.filter(want)) { if (!R(1)) break; const o = V.buildVehicle(k, { detailed: true }); scene.add(o); entries.push({ kind: k, obj: o, row: 1, off: OFFS.front, rowW: 1.0 }); }
+  for (const k of ['tack', 'caltrop', 'waterBalloon', 'gum', 'box', 'tire', 'cone'].filter(want)) { if (!R(2)) break;
+    const o = V.buildProjectile(k); o.position.y = 0.45; if (k === 'tack') o.rotation.x = 0.5; scene.add(o);
+    entries.push({ kind: k, obj: o, isProj: true, row: 2, off: OFFS.rear, rowW: 0.8 });
+  }
+  for (const k of V.FX_PROP_KINDS.filter(want)) { if (!R(2)) break;
+    const o = V.buildFxProp(k); if (k === 'drone') o.position.y = 1.2; scene.add(o);
+    entries.push({ kind: k, obj: o, isProj: true, row: 2, off: k === 'drone' ? OFFS.rear : OFFS.item, rowW: 0.8 });
+  }
+  const combo = (name, prop, place) => {
+    if (!R(3) || !want(prop)) return;
+    const g = new THREE.Group(); const car = V.buildVehicle(Q.get('car') || 'player', { detailed: true }); g.add(car);
+    const p = V.buildFxProp(prop); g.add(p); place(car, p); scene.add(g);
+    if (V.setStrobe) V.setStrobe(car, state.siren ? true : null);
+    entries.push({ kind: name, obj: g, isProj: true, combo: true, row: 3, off: OFFS.rear, rowW: 1.25 });
+  };
+  combo('heli 피니시', 'helicopter', (car, p) => { car.position.y = 2.2; car.rotation.x = -0.12; p.position.set(0, 2.2 + car.userData.height, 0.25); });
+  combo('ufo 피니시', 'ufo', (car, p) => { car.position.y = 3.5; car.rotation.set(0.35, 0.6, 0.25); });
+  combo('풍선 피니시', 'balloons', (car, p) => { car.position.y = 1.6; car.rotation.z = 0.1; p.position.set(0, 1.6 + (car.userData.beaconPos?.[1] ?? 1.5) - 0.12, 0.6); p.userData.bunch.rotation.z = -0.12; });
+  combo('드론 따라옴', 'drone', (car, p) => { p.position.set(1.4, 5.2, 2.2); p.rotation.y = 0.15; });
+  applyLights();
+  layout();
+}
+// 연출 소품 애니 (anim=1): 로터 회전, 풍선 흔들림, 림 전구/REC/스트로브 점멸, UFO 회전
+function animProps(root, t, dt) {
+  root.traverse((o) => {
+    const u = o.userData; if (!u || !u.kind) return;
+    if (u.rotors) u.rotors.forEach((r, i) => { r.rotation.y += dt * 40 * (i % 3 === 0 ? 1 : -1); });
+    if (u.rotor) u.rotor.rotation.y += dt * 18;
+    if (u.tailRotor) u.tailRotor.rotation.x += dt * 30;
+    if (u.bunch) { u.bunch.rotation.z = Math.sin(t * 1.3) * 0.08; u.bunch.rotation.x = Math.sin(t * 0.9) * 0.06; u.bunch.position.y = Math.sin(t * 2) * 0.05; }
+    if (u.lights) { const ph = Math.floor(t * 4) % 2 === 0; u.lights[0].visible = ph; u.lights[1].visible = !ph; }
+    if (u.saucer) u.saucer.rotation.y += dt * 0.8;
+    if (u.rec) u.rec.visible = Math.floor(t * 2) % 2 === 0;
+    if (u.hook && u.kind !== 'helicopter') u.hook.rotation.x = Math.sin(t * 2.2) * 0.25;
+    if (u.strobe && V.setStrobe) V.setStrobe(o, state.siren ? t : null);
+  });
+}
+
 if (view === 'jam') setupJam();
 else if (view === 'lineup') setupLineup();
+else if (view === 'items') setupItems();
 else setupTiles();
 
 let last = performance.now();
@@ -347,7 +416,8 @@ function frame(now) {
     const t = now / 1000;
     const blink = Math.floor(t * 2) % 2 === 0;
     for (const e of entries) {
-      if (e.isProj) { if (e.kind === 'tack') e.obj.rotation.x += dt * 6; if (e.marker) e.obj.userData.setProgress((t * 0.5) % 1); continue; }
+      animProps(e.obj, t, dt);
+      if (e.isProj) { if (e.kind === 'tack' || e.kind === 'caltrop') e.obj.rotation.x += dt * 6; if (e.marker) e.obj.userData.setProgress((t * 0.5) % 1); continue; }
       const ud = e.obj.userData, r = ud.wheelRadius || 0.4;
       for (const w of ud.wheels || []) w.rotation.x -= (6 * dt) / r;
       if (ud.body) { ud.body.position.y = Math.sin(t * 30) * 0.012; ud.body.rotation.x = Math.sin(t * 1.7) * 0.04; ud.body.rotation.z = Math.sin(t * 1.3) * 0.03; }

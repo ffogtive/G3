@@ -41,12 +41,13 @@ function vehicleKind(v, movement) {
   return 'villainSedan';
 }
 
-// 공격 템플릿 매핑 (카탈로그 → 엔진)
+// 공격 템플릿 매핑 (카탈로그 → 엔진). summon(벽 소환)은 엔진에 없으므로 굴리기로 대체
 const ATTACK_MAP = {
   highbeam: 'highbeam', selfie_flash: 'highbeam', horn_blast: 'horn', horn: 'horn', lunge: 'lunge', brake_check: 'lunge',
   throw: 'throw', roll: 'roll', spill: 'roll', swerve: 'swerve', zigzag: 'zigzag', smoke: 'smoke', summon: 'roll', argue_block: 'throw',
 };
 function throwItemFor(e, kind) {
+  if (e.throw_item) return e.throw_item;   // 카탈로그 값 우선 (box·tire·cone·tack 포함)
   const t = `${e.name_ko} ${e.title} ${e.vehicle} ${(e.new_assets || []).join(' ')}`;
   if (/수박|과일/.test(t)) return 'watermelon';
   if (/경운기|건초|벌초|농/.test(t) || kind === 'tractor') return 'hay';
@@ -60,52 +61,80 @@ const SKY_OF = { day: 'day', sunset: 'sunset', morning: 'morning', night: 'night
 const COLORS = [0xd9c9a3, 0x1d1f22, 0xe85d9a, 0x2f6fd6, 0xd8342c, 0x3a9d5d, 0xe0a526, 0x6d4bb8, 0xf4f4f2, 0x8b5a3c];
 
 function rngFor(id) { let a = id * 2654435761 >>> 0; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296); }
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
-// 빌런 배치 (이동 템플릿 → villains[] + frontRow + 특수 플래그)
+// 이동 템플릿 → 엔진 플래그
+const STOPPED_MV = new Set(['stopped_block', 'rubberneck', 'pedestrian_group']);
+const ZIG_MV = new Set(['zigzag', 'tailgate_racer']);
+const WIDE_MV = new Set(['straddle', 'wide_load']);
+const mvOf = (m) => String(m || 'lane_cruise').replace(/^NEW:/, '');
+
+// 빌런 배치: 카탈로그 lane·count를 그대로 쓴다 (빌런이 막은 차로 = 정체의 원인, 나머지 차로 = 앞줄 저속차 벽)
 function layout(e, kind, diff, rng) {
+  const mv = mvOf(e.movement);
   const hpBase = Math.round(110 + diff * 26);
   const name = e.name_ko || e.title;
-  const color = COLORS[Math.floor(rng() * COLORS.length)];
-  const one = (lane, extra = {}) => ({ kind, lane, hp: hpBase, name, color, ...extra });
-  const trucks = (lanes) => Object.fromEntries(lanes.map((l, i) => [l, i % 3 === 1 ? 'bus' : (rng() < 0.3 ? 'pickup1t' : 'truck')]));
-  switch (e.movement) {
-    case 'side_by_side': {
-      const n = diff >= 7 ? 3 : 2;
-      const vs = Array.from({ length: n }, (_, i) => one(i, { hp: Math.round(hpBase * 0.62), name: `${name} ${['1호', '2호', '3호'][i]}`, color: COLORS[(i * 3 + Math.floor(rng() * 10)) % COLORS.length] }));
-      return { villains: vs, frontRow: trucks([...Array(4).keys()].filter((l) => l >= n)) };
-    }
-    case 'straddle': case 'wide_load':
-      return { villains: [one(0.5, { hp: Math.round(hpBase * 1.15) })], frontRow: trucks([3]) };
-    case 'zigzag': case 'tailgate_racer':
-      return { villains: [one(1, { kind: kind === 'villainSedan' ? 'villainPhone' : kind })], frontRow: trucks([3]), zig: true };
-    case 'stopped_block': case 'rubberneck':
-      return { villains: [one(0, { hp: Math.round(hpBase * 0.6) }), one(1, { hp: Math.round(hpBase * 0.6), name: `${name}(상대)`, color: COLORS[(Math.floor(rng() * 10) + 4) % 10] })], frontRow: trucks([2, 3]), stopped: true };
-    case 'slow_convoy':
-      return { villains: [one(0, { hp: Math.round(hpBase * 0.55) }), one(1, { hp: Math.round(hpBase * 0.55), name: `${name} 일행` })], frontRow: trucks([2, 3]) };
-    case 'shoulder_cheater':
-      return { villains: [one(3)], frontRow: trucks([0, 1, 2]) };
-    case 'merge_blocker':
-      return { villains: [one(1)], frontRow: trucks([0, 2, 3]), stopped: true };
-    case 'spill_emitter':
-      return { villains: [one(1, { kind: 'villainTruck' })], frontRow: trucks([0, 2, 3]) };
-    case 'pedestrian_group':
-      // 보행자 모델 전까지: 차를 세워두고 내린 사람들(말풍선) 컨셉 → 정차 차량 2대
-      return { villains: [one(0, { hp: Math.round(hpBase * 0.6) }), one(1, { hp: Math.round(hpBase * 0.6), name: `${name}(일행)` })], frontRow: trucks([2, 3]), stopped: true };
-    case 'lane_cruise': default:
-      return { villains: [one(e.lane ?? 0)], frontRow: trucks([1, 2, 3].filter((l) => l !== (e.lane ?? 0))) };
+  const zig = ZIG_MV.has(mv);
+  const stopped = STOPPED_MV.has(mv);
+  let count = clamp(Math.round(e.count ?? (mv === 'side_by_side' || mv === 'slow_convoy' || stopped ? 2 : 1)), 1, 3);
+  let lane = e.lane ?? (mv === 'shoulder_cheater' ? 3 : 0);
+  if (WIDE_MV.has(mv) && Number.isInteger(lane)) lane = clamp(lane + 0.5, 0.5, 2.5);
+  if (!Number.isInteger(lane) && !WIDE_MV.has(mv)) lane = Math.floor(lane);
+  if (zig) { count = 1; lane = clamp(Math.round(lane), 1, 2); }   // 지그재그는 중심 차로 ±1을 휘젓는다
+  if (!Number.isInteger(lane)) count = 1;                          // 차선 물기는 한 대가 두 차로를 막는다
+  const base = Number.isInteger(lane) ? clamp(lane, 0, 4 - count) : lane;
+  const hpMul = count === 1 ? (WIDE_MV.has(mv) ? 1.15 : 1) : count === 2 ? 0.62 : 0.45;
+  const villains = Array.from({ length: count }, (_, i) => ({
+    kind: mv === 'spill_emitter' && !/^villain|truck|pickup1t|tractor/.test(kind) ? 'villainTruck' : kind,
+    lane: base + i,
+    hp: Math.round(hpBase * hpMul),
+    name: count === 1 ? name : `${name} ${['1호', '2호', '3호'][i]}`,
+    color: i === 0 ? COLORS[Math.floor(rng() * COLORS.length)] : COLORS[(i * 3 + Math.floor(rng() * 10)) % COLORS.length],
+    stopped, zig,
+  }));
+  // 막힌 차로 계산 → 나머지는 앞줄(화물차·버스) 벽
+  const blocked = new Set();
+  for (const v of villains) {
+    if (zig) { blocked.add(lane - 1); blocked.add(lane); blocked.add(lane + 1); }
+    else if (Number.isInteger(v.lane)) blocked.add(v.lane);
+    else { blocked.add(Math.floor(v.lane)); blocked.add(Math.ceil(v.lane)); }
   }
+  const free = [0, 1, 2, 3].filter((l) => !blocked.has(l));
+  const frontRow = Object.fromEntries(free.map((l, i) => [l, i % 3 === 1 ? 'bus' : (rng() < 0.3 ? 'pickup1t' : 'truck')]));
+  return { villains, frontRow, zig, zigCenter: zig ? lane : undefined, stopped, slow: mv === 'merge_blocker' || mv === 'slow_convoy' };
 }
 
-function attacksFor(e, lay, diff) {
+function attackMap(list, lay, diff) {
   const out = {};
-  for (const a of e.attacks || []) { const k = ATTACK_MAP[a]; if (k) out[k] = (out[k] || 0) + 2; }
-  if (lay.zig) out.zigzag = Math.max(out.zigzag || 0, 3);
-  if (lay.stopped) { delete out.lunge; delete out.swerve; out.throw = (out.throw || 0) + 2; }
+  for (const a of list || []) { const k = ATTACK_MAP[a]; if (k) out[k] = (out[k] || 0) + 2; }
+  if (!Object.keys(out).length) return out;           // 공격 없음(구조형) = 빈 표 그대로
+  if (lay.zig) out.zigzag = Math.max(out.zigzag || 0, 2);
+  if (lay.stopped) { delete out.lunge; delete out.swerve; out.throw = (out.throw || 0) + 1; }
   if (lay.villains.length > 1) delete out.swerve;
-  if (!Object.keys(out).length) Object.assign(out, { horn: 2, highbeam: 1, throw: 1 });
   if (diff >= 6 && !out.lunge && !lay.stopped) out.lunge = 1;
   return out;
 }
+
+// 보스·엘리트 2~3페이즈: HP 비율에서 공격표·이동 성격 교체 (차 대수 변경은 엔진 미지원 → 공격표로 표현)
+function phasesFor(e, diff) {
+  if (!Array.isArray(e.phases) || !e.phases.length) return null;
+  return e.phases.map((ph) => {
+    const mv = mvOf(ph.movement);
+    const lay = { zig: ZIG_MV.has(mv), stopped: STOPPED_MV.has(mv), villains: { length: ph.count || 1 } };
+    return {
+      hp: ph.hp ?? 0.5,
+      attacks: attackMap(ph.attacks, lay, diff),
+      stopped: lay.stopped,
+      zig: lay.zig,
+      slow: mv === 'merge_blocker' || mv === 'slow_convoy',
+      label: PHASE_LABEL[mv] || '2페이즈!',
+    };
+  });
+}
+const PHASE_LABEL = {
+  side_by_side: '나란히 벽 세우기!', stopped_block: '차 세우고 시비!', slow_convoy: '일행 줄 세우기!', merge_blocker: '합류 막기!',
+  spill_emitter: '적재물 와르르!', straddle: '두 차로 점령!', tailgate_racer: '칼치기 폭주!', lane_cruise: '1차선 고수!', zigzag: '갈지자 폭주!',
+};
 
 function shoulderFor(diff, rng, setting) {
   const n = 2 + Math.floor(diff / 4);
@@ -120,12 +149,13 @@ function shoulderFor(diff, rng, setting) {
 
 // 카탈로그 항목 1개 → 스테이지
 export function stageFromEntry(e) {
-  const diff = Math.max(1, Math.min(10, e.difficulty || 3));
+  const diff = clamp(e.difficulty_f ?? e.difficulty ?? 3, 1, 10);
   const rng = rngFor(e.id || 1);
   const kind = vehicleKind(e.vehicle, e.movement);
   const lay = layout(e, kind, diff, rng);
-  const isBoss = (e.id % 10) === 0;
-  if (isBoss) for (const v of lay.villains) v.hp = Math.round(v.hp * 1.6);
+  const isBoss = e.boss ?? ((e.id % 10) === 0);
+  const hpMul = isBoss ? 1.6 : e.elite ? 1.3 : 1;
+  for (const v of lay.villains) v.hp = Math.round(v.hp * hpMul);
   // 도로 이름
   let road = String(e.road || '');
   let r = routeOf(road);
@@ -145,7 +175,13 @@ export function stageFromEntry(e) {
     highway = road && /도로|길|IC|JC|톨게이트|터널|교/.test(road) ? road.split(' ')[0] : `${k}고속도로`;
     direction = r.signs[0][0] + ' 방향';
   }
-  const jamSpeed = lay.stopped ? 1.2 : 2.4;
+  // 정체 길이: 리서치 문장에 km가 있으면 그 값(사실 근거), 없으면 난이도로 추정
+  const kmHit = String(e.jam_causality || '').match(/(\d+(?:\.\d+)?)\s*km/);
+  const kmFromText = kmHit ? +kmHit[1] : NaN;
+  const displayKm = kmFromText >= 0.5 && kmFromText <= 15 ? kmFromText : +(1.4 + diff * 0.45 + rng() * 0.8).toFixed(1);
+  const jamSpeed = lay.stopped ? 1.2 : lay.slow ? 1.8 : 2.4;
+  const honkOnly = Array.isArray(e.weapons) && e.weapons.length > 0 && e.weapons.every((w) => w === 'honk');
+  const fine = e.fine_krw ?? 30000;
   const stage = {
     id: e.id,
     chapter: e.chapter || Math.ceil(e.id / 10),
@@ -155,36 +191,51 @@ export function stageFromEntry(e) {
     blurb: e.jam_causality || '',
     cause: e.name_ko || e.title,
     violation: e.violation || '도로교통법 위반',
-    fine: e.fine_krw || 30000,
+    fine,                                  // 카드 표시 (실제 범칙금·벌금)
+    payout: e.payout_krw ?? fine,          // 포상금 기준 (게임값)
+    card: e.card || '고지서',
     sky: SKY_OF[e.time] || 'day',
     jamLength: Math.min(215, 150 + diff * 6.5),
-    displayKm: +(1.4 + diff * 0.45 + rng() * 0.8).toFixed(1),   // 실제 병목 정체 규모 (1.8~6.6km)
+    displayKm,
     density: 1 + diff * 0.008,
     jamSpeed,
-    villains: lay.villains.map((v) => ({ ...v, stopped: !!lay.stopped })),
+    villains: lay.villains,
     frontRow: lay.frontRow,
+    zig: lay.zig, zigCenter: lay.zigCenter,
     shoulder: shoulderFor(diff, rng, e.setting),
-    attacks: attacksFor(e, lay, diff),
+    attacks: attackMap(e.attacks, lay, diff),
+    phases: phasesFor(e, diff),
+    honkOnly,
     throwItem: throwItemFor(e, kind),
     attackInterval: [Math.max(1.3, 2.7 - diff * 0.12), Math.max(2.0, 3.8 - diff * 0.14)],
     taunts: (e.taunts && e.taunts.length ? e.taunts : ['비켜 비켜~']).slice(0, 6),
     defeatLine: e.defeat_line || '',
     signs: r.signs,
-    vms: (e.jam_causality || '').slice(0, 14) || '안전운전 하세요',
+    vms: (e.jam_causality || '').split('→')[0].trim().slice(0, 14) || '안전운전 하세요',
     boss: isBoss,
+    elite: !!e.elite,
     difficulty: diff,
     newAssets: e.new_assets || [],
+    wrongWay: mvOf(e.movement) === 'wrong_way',
   };
   return stage;
 }
 
-// 카탈로그 전체 → 스테이지 배열 (원래 손으로 만든 스테이지는 같은 id 자리에 우선 사용)
+// 카탈로그 전체 → 스테이지 배열. 손으로 만든 스테이지는 handmade_id가 가리키는 카탈로그 자리에 들어가고,
+// 금액·카드·챕터·보스 정보는 카탈로그(리서치) 값을 쓴다.
 export function buildStages(catalog, handmade = []) {
   const byId = new Map(handmade.map((s) => [s.id, s]));
   const out = [];
   for (const e of (catalog?.villains || []).slice().sort((a, b) => a.id - b.id)) {
-    const hm = byId.get(e.id);
-    out.push(hm ? { ...hm, chapter: e.chapter || 1 } : stageFromEntry(e));
+    const hm = e.handmade_id != null ? byId.get(e.handmade_id) : null;
+    if (hm) {
+      const g = stageFromEntry(e);
+      out.push({
+        ...hm, id: e.id, chapter: g.chapter, handmadeId: hm.id,
+        fine: g.fine, payout: g.payout, card: g.card, violation: g.violation,
+        defeatLine: g.defeatLine, boss: g.boss, elite: g.elite, phases: g.phases, difficulty: g.difficulty,
+      });
+    } else out.push(stageFromEntry(e));
   }
   return out.length ? out : handmade;
 }

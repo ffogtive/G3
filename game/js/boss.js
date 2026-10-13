@@ -10,6 +10,9 @@ import { occupies } from './traffic.js';
 import * as VEH from './vehicles.js';
 
 // 피니시 소품 (아트 모듈에 없으면 간단한 대체 모델)
+// 투척물 착지 높이(중심): 모델 반높이에 맞춤
+const LAND_Y = { hay: 0.37, box: 0.28, tire: 0.43, cone: 0.4, tack: 0.2 };
+
 function fxProp(kind) {
   try { const g = VEH.buildFxProp?.(kind); if (g) return g; } catch { /* 대체 */ }
   const g = new THREE.Group();
@@ -75,6 +78,9 @@ export class Villain {
     this.sparkT = 0;
     this.zigT = Math.random() * 10;
     this.zigBoost = 0;
+    // 지그재그형(폰·졸음·칼치기): 중심 차로 ±1을 휘젓는다
+    this.zig = spec.zig ?? (spec.kind === 'villainPhone');
+    this.zigC = Math.max(1, Math.min(2, Math.round(spec.lane)));
     this.taunt = null;
     this.nextTaunt = 1.5 + index * 1.7;
     this.mesh.position.set(this.x, 0, -s);
@@ -145,6 +151,11 @@ export class BossManager {
     this.villains = stage.villains.map((spec, i) => new Villain(this.scene, spec, stage, sFront, i));
     this.attackT = 2.2;
     this.totalMaxHp = this.villains.reduce((a, v) => a + v.maxHp, 0);
+    // 공격표는 페이즈마다 바뀌므로 복사해서 쓴다 (stage 객체는 재도전 때 재사용)
+    this.attacks = { ...(stage.attacks || {}) };
+    this.intervalMul = 1;
+    this.phases = (stage.phases || []).slice().sort((a, b) => b.hp - a.hp);
+    this.phaseIdx = 0;
   }
 
   get alive() { return this.villains.filter((v) => v.alive); }
@@ -189,7 +200,7 @@ export class BossManager {
     v.flash = 1;
     const after = Math.max(0, v.hp) / v.maxHp;
     let popped = false;
-    for (let k = 1; k <= 3; k++) {
+    if (!this.stage?.honkOnly) for (let k = 1; k <= 3; k++) {
       const th = 1 - k * 0.25;
       if (before > th && after <= th && v.tires > 1) { this._popTire(v); popped = true; }
     }
@@ -234,17 +245,19 @@ export class BossManager {
     v.vel = new THREE.Vector3(0, 8, -(v.v + 3));
     v.spin = new THREE.Vector3(3.5 + Math.random() * 2, 7 + Math.random() * 3, 2.5);
     v.launched = false;
-    v.finish = this.finishStyle || 'rocket';
+    v.finish = this.stage?.honkOnly ? 'pullover' : (this.finishStyle || 'rocket');
+    setHazard(v.mesh, true);
+    for (const b of this.beams) if (b.v === v) b.life = 0;
+    if (v.finish === 'pullover') { v.pullX = v.x; v.pullV = Math.max(v.v, 1.5); this.audio.play('twinkle'); return; }
     while (v.tires > 0) this._popTire(v);
     const p = v.mesh.position.clone(); p.y += 1;
     this.fx.explosion(p, v.len > 6 ? 1.4 : 1.0);
     this.fx.debris(p, [v.spec.color || 0xcccccc, 0x222222, 0xdddddd], 18);
     this.audio.play('explosion');
-    setHazard(v.mesh, true);
-    for (const b of this.beams) if (b.v === v) b.life = 0;
   }
 
   _updateDeath(v, dt) {
+    if (v.finish === 'pullover') return this._updatePullover(v, dt);
     if (v.finish && v.finish !== 'rocket') return this._updateFinish(v, dt);
     v.deathT += dt;
     v.baseS += v.vNominal * dt;
@@ -271,6 +284,26 @@ export class BossManager {
       this.audio.play('twinkle');
       m.visible = false;
       this.onGone?.(v);
+    }
+  }
+
+  // 구조형 마무리: 정신 차리고 갓길로 빠져 비상등 정차 (날려 보내지 않는다)
+  _updatePullover(v, dt) {
+    v.deathT += dt;
+    const t = v.deathT, m = v.mesh;
+    v.pullV = Math.max(0, v.pullV - dt * 1.6);
+    v.baseS += v.pullV * dt;
+    v.s = v.baseS;
+    const tx = laneX(SHOULDER_LANE);
+    const k = Math.min(1, t / 1.8);
+    v.x = v.pullX + (tx - v.pullX) * (k * k * (3 - 2 * k));
+    m.position.set(v.x, 0, -v.s);
+    m.rotation.set(0, -Math.sin(k * Math.PI) * 0.25, 0);
+    setHazard(m, Math.floor(t * 3) % 2 === 0);
+    if (t > 2.2 && !v.gone) {
+      v.gone = true; v.dying = false;
+      this.fx.twinkle(m.position.clone().setY(v.h + 1.2));
+      this.onGone?.(v);   // 메시는 갓길에 남겨 둔다 (비상등 정차)
     }
   }
 
@@ -354,11 +387,30 @@ export class BossManager {
 
   // ── 공격 선택
   _chooseAttack() {
-    const w = this.stage.attacks || { horn: 1 };
+    const w = this.attacks || {};
     let tot = 0; for (const k in w) tot += w[k];
+    if (tot <= 0) return null;   // 공격 없음(구조형 스테이지)
     let r = Math.random() * tot;
     for (const k in w) { if ((r -= w[k]) <= 0) return k; }
-    return 'horn';
+    return null;
+  }
+
+  // 페이즈 전환: HP 비율이 기준 아래로 → 공격표·이동 성격 교체 (반환: 이벤트 또는 null)
+  _checkPhase() {
+    const ph = this.phases[this.phaseIdx];
+    if (!ph || this.hpFrac() > ph.hp) return null;
+    this.phaseIdx++;
+    if (Object.keys(ph.attacks || {}).length) this.attacks = { ...ph.attacks };
+    this.intervalMul *= 0.85;
+    for (const v of this.villains) {
+      if (!v.alive) continue;
+      if (ph.stopped) { v.stopped = true; v.vNominal = 0; v.lunge = null; v.lungeOff = 0; }
+      if (ph.zig) { v.zig = true; v.zigC = Math.max(1, Math.min(2, Math.round(v.lanePos))); }
+      if (ph.slow && !v.stopped) v.vNominal *= 0.7;
+      v.flash = 1;
+    }
+    this.attackT = 1.2;
+    return { type: 'phase', label: ph.label || '2페이즈!', idx: this.phaseIdx };
   }
 
   _say(v, text, dur = 2.0) { v.taunt = { text, until: this.time + dur }; this.audio.play('tauntBlip'); }
@@ -464,7 +516,7 @@ export class BossManager {
     const from = new THREE.Vector3(v.x, v.h + 0.4, -(v.front - 0.6));
     const dur = rolling ? 0.45 : 0.85;
     const landS = rolling ? v.front + 2.2 : player.s + Math.max(0, player.v) * dur + 0.3;
-    const to = new THREE.Vector3(laneX(lane), kind === 'hay' ? 0.37 : 0.45, -landS);
+    const to = new THREE.Vector3(laneX(lane), LAND_Y[kind] ?? 0.45, -landS);
     const marker = this._getMarker();
     marker.position.set(to.x, 0.04, rolling ? -(player.s) : to.z); // 굴러오는 건 '내 위치'에 경고
     marker.userData.setProgress?.(0);
@@ -540,16 +592,16 @@ export class BossManager {
       v.s = v.baseS + v.lungeOff;
 
       // 횡방향
-      if (v.kind === 'villainPhone') {
+      if (v.zig && !v.stopped) {
         v.zigBoost = Math.max(0, v.zigBoost - dt);
         v.zigT += dt * (v.zigBoost > 0 ? 2.4 : 1);
-        v.targetLanePos = 1 + Math.sin(v.zigT * 0.9) * 1.0 + Math.sin(v.zigT * 2.3) * 0.15;
+        v.targetLanePos = v.zigC + Math.sin(v.zigT * 0.9) * 1.0 + Math.sin(v.zigT * 2.3) * 0.15;
       } else if (v.returnAt && this.time > v.returnAt) {
         v.returnAt = 0;
         v.targetLanePos = v.homeLane;
       }
       const prevX = v.x;
-      const k = v.kind === 'villainPhone' ? 3 : 5;
+      const k = v.zig ? 3 : 5;
       v.lanePos += (v.targetLanePos - v.lanePos) * (1 - Math.exp(-dt * k));
       v.x = laneX(v.lanePos);
       const vx = (v.x - prevX) / Math.max(dt, 1e-4);
@@ -599,16 +651,21 @@ export class BossManager {
       (m.userData.wheels || []).forEach((w, i) => { if (w.parent === m) w.rotation.x -= (v.v * dt) / (radii?.[i] || r); });
     }
 
+    // 페이즈 전환 (보스·엘리트)
+    if (fighting && this.anyAlive && this.phases?.length) { const pe = this._checkPhase(); if (pe) events.push(pe); }
+
     // 공격 스케줄
     if (fighting && this.anyAlive) {
       this.attackT -= dt;
       if (this.attackT <= 0) {
         const [a, b] = this.stage.attackInterval || [2.5, 3.5];
-        this.attackT = a + Math.random() * (b - a);
+        this.attackT = (a + Math.random() * (b - a)) * (this.intervalMul || 1);
         const alive = this.alive;
         const v = alive[Math.floor(Math.random() * alive.length)];
-        // 플레이어가 아직 뒤(갓길)에 있으면: 뒤로 투척만 (앞으로 쏘는 공격은 안 닿음)
-        this._attack(ctx.playerBehind ? 'throw' : this._chooseAttack(), v, ctx);
+        // 플레이어가 아직 뒤(갓길)에 있으면: 뒤로 투척만 (앞으로 쏘는 공격은 안 닿음). 구조형(경적 전용)은 안 던진다
+        const peaceful = this.stage.honkOnly || !Object.keys(this.attacks || {}).length;
+        const kind = ctx.playerBehind ? (peaceful ? null : 'throw') : this._chooseAttack();
+        if (kind) this._attack(kind, v, ctx);
       }
     }
 

@@ -244,6 +244,40 @@ function rageHorn() {
   for (const c of r.startled.slice(0, 4)) bubble('st' + c.id, ['깜짝이야!', '헉!', '고막…', '무슨 소리야?!'][Math.floor(Math.random() * 4)], 'angry', 1.2, carTop(c, 0.8));
   player.boostT = TUNE.boostTime;
 }
+// 보스·엘리트 페이즈 전환 연출
+function onBossPhase(e) {
+  G.hitstop = Math.max(G.hitstop, 0.12);
+  fx.shake(0.6, 0.4);
+  ui.flash('#ff6b3d', 120);
+  ui.banner(`${e.idx + 1}페이즈! ${e.label}`, 'boss', 1300);
+  audio.play('hornAngry', { volume: 0.8 });
+  const v = boss.alive[0];
+  if (v) v.taunt = { text: ['이제부터 진짜다!', '어디 한번 해보자고!', '동생들 집합!'][e.idx % 3], until: G.time + 2 };
+}
+
+// 구조형 스테이지의 경적: 원흉을 깨운다(게이지 감소), 분노 = 사이렌 대경적
+const RESCUE_POPS = ['빵! 정신 차려요!', '비상등 켜세요!', '갓길로 빼요!', '빵빵!', '괜찮아요?!'];
+function rescueHonk(dt, fire, superFire) {
+  G.honkCool = Math.max(0, (G.honkCool || 0) - dt);
+  const tgt = boss.alive.filter((v) => Math.abs(v.s - player.s) < 45).sort((a, b) => Math.abs(a.s - player.s) - Math.abs(b.s - player.s))[0];
+  if (superFire) {
+    if (G.rage < TUNE.superCost - 1e-6) { hud.popAt(player.mesh.position.clone().setY(2.6), '분노 부족!', 'warn'); return; }
+    if (!tgt) return;
+    G.rage = Math.max(0, G.rage - TUNE.superCost); G.supers++;
+    audio.play('hornTruck', { volume: 1 });
+    fx.shockwave(new THREE.Vector3(tgt.x, 0.1, -tgt.s), 12, 0xffd23a);
+    onWeaponHit(tgt, TUNE.superDmg, new THREE.Vector3(tgt.x, tgt.h + 0.8, -tgt.s), 'super');
+    return;
+  }
+  if (!fire || G.honkCool > 0 || !tgt) return;
+  G.honkCool = 0.28;
+  audio.play('horn', { volume: 0.6, pitch: 0.95 + Math.random() * 0.1 });
+  fx.shockwave(new THREE.Vector3(tgt.x, 0.1, -tgt.s), 4.5, 0xfff0c0);
+  const pos = new THREE.Vector3(tgt.x, tgt.h + 0.8, -tgt.s);
+  onWeaponHit(tgt, TUNE.tackDmg * 1.6, pos, 'honk');
+  if (Math.random() < 0.25) hud.popAt(pos.clone().setY(tgt.h + 2.2), RESCUE_POPS[Math.floor(Math.random() * RESCUE_POPS.length)], 'score');
+}
+
 // 장애물 날려버리기 (분노의 경적 / 레커차 견인)
 function flingObstacle(o, towed) {
   o.mesh.updateMatrixWorld(true);
@@ -387,7 +421,8 @@ function enterPhase(name) {
       G.stuckHinted = false;
       ui.banner('출발!', 'go', 900);
       ui.setTouchVisible(IS_TOUCH);
-      ui.setControls?.({ jump: owns('mv_jump') });
+      G.hasJump = owns('mv_jump');
+      ui.setControls?.({ jump: G.hasJump });
       audio.play('go');
       G.cheaterHinted = G.stageIdx > 0;
       if (G.stageIdx === 0 || G.auto) {
@@ -400,12 +435,15 @@ function enterPhase(name) {
       G.bossStart = G.time;
       boss.attackT = 2.0;
       const names = boss.villains.map((v) => v.name).join(' & ');
-      ui.banner('원인 발견!', 'boss', 1300);
+      ui.banner(G.stage.honkOnly ? '원인 발견! 구조 출동!' : '원인 발견!', 'boss', 1300);
       G.frontLocked = false;
       ui.showBoss({ name: names, hp: 1, tires: 4 });
       audio.startMusic('boss');
       audio.play('warn');
-      setTimeout(() => G.phase === 'boss' && !G.frontLocked && ui.hint?.(IS_TOUCH ? '[발사] 꾹 = 화물차 너머로 압정 선제공격 · 갓길로 앞질러 정면 참교육!' : 'Space 꾹 = 화물차 너머로 압정 선제공격 · 갓길로 앞질러 정면 참교육!', 3600), 1500);
+      const hint = G.stage.honkOnly
+        ? (IS_TOUCH ? '구조 상황! 압정 금지 · [발사] = 경적으로 깨우기 → 갓길로 유도' : '구조 상황! 압정 금지 · Space = 경적으로 깨우기 → 갓길로 유도')
+        : (IS_TOUCH ? '[발사] 꾹 = 화물차 너머로 압정 선제공격 · 갓길로 앞질러 정면 참교육!' : 'Space 꾹 = 화물차 너머로 압정 선제공격 · 갓길로 앞질러 정면 참교육!');
+      setTimeout(() => G.phase === 'boss' && !G.frontLocked && ui.hint?.(hint, 3600), 1500);
       audio.play('hornAngry', { volume: 0.5 });
       // 벽 차량들 짜증 경적
       for (const c of traffic.carsBehindFront(5)) bubble('w' + c.id, FRONT_RAGE_LINES[Math.floor(Math.random() * FRONT_RAGE_LINES.length)], 'angry', 1.8, carTop(c, 0.8));
@@ -460,7 +498,7 @@ function enterPhase(name) {
 function stageMissions() {
   const n = G.minisTotal || 0;
   return [
-    { label: '원인 제거 (참교육 완료)' },
+    { label: G.stage?.honkOnly ? '원인 해결 (구조 완료 · 압정 금지)' : '원인 제거 (참교육 완료)' },
     { label: '추돌·피격 합계 3회 이하' },
     { label: n ? `잔챙이 빌런 ${n}명 전원 참교육` : '잔챙이 빌런 없음 (자동 달성)' },
   ];
@@ -508,7 +546,7 @@ function showResult() {
   });
   if (milestone) setTimeout(() => audio.play('stageClear'), 2600);
   audio.play('stageClear');
-  for (let i = 0; i < stars; i++) setTimeout(() => audio.play('star', { pitch: 1 + i * 0.25 }), 700 + i * 380);
+  missions.forEach((m, i) => m.done && setTimeout(() => audio.play('star', { pitch: 1 + i * 0.25 }), 700 + i * 380));
 }
 
 // ───────────────────────────── 전투 피격
@@ -890,6 +928,7 @@ function update(realDt) {
 
   // 참교육 점프 (상점 아이템)
   G.jumpCool = Math.max(0, (G.jumpCool || 0) - dt);
+  if (G.hasJump) ui.setControls?.({ jumpCd: G.jumpCool / 4 });
   if (wantJump && jamLike && owns('mv_jump') && G.jumpCool <= 0 && player.jump?.()) {
     G.jumpCool = 4; audio.play('whoosh', { pitch: 1.3 });
     hud.popAt(player.mesh.position.clone().setY(3), '참교육 점프!', 'score');
@@ -928,14 +967,23 @@ function update(realDt) {
 
   // 원흉
   const bev = boss.update(dt, { time: G.time, phase: ph, player, hud, night: world.night, playerBehind: ph === 'boss' && !G.frontLocked, laneFree: (lane) => !traffic.cars.some((c) => c.isWall && c.lane === lane) });
-  for (const e of bev) if (e.type === 'playerHit' || e.type === 'miniHit') onPlayerHit(e);
+  for (const e of bev) {
+    if (e.type === 'playerHit' || e.type === 'miniHit') onPlayerHit(e);
+    else if (e.type === 'phase') onBossPhase(e);
+  }
 
   // 무기
   if (ph === 'boss') {
-    // 뒤에서 접근 중: 압정 선제공격(화물차 너머로) 가능, 분노는 '경적'으로 위에서 처리됨
-    const wr = weapons.update(dt, { phase: ph, player, boss, wantFire, wantSuper: wantSuper && G.frontLocked, rage: G.rage, onHit: onWeaponHit });
-    if (wr.superFired) { G.rage = Math.max(0, G.rage - TUNE.superCost); G.supers++; }
-    else if (wantSuper && G.frontLocked && G.rage < TUNE.superCost) hud.popAt(player.mesh.position.clone().setY(2.6), '분노 부족!', 'warn');
+    if (G.stage.honkOnly) {
+      // 구조형(졸음·고장·대피): 압정·폭탄 대신 경적으로 깨워 갓길로 유도
+      rescueHonk(dt, wantFire, wantSuper && G.frontLocked);
+      weapons.update(dt, { phase: ph, player, boss, wantFire: false, wantSuper: false, rage: 0, onHit: onWeaponHit });
+    } else {
+      // 뒤에서 접근 중: 압정 선제공격(화물차 너머로) 가능, 분노는 '경적'으로 위에서 처리됨
+      const wr = weapons.update(dt, { phase: ph, player, boss, wantFire, wantSuper: wantSuper && G.frontLocked, rage: G.rage, onHit: onWeaponHit });
+      if (wr.superFired) { G.rage = Math.max(0, G.rage - TUNE.superCost); G.supers++; }
+      else if (wantSuper && G.frontLocked && G.rage < TUNE.superCost) hud.popAt(player.mesh.position.clone().setY(2.6), '분노 부족!', 'warn');
+    }
   } else {
     weapons.update(dt, { phase: ph, player, boss, wantFire: false, wantSuper: false, rage: 0, onHit: onWeaponHit });
   }
@@ -955,7 +1003,10 @@ function update(realDt) {
     G.frontLocked = true;
     ui.banner('앞을 막았다! 정면 참교육!', 'go', 1100);
     audio.play('warn');
-    setTimeout(() => G.phase === 'boss' && ui.hint?.(IS_TOUCH ? '[발사] 꾹 = 뒤로 압정 (밟으면 펑크!) · [분노] = 분노 폭탄 · 공격은 차선 바꿔 피하기' : 'Space 꾹 = 뒤로 압정 (밟으면 펑크!) · R = 분노 폭탄 · 공격은 차선 바꿔 피하기', 3400), 900);
+    const fh = G.stage.honkOnly
+      ? (IS_TOUCH ? '[발사] = 경적으로 깨우기 · [분노] = 사이렌 대경적 · 갓길로 유도하면 구조 완료' : 'Space = 경적으로 깨우기 · R = 사이렌 대경적 · 갓길로 유도하면 구조 완료')
+      : (IS_TOUCH ? '[발사] 꾹 = 뒤로 압정 (밟으면 펑크!) · [분노] = 분노 폭탄 · 공격은 차선 바꿔 피하기' : 'Space 꾹 = 뒤로 압정 (밟으면 펑크!) · R = 분노 폭탄 · 공격은 차선 바꿔 피하기');
+    setTimeout(() => G.phase === 'boss' && ui.hint?.(fh, 3400), 900);
   }
   if (ph === 'release') {
     const waveDone = G.phaseT > (G.frontS - G.tailS) / TUNE.releaseWaveSpeed + 1.4;
@@ -990,7 +1041,7 @@ function update(realDt) {
   // HUD
   if (['jam', 'boss', 'release', 'cruise'].includes(G.phase)) {
     const distM = Math.max(0, boss.refS() - player.s);
-    ui.setHUD({ phase: G.phase, speedKmh: Math.round(toKmh(Math.max(0, player.v))), distM: Math.round(distM), rage: G.rage, score: G.score, combo: G.combo, minis: { done: G.minisDone || 0, total: G.minisTotal || 0 }, boostT: Math.min(1, (player.boostT || 0) / TUNE.boostTime) });
+    ui.setHUD({ phase: G.phase, speedKmh: Math.round(toKmh(Math.max(0, player.v))), distM: Math.round(distM), rage: G.rage, score: G.score, combo: G.combo, minis: { done: G.minisDone || 0, total: G.minisTotal || 0 }, boostT: Math.min(1, (player.boostT || 0) / TUNE.boostTime), rageMode: G.phase === 'boss' && G.frontLocked ? (G.stage.honkOnly ? 'siren' : 'bomb') : 'horn' });
     const span = Math.max(1, G.frontS - G.startS);
     let released = 0;
     if (G.phase === 'release' || G.phase === 'cruise') released = Math.min(1, (G.time - traffic.releaseTime) * TUNE.releaseWaveSpeed / Math.max(1, G.frontS - G.tailS));

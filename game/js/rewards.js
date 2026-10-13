@@ -21,15 +21,16 @@ function pick(arr, n, seed) {
 
 // r: { stars, cath, freed, bumps, cheaters }
 export function computeReward(stage, r, seed = 1) {
-  const fine = stage.fine || 30000;
+  const fine = stage.fine ?? 30000;              // 카드 표시: 실제 범칙금·벌금
+  const base = stage.payout ?? fine;             // 포상금 기준(게임값): 형사 카드는 벌금 대신 30만~100만
   const mult = [1, 1, 1.5, 2][r.stars] || 1;
   const bonus = (r.cheaters || 0) * 10000 + (r.miniFines || 0);
-  const payout = Math.round(((fine * mult + bonus) * (r.payMult || 1)) / 100) * 100;
+  const payout = Math.round(((base * mult + bonus) * (r.payMult || 1)) / 100) * 100;
   const views = Math.round((r.freed * 38 + r.cath * 950) * (0.85 + ((seed * 7919) % 100) / 300));
   const subsGain = Math.max(12, Math.round(views * 0.011));
   const vName = stage.villains.map((v) => v.name).join(' & ');
   const comments = pick(COMMENTS, 3, seed + stage.id * 31).map((c) => c.replace('{v}', vName));
-  return { fine, payout, bonus, views, subsGain, comments, violation: stage.violation || '도로교통법 위반', villainName: vName, stars: r.stars };
+  return { fine, payout, bonus, views, subsGain, comments, violation: stage.violation || '도로교통법 위반', villainName: vName, stars: r.stars, card: stage.card || '고지서' };
 }
 
 // progress 갱신. 반환: { milestone: string|null }

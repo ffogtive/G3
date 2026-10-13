@@ -121,11 +121,13 @@ export class Traffic {
     // ① 앞줄(frontRow): 빌런 옆에 나란히 서는 정상 저속 차량 → '벽'
     const villainLanes = new Set();
     for (const v of villains) for (let i = 0; i < NUM_LANES; i++) if (occupies(v, i)) villainLanes.add(i);
-    if (stage.attacks && stage.attacks.zigzag) { villainLanes.add(0); villainLanes.add(1); villainLanes.add(2); }
+    const zig = !!(stage.zig || (stage.attacks && stage.attacks.zigzag));
+    const zc = stage.zigCenter ?? 1;
+    if (zig) { villainLanes.add(zc - 1); villainLanes.add(zc); villainLanes.add(zc + 1); }
     const fr = stage.frontRow || { 1: 'truck', 2: 'truck', 3: 'truck' };
     const frontRear = new Array(NUM_LANES).fill(Infinity);
     for (const v of villains) for (let i = 0; i < NUM_LANES; i++) if (occupies(v, i)) frontRear[i] = Math.min(frontRear[i], v.s - v.len / 2);
-    this.zigzag = !!(stage.attacks && stage.attacks.zigzag);
+    this.zigzag = zig;
     for (let l = 0; l < NUM_LANES; l++) {
       if (villainLanes.has(l)) continue;
       if (!fr[l]) continue; // 빌런이 스워브로 막는 차선 (가상의 '못 지나감' 벽)
@@ -139,7 +141,7 @@ export class Traffic {
 
     // ② 정체: 앞줄 바로 뒤부터 빽빽하게 (플레이어 시작 자리만 비움)
     for (let l = 0; l < NUM_LANES; l++) {
-      let cursor = frontRear[l] - (2.2 + rng() * 1.6) - (villainLanes.has(l) && stage.attacks?.zigzag ? 6 : 0);
+      let cursor = frontRear[l] - (2.2 + rng() * 1.6) - (villainLanes.has(l) && zig ? 6 : 0);
       while (cursor > tail) {
         const kind = pickWeighted(rng, NPC_KINDS);
         const tmp = this._makeCar(rng, kind, l, 0, stage.jamSpeed * 0.7);
