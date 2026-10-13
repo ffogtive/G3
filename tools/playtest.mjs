@@ -1,5 +1,5 @@
 // 자동 플레이테스트: 모든(또는 지정) 스테이지를 오토파일럿 + 빨리감기로 끝까지 돌려 페이즈 타이밍/에러를 리포트
-// 사용법: node tools/playtest.mjs [--page game/index.html] [--stages 1,2,3,4,5] [--ff 6] [--shots dir] [--mobile]
+// 사용법: node tools/playtest.mjs [--page game/index.html] [--stages 1,2,3,4,5] [--ff 6] [--shots dir] [--mobile] [--timeout 240]
 // (레포 루트를 http://localhost:8090 에서 서빙 중이어야 함: npx http-server . -p 8090 -c-1 -s)
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -12,6 +12,7 @@ const ff = +opt('ff', 6);
 const shots = opt('shots', null);
 const mobile = args.includes('--mobile');
 const base = opt('base', 'http://localhost:8090');
+const limitMs = +opt('timeout', 240) * 1000;   // 스테이지당 벽시계 제한(초). 병렬 실행 시 늘릴 것
 const browser = await pw.chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 const report = [];
 for (const st of stages) {
@@ -21,7 +22,7 @@ for (const st of stages) {
   page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
   await page.goto(`${base}/${page0}?stage=${st}&auto=1&mute=1&ff=${ff}`);
   const phases = {}; let last = null; const t0 = Date.now(); let final = null;
-  while (Date.now() - t0 < 240000) {
+  while (Date.now() - t0 < limitMs) {
     await page.waitForTimeout(700);
     const s = await page.evaluate(() => { const G = window.__game; if (!G || !G.objs) return null; return { ph: G.phase, t: G.time, bumps: G.bumps, rage: G.rage, supers: G.supers, hp: G.objs.boss.hpFrac(), err: G.lastError || null, fps: G.fps }; });
     if (!s) continue;
