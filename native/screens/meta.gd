@@ -212,6 +212,19 @@ func set_setting(key: String, value: Variant) -> void:
 	_call([&"set_setting"], [key, value])
 
 
+## r3 S1 run index (meta/progress.gd plays / next_play / begin_play; the stub counts runs without a skip list).
+func plays(id: int) -> int:
+	return maxi(0, int(_call([&"plays"], [id], 0)))
+
+
+func next_play(id: int) -> int:
+	return maxi(0, int(_call([&"next_play", &"plays"], [id], 0)))
+
+
+func begin_play(id: int) -> int:
+	return maxi(0, int(_call([&"begin_play"], [id], 0)))
+
+
 func mini_count(id: int) -> int:
 	var v: Variant = _call([&"mini_count"], [id])
 	return int(v) if v != null else 0

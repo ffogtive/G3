@@ -1,5 +1,5 @@
 {
-  "_doc": "r3 A1/A2/A3 (native/sim/neck_sim.gd, game_sim.gd). runtime: cfg = default deep-merged (one level: pace / checkpoints / plug) with byId[stage id]. Missing table -> NeckSim.DEFAULTS. enabled gates the plug only (A2: false until the U3 plug view is merged; tests force it with tables.options.neck = true); pace (A1) and checkpoints (A3) run regardless.",
+  "_doc": "r3 A1/A2/A3 (native/sim/neck_sim.gd, game_sim.gd). runtime: cfg = default deep-merged (one level: pace / checkpoints / plug) with byId[stage id]. Missing table -> NeckSim.DEFAULTS. enabled gates the plug only (A2: on since the r3 integration with the U3 plug view; tables.options.neck = true/false forces it); pace (A1) and checkpoints (A3) run regardless.",
   "_hypothesis": "가설: 원흉 뒤 구멍 = 정체 줄 평균 목표속도(0.84x jamSpeed) < 원흉(1.0x). 접근 중 원흉 x0.78이면 앞줄이 원흉에 붙는다. 그래도 갓길 끝 22m가 비어 잠금이 2.4s라 갓길 마개 + 판별 돌파 밸브가 필요하다.",
   "byId": {
     "1": {
@@ -36,7 +36,7 @@
   },
   "default": {
     "checkpoints": {"at": [150, 100, 60], "atLong": [180, 130, 90, 50], "fastMul": 1.5, "fastWindow": 8, "longJam": 200, "minLead": 15, "on": true, "rage": 0.04, "rageLong": 0.03, "score": 100},
-    "enabled": false,
+    "enabled": true,
     "pace": {"_doc": "A1: before the front lock the villain runs at approachVMul x jamSpeed; frontGlue also eases it down to floor x that while the widest first bumper behind the front row (lanes 0-3; spaced/pass lanes and zig stages excluded) is wider than gapIn, fully at gapOut (packed lanes breathe +-2.7 m at 0.42 rad/s, so a constant multiplier alone leaves 2.9-8.3 m)", "approachVMul": 0.78, "frontGlue": true, "glue": {"every": 4, "floor": 0.35, "gapIn": 3.0, "gapOut": 5.0, "tau": 0.4}},
     "plug": {
       "activeDist": 35,
@@ -54,7 +54,7 @@
       "exitDur": 1.2,
       "kind": "cutter",
       "len": 4.5,
-      "lines": {"backfire": ["빵빵해봐야 소용없지~"], "block": ["끼워줘요~", "나도 급해요!", "먼저 왔거든요?"], "bump": ["천천히 가요!!"], "deaf": ["폰 보는 중…"], "far": ["달려오면서 빵빵? 안 비켜!", "멀리서 빵빵? 흥!", "뭐야, 위협해?"], "noway": ["앞이 꽉 막혔어요"], "nudge": ["…?"], "open": ["알았어요, 비켜줄게요", "먼저 가세요~"], "pushed": ["어어, 밀지 마!"], "safety": ["에휴, 먼저 가요"], "stubborn": ["시끄러워! 안 비켜!", "빵빵 그만!"], "thief": ["내 자리~"]},
+      "lines": {"backfire": ["빵빵해봐야 소용없지~"], "block": ["끼워줘요~", "나도 급해요!", "먼저 왔거든요?"], "bump": ["천천히 가요!!"], "closer": ["뭐라고? 붙어서 빵!", "응? 한 번 더~"], "deaf": ["폰 보는 중…"], "far": ["멀리서 빵빵? 안 비켜!", "멀리서 빵빵? 흥!", "뭐야, 위협해?"], "noway": ["앞이 꽉 막혔어요"], "nudge": ["…?"], "open": ["알았어요, 비켜줄게요", "먼저 가세요~"], "pushed": ["어어, 밀지 마!"], "safety": ["에휴, 먼저 가요"], "stubborn": ["시끄러워! 안 비켜!", "빵빵 그만!"], "thief": ["내 자리~"]},
       "n": 1,
       "near": 4,
       "passFor": 3,

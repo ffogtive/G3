@@ -20,6 +20,8 @@ extends RefCounted
 ##   TrafficBridge.honk (every honk_reply carries neck: true) and no stuck-assist increase; plus unit checks (defaults off,
 ##   jam hop blocked, rage t1 opens it, honk from afar → stubborn, state().neck shape).
 ## Default: seeds [1, 2] for A1, seed 1 for the bots. `-- --full` (runner user arg): seeds 1–5 everywhere (the r3 gate).
+## r3 final (review majors): A1 glue controller with the plug (1-4 straddle plug counted as a body by front_gap_max:
+##   pre-lock mean glue with the plug ≥ without it − 0.15, run seeds n = 0..2, both backends) and the arrival-honk gate.
 
 ## Multi-seed autopilot matrix over both backends (~3 min): e2e like the other autoplay matrices (native-check step 6).
 ##   godot47 --headless --path native -s res://tests/run_tests.gd -- --suite=e2e --filter=test_neck [--full]
@@ -51,6 +53,10 @@ func run() -> int:
 		_a1(fb)
 	for fb: bool in [false, true]:
 		_a2(fb)
+	for fb: bool in [false, true]:
+		_glue_gate(fb)
+	for fb: bool in [false, true]:
+		_eager_gate(fb)
 	print("INFO neck: %.1f s (full=%s)" % [(Time.get_ticks_msec() - t0) / 1000.0, _full])
 	return _fails
 
@@ -80,9 +86,13 @@ func _unit() -> void:
 	_check(nk != null, "GameSim owns a NeckSim (sim.neck)")
 	if nk == null:
 		return
-	_check(not bool(nk.get("enabled")), "data default.enabled = false: no plug until U3 lands (override with options.neck)")
+	# r3 integration (main_overrides neck_enabled): U3 landed, so the plug is on by default; options.neck = false forces it off
+	_check(bool(nk.get("enabled")), "data default.enabled = true: the plug is on by default since the U3 view (options.neck overrides)")
 	var st: Dictionary = sim.state()
-	_check(st.get("neck") is Dictionary and not bool((st["neck"] as Dictionary).get("on", true)), "state().neck present, on = false by default")
+	_check(st.get("neck") is Dictionary and bool((st["neck"] as Dictionary).get("enabled", false)), "state().neck present, enabled by default")
+	var off := _sim(1, 3, false, {"neck": false})
+	_check(not bool(_neck(off).get("enabled")) and not bool((off.state()["neck"] as Dictionary).get("enabled", true)),
+		"options.neck = false still turns the plug off")
 	# pace data: 1-1 0.78, 1-5 1.0
 	_check(is_equal_approx(float(sim.boss.get("pace")), 0.78), "A1: 1-1 villain pace %.2f = approachVMul 0.78 before the lock" % float(sim.boss.get("pace")))
 	var s5 := _sim(5, 3, false)
@@ -266,6 +276,14 @@ func _front_metrics(sim: GameSim) -> Dictionary:
 	for l: int in 4:
 		if sim.player.occupies(l):
 			(bodies[l] as Array).append([sim.player.s + sim.player.len / 2.0, sim.player.s - sim.player.len / 2.0, "player"])
+	# the 병목 plug is a body on the road too (on by default since the r3 integration; 1-4 straddles lanes 3/4): same
+	# x-occupancy rule as the bridge extras (|x − lane x| < w/2 + 1.2)
+	for ex: Dictionary in sim.neck.extras():
+		if not bool(ex.get("alive", true)):
+			continue
+		for l: int in 4:
+			if absf(float(ex["x"]) - Cfg.lane_x(l)) < float(ex["w"]) / 2.0 + 1.2:
+				(bodies[l] as Array).append([float(ex["s"]) + float(ex["len"]) / 2.0, float(ex["s"]) - float(ex["len"]) / 2.0, "plug"])
 	var worst: float = 0.0
 	var holes: int = 0
 	var detail: PackedStringArray = []
@@ -411,3 +429,103 @@ func _neck_run(id: int, seed: int, fb: bool, mode: String) -> Dictionary:
 	out["lock_n"] = sim.time - neck_t if sim.front_locked and neck_t >= 0.0 else -1.0
 	out["after_open"] = sim.time - open_time if sim.front_locked and open_time >= 0.0 else -1.0
 	return out
+
+
+# --- r3 final: A1 glue × the plug -------------------------------------------------------------------------
+
+## Mean glue (boss.pace / approach pace) over the jam + boss ticks before the lock, autopilot.
+func _glue_mean(id: int, seed: int, fb: bool, neck_on: bool) -> Dictionary:
+	var sim := _sim(id, seed, fb, {"neck": neck_on})
+	sim.autopilot = Autopilot.new(seed * 13 + 1)
+	var base: float = maxf(0.01, float(sim.get("_pace")))
+	var sum: float = 0.0
+	var n: int = 0
+	var low: int = 0
+	while sim.time < LIMIT_S and not sim.front_locked:
+		sim.step(Cfg.TICK)
+		sim.events()
+		if sim.phase in [&"jam", &"boss"] and not sim.front_locked:
+			var g: float = float(sim.boss.get("pace")) / base
+			sum += g
+			n += 1
+			low += 1 if g < 0.5 else 0
+	return {"mean": sum / maxf(1.0, n), "low": float(low) / maxf(1.0, n)}
+
+
+## Review (device + code, major): front_gap_max() did not count the 1-4 straddle plug, read lane 3 under it as an 8 m hole
+## and held the villain at the glue floor (0.35) for the whole approach. With the plug counted the glue on 1-4 runs
+## like the plug-off run (other stages' plugs sit on the shoulder: no change).
+func _glue_gate(fb: bool) -> void:
+	var tag: String = "fallback" if fb else "native"
+	for n: int in 3:
+		var seed: int = Mulberry32.run_seed(4, n)
+		var on: Dictionary = _glue_mean(4, seed, fb, true)
+		var off: Dictionary = _glue_mean(4, seed, fb, false)
+		_check(float(on["mean"]) >= float(off["mean"]) - 0.15,
+			"A1 glue %s 1-4 n=%d: pre-lock mean glue with the plug %.2f ≥ without %.2f − 0.15 (glue < 0.5: %.0f %% vs %.0f %%)" % [tag, n,
+			float(on["mean"]), float(off["mean"]), 100.0 * float(on["low"]), 100.0 * float(off["low"])])
+
+
+# --- r3 final: a person honking on arrival -----------------------------------------------------------------
+
+## Device review (major): the autopilot sits down behind the plug first; a person taps 빵 the moment they pull up
+## (gap ≤ 4 m, still closing at 5–7 m/s on the leash) and again every 1.0 s. That read as "far" → sulk → every tap
+## refreshed it + safety penalty → the 12 s safety on 1-2/1-4/1-6/1-7/1-8/1-10 (9/9 runs). Gate: such a person opens
+## the honk / race / push valves by input (verb, or 1-6's bump when passing fast) on ≥ 80 % of the runs, and every
+## run within 8 s of the bottleneck turning on. 1-3 (quiet: honking is wrong by design) and 1-9 (deaf) are excluded.
+const EAGER_STAGES: Array[int] = [1, 2, 4, 6, 7, 8, 10]
+
+
+func _eager_run(id: int, seed: int, fb: bool) -> Dictionary:
+	var sim := _sim(id, seed, fb, {"neck": true})
+	var ap := Autopilot.new(seed * 13 + 1)
+	ap.set("neck_mode", "naive")
+	sim.autopilot = ap
+	var nk: Object = _neck(sim)
+	var t_act: float = -1.0
+	var out: Dictionary = {"how": "", "dt": INF, "replies": {}}
+	var last: float = -99.0
+	var next_lane: float = 0.0
+	while sim.time < LIMIT_S and not sim.front_locked and str(out["how"]) == "":
+		var act: bool = bool(nk.call(&"is_active", sim))
+		if act and t_act < 0.0:
+			t_act = sim.time
+		if act and str((nk.get("plug") as Dictionary).get("phase", "")) == "block":
+			var p: PlayerSim = sim.player
+			if p.lane < Cfg.SHOULDER_LANE:
+				if sim.real_time > next_lane and sim.bridge.can_merge(p.lane + 1, 0.5) == 0:
+					sim.input(&"lane", 1)
+					next_lane = sim.real_time + 0.3
+			elif float(nk.call(&"gap", sim)) <= 4.0 and sim.real_time - last >= 1.0:
+				sim.input(&"honk")
+				last = sim.real_time
+		sim.step(Cfg.TICK)
+		for e: Dictionary in sim.events():
+			match str(e["type"]):
+				"honk_reply":
+					if bool(e.get("neck", false)):
+						var k: String = str(e.get("data", ""))
+						(out["replies"] as Dictionary)[k] = int((out["replies"] as Dictionary).get(k, 0)) + 1
+				"neck_open":
+					out["how"] = str(e["how"])
+					out["dt"] = sim.time - t_act if t_act >= 0.0 else INF
+	return out
+
+
+func _eager_gate(fb: bool) -> void:
+	var tag: String = "fallback" if fb else "native"
+	var seeds: Array = range(1, 6) if _full else [1, 2]
+	var by_input: int = 0
+	var total: int = 0
+	var worst: float = 0.0
+	var rows: PackedStringArray = []
+	for id: int in EAGER_STAGES:
+		for seed: int in seeds:
+			var r: Dictionary = _eager_run(id, seed, fb)
+			total += 1
+			by_input += 1 if str(r["how"]) in ["verb", "bump"] else 0
+			worst = maxf(worst, float(r["dt"]))
+			rows.append("1-%d/%d %s %.1fs %s" % [id, seed, r["how"], minf(99.0, float(r["dt"])), str(r["replies"])])
+	print("INFO neck: eager honker %s: %s" % [tag, "; ".join(rows)])
+	_check(by_input >= ceili(0.8 * total), "eager honker %s: opened by input on %d/%d runs (≥ 80 %%)" % [tag, by_input, total])
+	_check(worst <= 8.0, "eager honker %s: every run opens ≤ 8 s after the bottleneck turns on (worst %.1f s)" % [tag, minf(99.0, worst)])

@@ -377,5 +377,18 @@ func _stub_parity() -> void:
 		stub.buy(id)
 	_check(str(real2.loadout()) == str(stub.loadout()), "stub loadout() == Progress loadout() after buys (%s | %s)" % [real2.loadout(), stub.loadout()])
 	_check(real2.wallet() == stub.wallet() and stub.daily_villain() >= 1, "stub wallet after buys == Progress; daily_villain → id")
+	# r3 S1 run index: ScrMeta forwards plays / next_play / begin_play; the stub counts runs too, so a build without
+	# meta/ still varies the seed per run (it has no SEED_SKIP list: next_play == plays there)
+	var seq_real: Array = []
+	var seq_stub: Array = []
+	for i: int in 3:
+		seq_real.append(real.begin_play(2))
+		seq_stub.append(stub.begin_play(2))
+	var stub_re: ScrMeta = ScrMeta.bind_to(ScrProgressStub.new(stub_path))
+	host.add_child(stub_re.p as Node)
+	_check(ScrMeta.new().has_method(&"begin_play") and seq_real == [0, 1, 2] and seq_stub == seq_real and real.plays(2) == 3
+		and stub.plays(2) == 3 and stub.next_play(2) == 3 and stub_re.plays(2) == 3 and real.plays(7) == 0,
+		"ScrMeta run index: begin_play real %s stub %s, plays %d/%d, stub reload %d" % [seq_real, seq_stub, real.plays(2),
+		stub.plays(2), stub_re.plays(2)])
 	host.queue_free()
 	await _frames()

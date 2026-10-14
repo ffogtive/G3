@@ -13,10 +13,20 @@ extends RefCounted
 ## The window is the median of the 5 seeds (the prototype's numbers were medians; its own 1-1 / 1-2 pilot runs went
 ## 7.7–10.3 s); every single run stays ≤ the upper bound and ≥ FLOOR_S (a fight that is over before it starts).
 ## Plus per run: ×20 타이어 저격 ≥ 1, ×10 따다닥 2–8, the first ×20 ≤ FIRST_C20_MAX s after the lock, and 0
-## skill_denied{target} in the boss phase. 1-5..1-10 (generic window, global hpMul, no gate of their own yet): the pilot on
-## seed 1007 × both paths reaches the result card with a lock → kill ≤ REST_MAX_S and 0 skill_denied{target}.
+## skill_denied{target} in the boss phase. These C2 windows are measured with the 병목 plug OFF (options.neck = false): they
+## tune the fight after the front lock, and with the plug the pre-lock 압정 phase (tacks and combos already hit the villain
+## from boss entry) eats into lock → kill.
+## r3 integration — the shipped game (plug ON by default, neck.json default.enabled): pilot + tacks × 5 seeds × both paths,
+## the same per-run gates (lock → kill ≥ FLOOR_S and ≤ the upper bound, ×20 ≥ 1, ×10 2–8, 0 denied{target}, finisher), and
+## the boss segment (boss entry → kill, the time the player is fighting) median within NECK_DELTA of the plug-off median:
+## the plug moves damage before the lock and may add one valve wait (1-3 quiet 3 s + react), nothing more.
+## 1-5..1-10 (generic window, global hpMul, no gate of their own yet): the pilot on seed 1007 × both paths in the shipped game
+## reaches the result card with a lock → kill ≤ REST_MAX_S and 0 skill_denied{target}.
 ##   가설: ✅ (r3design/combat/combo_proto.gd, hpMul 1.7) the milestones + the generic window bring 압정-only fights from
 ##         41–60 s (1-2..1-4) to 14–21 s on both traffic paths; ❓ the first ×20 lands 4.7–6.9 s after the lock.
+##   가설(r3 통합): ✅ with the plug on, lock → kill drops (1-1 pilot median 10.9 → 6.6 s) but boss → kill stays (13.6 → 12.5 s);
+##         ~~raise 1-1 skillHpMul for the 10 s lock → kill floor~~ → rejected: it would lengthen the boss segment the
+##         player actually feels (피드백 2 '너무 오래 걸린다').
 ## Runs in the e2e suite: godot47 --headless --path native -s res://tests/run_tests.gd -- --suite=e2e
 
 const SUITE := "e2e"
@@ -37,6 +47,9 @@ const FLOOR_S: float = 6.0
 ## The combo counts before the lock too (C1: boss phase 잠금 전후), so the first ×20 lands earlier than the prototype's
 ## 4.7–6.9 s (it counted from the lock): the gate only says the big one comes early in every fight.
 const FIRST_C20_MAX: float = 8.0
+## Shipped game (plug on) boss → kill median − plug-off median, s: [min, max] (r3 integration).
+const NECK_DELTA: Array[float] = [-2.5, 4.0]
+const NECK_POLICIES: Array[String] = ["pilot", "tacks"]
 
 var _fails: int = 0
 
@@ -81,17 +94,21 @@ func run() -> int:
 		backends.push_front(false)
 	else:
 		print("SKIP e2e_skills: C++ Traffic not loaded (native path)")
+	var off_boss: Dictionary = {}  # "sid:fb:pol" -> plug-off boss → kill median
 	for sid: int in STAGES:
 		var stage: Dictionary = _DB.find_stage(stages_db, sid)
 		for fb: bool in backends:
 			for pol: String in POLICIES:
 				var fights: Array = []
+				var bosses: Array = []
 				var firsts: Array = []
 				var c10s: Array = []
 				var c20s: Array = []
 				var c5s: Array = []
 				for i: int in SEEDS.size():
-					var r: Dictionary = _one(stage, fb, pol, SEEDS[i], FINISHES[(i + sid + (1 if fb else 0)) % FINISHES.size()], fc, skc, tiers)
+					var r: Dictionary = _one(stage, fb, pol, SEEDS[i], FINISHES[(i + sid + (1 if fb else 0)) % FINISHES.size()], fc, skc, tiers,
+						-1.0, {"neck": false})
+					bosses.append(float(r["boss"]))
 					fights.append(float(r["fight"]))
 					if float(r["first_c20"]) >= 0.0:
 						firsts.append(float(r["first_c20"]))
@@ -107,6 +124,29 @@ func run() -> int:
 					_pct(firsts, 0.5), _pct(firsts, 0.0), _pct(firsts, 1.0)]
 				summary.append(line)
 				print("INFO e2e_skills: " + line)
+				off_boss["%d:%s:%s" % [sid, fb, pol]] = _pct(bosses, 0.5)
+	# r3 integration: the shipped game (plug on by default) — per-run gates + the boss segment vs plug off
+	for sid: int in STAGES:
+		var stage2: Dictionary = _DB.find_stage(stages_db, sid)
+		for fb: bool in backends:
+			for pol: String in NECK_POLICIES:
+				var nb: Array = []
+				var nf: Array = []
+				for i: int in SEEDS.size():
+					var nr: Dictionary = _one(stage2, fb, pol, SEEDS[i], FINISHES[(i + sid + (1 if fb else 0)) % FINISHES.size()], fc, skc, tiers,
+						-1.0, {}, true)
+					nb.append(float(nr["boss"]))
+					nf.append(float(nr["fight"]))
+				var off_med: float = float(off_boss.get("%d:%s:%s" % [sid, fb, pol], NAN))
+				var on_med: float = _pct(nb, 0.5)
+				var d: float = on_med - off_med
+				_check(is_finite(d) and d >= NECK_DELTA[0] and d <= NECK_DELTA[1],
+					"1-%d %s %s, plug on (shipped): boss → kill median %.1f s vs plug off %.1f s (Δ %+.1f in %+.1f..%+.1f; lock → kill med %.1f)" % [
+					sid, "fallback" if fb else "native", pol, on_med, off_med, d, NECK_DELTA[0], NECK_DELTA[1], _pct(nf, 0.5)])
+				var nline: String = "1-%d %s %-6s plug on: boss→kill med %5.1f (off %5.1f, Δ %+.1f)  lock→kill med %5.1f [%5.1f..%5.1f]" % [sid,
+					"FB " if fb else "CPP", pol, on_med, off_med, d, _pct(nf, 0.5), _pct(nf, 0.0), _pct(nf, 1.0)]
+				summary.append(nline)
+				print("INFO e2e_skills: " + nline)
 	for sid: int in STAGES_REST:
 		for fb: bool in backends:
 			var rr: Dictionary = _one(_DB.find_stage(stages_db, sid), fb, "pilot", SEEDS[0], FINISHES[sid % FINISHES.size()], fc, skc, tiers, REST_MAX_S)
@@ -118,13 +158,17 @@ func run() -> int:
 	return _fails
 
 
-## One run to the result card. Returns {fight (lock → kill real s), first_c20 (real s after the lock, −1 = none), c5, c10, c20}.
+## One run to the result card. Returns {fight (lock → kill real s), boss (boss entry → kill real s), first_c20 (real s after
+## the lock, −1 = none), c5, c10, c20}.
 ## max_s >= 0: a 1-5..1-10 completion run (only the result card, lock → kill ≤ max_s and 0 denied{target} are gated).
+## opts: extra tables.options (e.g. {"neck": false}). shipped: the plug-on run of the shipped game — the first-×20 timing
+## (lock based) is not gated there: the combo already counts behind the plug.
 func _one(stage: Dictionary, fb: bool, pol: String, sd: int, fin: String, fc: Dictionary, skc: Dictionary, tiers: Dictionary,
-		max_s: float = -1.0) -> Dictionary:
+		max_s: float = -1.0, opts: Dictionary = {}, shipped: bool = false) -> Dictionary:
 	var sid: int = int(stage.get("id", 0))
 	var tables: Dictionary = _DB.load_traffic_tables()
 	tables["options"] = {"loadout": {"finish": fin, "items": ["mv_jump", "mv_drone"]}}
+	(tables["options"] as Dictionary).merge(opts, true)
 	var sim := PolicySim.new()
 	sim.force_fallback = fb
 	sim.no_fight_skills = pol != "pilot"
@@ -196,7 +240,8 @@ func _one(stage: Dictionary, fb: bool, pol: String, sd: int, fin: String, fc: Di
 					overlap.erase(ch2)
 				"finisher":
 					finishers.append(str(e["id"]))
-	var name: String = "1-%d %s %s seed %d (%s)" % [sid, "fallback" if fb else "native", pol, sd, fin]
+	var plug: String = ", plug off" if opts.get("neck") == false else (", plug on" if sim.neck.has_plug_stage() else "")
+	var name: String = "1-%d %s %s seed %d (%s%s)" % [sid, "fallback" if fb else "native", pol, sd, fin, plug]
 	var fight: float = kill_t - lock_t if kill_t > 0.0 and lock_t > 0.0 else INF
 	var budget_rel: float = float((fc.get(fin, {}) as Dictionary).get("done", 2.5)) + float(fc.get("releaseDelay", 0.3))
 	for k: Variant in used.keys():
@@ -206,7 +251,8 @@ func _one(stage: Dictionary, fb: bool, pol: String, sd: int, fin: String, fc: Di
 		first_c20, str(used), shared, sim.hp])
 	_check(sim.phase == stop and sim.bridge.is_native() != fb, "%s: reaches the %s on the %s traffic" % [name,
 		"result card" if pol == "pilot" else "release", "fallback" if fb else "native"])
-	var ret: Dictionary = {"fight": fight, "first_c20": first_c20, "c5": int(ms["c5"]), "c10": int(ms["c10"]), "c20": int(ms["c20"])}
+	var ret: Dictionary = {"fight": fight, "boss": kill_t - boss_t0 if kill_t > 0.0 and boss_t0 >= 0.0 else INF, "first_c20": first_c20,
+		"c5": int(ms["c5"]), "c10": int(ms["c10"]), "c20": int(ms["c20"])}
 	if max_s >= 0.0:
 		_check(fight <= max_s and denied_target == 0 and finishers == [fin], "%s: lock → kill %.1f s ≤ %.0f s, 0 denied{target} (%d), finisher %s" % [
 			name, fight, max_s, denied_target, str(finishers)])
@@ -215,9 +261,13 @@ func _one(stage: Dictionary, fb: bool, pol: String, sd: int, fin: String, fc: Di
 	_check(fight >= FLOOR_S and fight <= float(g[1]) and sim.boss_clock >= float(skc.get("minKillT", 6.0)),
 		"%s: lock → kill %.1f s real in %.0f–%.0f s, %.1f s sim ≥ minKillT" % [name, fight, FLOOR_S, float(g[1]), sim.boss_clock])
 	_check(denied_target == 0, "%s: 0 skill_denied{target} in the boss phase (%d)" % [name, denied_target])
-	_check(int(ms["c20"]) >= 1 and int(ms["c10"]) >= 2 and int(ms["c10"]) <= 8 and first_c20 >= 0.0 and first_c20 <= FIRST_C20_MAX,
-		"%s: ×20 타이어 저격 %d ≥ 1 (first %.1f s after the lock ≤ %.0f), ×10 따다닥 %d in 2–8" % [name, int(ms["c20"]), first_c20,
-		FIRST_C20_MAX, int(ms["c10"])])
+	if shipped:
+		_check(int(ms["c20"]) >= 1 and int(ms["c10"]) >= 2 and int(ms["c10"]) <= 8,
+			"%s: ×20 타이어 저격 %d ≥ 1, ×10 따다닥 %d in 2–8" % [name, int(ms["c20"]), int(ms["c10"])])
+	else:
+		_check(int(ms["c20"]) >= 1 and int(ms["c10"]) >= 2 and int(ms["c10"]) <= 8 and first_c20 >= 0.0 and first_c20 <= FIRST_C20_MAX,
+			"%s: ×20 타이어 저격 %d ≥ 1 (first %.1f s after the lock ≤ %.0f), ×10 따다닥 %d in 2–8" % [name, int(ms["c20"]), first_c20,
+			FIRST_C20_MAX, int(ms["c10"])])
 	if pol == "pilot":
 		_check(int(used.get("t3_carpet", 0)) + int(used.get("t5_finish", 0)) >= 1 and finishers == [fin],
 			"%s: t3 or t5 used (t3 %d, t5 %d), finished by finisher %s" % [name, int(used.get("t3_carpet", 0)), int(used.get("t5_finish", 0)), str(finishers)])

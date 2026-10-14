@@ -21,6 +21,7 @@
 - `loadout()` → `{car, car_kind, speed, armor, hp_max, tow, siren, weapon_id, weapon{id, proj, dmg, rate, spread, slow}, finish_id, finish, pay_mul, airbag, trot, coffee, rage_start_segs, jump, jump_cool, drone, drone_every}`. 게임은 이 dict만 읽는다.
 - `daily_villain()` → `{id, date}`: Mulberry32(yyyymmdd)로 열린 판 중 하나. 그날 처음 고른 판을 저장해서 해금이 늘어도 하루 동안 같다.
 - 설정: `settings()`, `get_setting(key)`, `set_setting(key, value)` — `{music, sfx, haptics, battery60, left_hand}`(bool). 적용(버스·Haptics·max_fps·HUD 반전)은 FI.
+- 회차(r3 S1, 피드백 3 '매번 똑같다'): `plays(id)` = 시작한 판 수 = 다음 회차 n(저장 키 `plays{"<id>": n}`, 없으면 0 → 업데이트 뒤 첫 판은 n = 0 = 예전 고정 시드). `next_play(id)` = `plays(id)`에서 `SEED_SKIP[id]`(측정한 나쁜 시드, 지금 `{5: [11]}`)를 건너뛴 값, n = 0은 건너뛰지 않는다. `begin_play(id)` = 판 시작마다 1회(카드 START·일시정지 다시하기) 증가 전 n을 돌려주고 저장한다. 판 안의 견인 재도전은 부르지 않는다(같은 시드). 시드는 `Mulberry32.run_seed(id, n)`. `screens/meta.gd`(ScrMeta)가 세 함수를 전달하고, meta 없는 빌드의 `ScrProgressStub`도 회차를 센다(건너뛰기 목록 없음). traffic·neck·판 데이터를 바꾸면 `--suite=e2e --filter=test_seed_variety --full`로 `SEED_SKIP`을 다시 잰다.
 
 ## `record_result(id, result)`
 읽는 키(괄호 = 별칭): `cleared`, `aborted`, `hp_end`(`hp`), `hp_max`, `min_hp`, `tows`(`fails`, `retries`), `minis_done`, `minis_total`, `missions_done`(`missions[{done}]`, hp/minis가 없을 때만), `cath`(없으면 bumps·boss_time_s·supers·max_combo로 계산), `freed`, `cheaters`, `mini_fines`, `score`(최종 점수), `seed`(없으면 `floor(time_s·1000) % 997 + 1`), `time_s`, `photo`(Image 또는 user:// 경로), `stats`(보스 통계 줄), `retry_mul`(`pay_mul`, 견인 수가 없을 때만).

@@ -14,13 +14,22 @@ extends Node3D
 ##        (real-dt smoothing + P0#4 boss framing), engine sound.
 ## Phase audio = Audio.phase(p) (web enterPhase: music, ambience, go / warn / superHit / explosion / cheer, ducking);
 ## per-event SFX are the remaining web audio.play calls (main.js / boss.js / weapons.js), never the phase ones twice.
-## Command line (after `--`): --stage=N --seed=N --autoplay --traffic=auto|fallback --no-debug-panel --manual
+## Command line (after `--`): --stage=N --seed=N --autoplay --traffic=auto|fallback --no-debug-panel --manual --neck=0|1
 ## --safe-pt=TOP,BOTTOM (fake notch / home-indicator insets in points). Live runs write the boot line to user://boot.txt
 ## (Documents/ on iOS) so tools/mac/ios_run.sh can report native=true|false after launch.
 ## Hosting (screens/app.gd, NATIVE_PARITY 8): hosted → stage_finished(result) at the result phase (fail-card menu =
 ## {aborted: true}); intro_hold + begin(); loadout (Progress.loadout(); standalone live runs read Progress itself) goes
 ## to GameSim as tables.options.loadout (finish, items / jump / drone → item1 / item2, rage_start_segs) and the HUD
 ## t5 face (hud.finish_id).
+## r3 (device feedback 1·3·4, docs r3 U1 / U3): every frame Hud.guard_bubbles(bubbles) hands the bubble layer the top
+## HUD guard (bubbles flip under / dock below the bar, pill, villain plate, combo badge, chips); state.neck drives the
+## bottleneck plug car (_sync_neck: role look — cutter left blinker, 1-4 straddle at an angle, 1-6 victim hazards, 1-10
+## parked dark — and the 1.2 s exits cutin / zip / tow / fly on the sim's s / x), who "neck" bubbles anchor on it; the
+## rage_horn's startled cars shake in the view on both traffic backends; a rage_horn of a 충격파 (via t1_wave, or
+## SkillCues.owns_rage_horn()) plays no horn. sim_options (tests / shots, --neck=1) go to GameSim as tables.options.
+##
+## 가설(r3 U3): ❓ the plug only reads as "막힌 원인" when the car itself shows its intent (blinker / hazards / angle) and
+##       leaves visibly (nose in → pull out, tow, fly) on the same s the sim blocks with (view s error 0).
 ## Skills (docs/SKILLS.md §6 뷰 훅): LaneInput 분노 tap → &"rage", item1 / item2 taps → &"item1" / &"item2", an open-screen
 ## tap while state.skills.skip_ready (or the HUD skip hint) → &"skip". Skill events reach Hud / FightFx (SkillFx 3D +
 ## SkillCues audio / haptics) / CameraRig through the fan-out below; this file plays no audio or haptics for skill_*,
@@ -51,6 +60,8 @@ var autoplay: bool = false
 var hosted: bool = false
 var intro_hold: bool = false
 var loadout: Dictionary = {}
+## Extra GameSim tables.options (tests / shots: {"neck": true} forces the bottleneck plug; --neck=1 on the command line).
+var sim_options: Dictionary = {}
 
 var sim: GameSim
 var st: Dictionary = {}
@@ -91,6 +102,8 @@ var ticks: int = 0
 var log_events: Array[Dictionary] = []
 var phase_log: Array[StringName] = []
 var sfx_played: int = 0
+## Names asked of sfx() (last 128, played or not; tests: the 충격파 rage_horn asks no hornTruck).
+var sfx_log: Array[StringName] = []
 var haptic_calls: int = 0
 var event_counts: Dictionary = {}       # event type → count over the whole run (log_events keeps only the last 256)
 ## Tests / shots: called with every drained GameSim event after the fan-out (touch-driven runs wait on skill events).
@@ -106,6 +119,17 @@ var _pick := RandomNumberGenerator.new()   # presentation-only picks (bubble lin
 var _built: bool = false
 var _safe_pt := Vector2.ZERO
 var _fail_shown: bool = false
+# ── r3 U3 bottleneck plug view
+var neck_view: HeroVehicleView
+var _neck_car: String = ""
+var _neck_beacon: bool = false
+var _neck_last := Vector3(NAN, NAN, 0.0)   # (sim time, x, lateral speed) at the last plug x change
+var _neck_yaw: float = 0.0
+## Last placed plug pose (tests / shots: view s vs sim s, the exit pose): {s, x, y, yaw, roll, scale, phase, exit, lamps}.
+var neck_pose: Dictionary = {}
+## r3 U3: rage_horn startled car id → real_time (view-only shake; neither traffic backend draws its jolt).
+var _jolt: Dictionary = {}
+const JOLT_S: float = 0.45
 
 
 func _ready() -> void:
@@ -122,6 +146,8 @@ func _ready() -> void:
 			autoplay = true
 		elif a.begins_with("--traffic="):
 			traffic_mode = a.trim_prefix("--traffic=")
+		elif a.begins_with("--neck="):
+			sim_options["neck"] = a.trim_prefix("--neck=") in ["1", "true", "on"]
 		elif a.begins_with("--safe-pt="):
 			var p: PackedStringArray = a.trim_prefix("--safe-pt=").split(",")
 			_safe_pt = Vector2(p[0].to_float(), p[1].to_float() if p.size() > 1 else 0.0)
@@ -147,6 +173,7 @@ func build() -> void:
 	var opts: Dictionary = {"loadout": loadout}
 	if intro_hold:
 		opts["intro_hold"] = true
+	opts.merge(sim_options, true)
 	tables["options"] = opts
 	cfg = tables.get("config", {}) if tables.get("config") is Dictionary else {}
 	tune = cfg.get("tune", {}) if cfg.get("tune") is Dictionary else {}
@@ -351,6 +378,9 @@ func haptic(event_name: String) -> void:
 
 ## One web audio.play: Audio autoload (pan / volume / pitch opts). Counted for tests.
 func sfx(name: StringName, opts: Dictionary = {}) -> void:
+	sfx_log.append(name)
+	if sfx_log.size() > 128:
+		sfx_log.pop_front()
 	if audio != null and bool(audio.call(&"sfx", name, opts)):
 		sfx_played += 1
 
@@ -495,7 +525,8 @@ func _on_event(e: Dictionary) -> void:
 			_honk_fx()
 		"honk_reply":
 			last_honk_reply = {"kind": str(e.get("data", "")), "id": int(e.get("id", 0))}
-			_reply_bubble(last_honk_reply)
+			if not bool(e.get("neck", false)):  # the bottleneck answers with its own bubble event (anchored on the plug)
+				_reply_bubble(last_honk_reply)
 		"fire":
 			if bool(e.get("drone", false)):  # the passive drone's shots: a light tick, no thumb buzz (that is the player's 압정)
 				sfx(&"tack", {"volume": 0.3, "pitch": 1.25 + _pick.randf() * 0.15})
@@ -553,8 +584,17 @@ func _on_event(e: Dictionary) -> void:
 				sfx(&"rageFull", {"volume": 0.7})
 		"rage_horn":
 			haptic("rageFire")
-			sfx(&"hornTruck")
-			sfx(&"superHit", {"volume": 0.55})
+			# r3 F1/C3: the pre-lock 충격파 also clears the shoulder (rage_horn via t1_wave); SkillCues plays the wave, so the
+			# horn must not sound here (device feedback 2: "분노가 경적처럼 보임")
+			var wave: bool = str(e.get("via", "")) == "t1_wave" or (fx.cues != null and fx.cues.has_method(&"owns_rage_horn")
+				and bool(fx.cues.call(&"owns_rage_horn")))
+			if not wave:
+				sfx(&"hornTruck")
+				sfx(&"superHit", {"volume": 0.55})
+			var stl: Variant = e.get("startled")
+			if stl is PackedInt32Array or stl is Array:
+				for id: Variant in stl:
+					_jolt[int(id)] = real_time
 		"cutin":
 			sfx(&"cutin")
 		"release":
@@ -727,6 +767,8 @@ func _bubble(e: Dictionary, p: Dictionary) -> void:
 			pos = _car_top(id, 0.8)
 			if str(e.get("table", "")) == "blocked":
 				sfx(&"hornShort", {"volume": 0.5})
+		"neck":  # r3 U3: over the plug car (its live view, else its sim s / x)
+			pos = _neck_top(0.8)
 		_:
 			var roof: float = float(player_view.template.get(&"height")) + 1.4
 			var pv: HeroVehicleView = player_view
@@ -825,7 +867,14 @@ func _update_view(frac: float) -> void:
 		for k: int in _cur.size() / 8:
 			if lit.has(int(_cur[k * 8])):
 				_cur[k * 8 + 7] = float(int(_cur[k * 8 + 7]) | HeroVehicleView.BIT_HIGHBEAM)
-	npc.sync(_prev, _cur, frac)
+	if _jolt.is_empty():
+		npc.sync(_prev, _cur, frac)
+	else:  # rage_horn startled cars shake (view only: copies, the sim buffer stays as read)
+		var jp: PackedFloat32Array = _prev.duplicate()
+		var jc: PackedFloat32Array = _cur.duplicate()
+		_apply_jolt(jp)
+		_apply_jolt(jc)
+		npc.sync(jp, jc, frac)
 	var p: Dictionary = st["player"]
 	var ph: StringName = StringName(str(st.get("phase", "jam")))
 	var jam_like: bool = ph in [&"intro", &"jam"] or (ph == &"boss" and not bool((st.get("lock", {}) as Dictionary).get("active", false)))
@@ -843,6 +892,7 @@ func _update_view(frac: float) -> void:
 	var hz: int = 16 if int(floorf(sim_time * 2.0)) % 2 == 0 else 0
 	for hv: HeroVehicleView in _hazard_cars.values():
 		hv.set_lamps(hz)
+	_sync_neck()
 	# player: brake light (held / creeping), blinker while changing lanes, hazards when wrecked, beacon when urgent
 	var pl: PlayerSim = sim.player
 	var pbits: int = 1 if bool(p.get("brake", false)) or (jam_like and float(p["v"]) < 1.6) else 0
@@ -866,6 +916,7 @@ func _update_view(frac: float) -> void:
 	bubbles.avoid_rects.clear()
 	var safe: Rect2 = hud.safe_rect()
 	bubbles.safe_rect = safe
+	hud.guard_bubbles(bubbles)  # r3 U1: top guard + top HUD rects (flip / dock instead of covering the bar)
 	icons.bounds = safe.grow(-8.0)
 	icons.reserved = hud.reserved_rects()
 	icons.suppress = bubbles.anchored_ids()  # the honk target's reply bubble is the signal; no icon on top of it
@@ -875,6 +926,135 @@ func _update_view(frac: float) -> void:
 			if c.has("rect"):
 				bubbles.avoid_rects.append(c["rect"])
 	bubbles.step(real_time)
+
+
+## Startled cars (rage_horn) wobble sideways and yaw for JOLT_S after the horn (web car.bumpJolt look).
+func _apply_jolt(buf: PackedFloat32Array) -> void:
+	var done: Array = []
+	for id: int in _jolt:
+		var age: float = real_time - float(_jolt[id])
+		if age >= JOLT_S:
+			done.append(id)
+			continue
+		var k: float = 1.0 - age / JOLT_S
+		for r: int in buf.size() / 8:
+			if int(buf[r * 8]) == id:
+				buf[r * 8 + 3] += 0.16 * sin(age * 55.0) * k
+				buf[r * 8 + 5] += 0.07 * sin(age * 47.0 + 1.3) * k
+				break
+	for id: Variant in done:
+		_jolt.erase(id)
+
+
+## Live roof position of the bottleneck plug (its view when built, else the sim s / x); INF when there is none.
+func _neck_top(above: float) -> Callable:
+	return func() -> Vector3:
+		var n: Dictionary = st.get("neck", {}) if st.get("neck") is Dictionary else {}
+		if not n.has("s") or str(n.get("phase", "gone")) == "gone":
+			return Vector3(INF, INF, INF)
+		if neck_view != null and neck_view.visible:
+			return neck_view.global_position + Vector3(0, float(neck_view.template.get(&"height")) + above, 0)
+		return road.position(float(n["s"]), float(n["x"])) + Vector3(0, 1.5 + above, 0)
+
+
+## r3 U3: the plug car from state.neck {s, x, kind (role), car, phase, exit, exit_t, blinker, v}. s / x are the sim's
+## every frame (view error 0); yaw follows its lateral speed (cutin / zip nose into lane 3, the race / push side step),
+## 1-4 straddles at an angle; lamps by role (cutter / straddle left blinker while it waits, victim hazards, parked dark,
+## phone brake light); exits over exitDur: cutin / zip blink left and pull out on the sim path, tow = hazards + an
+## amber beacon and it shrinks away at the end, fly (rage t1) = flung up in an arc, rolling and spinning.
+func _sync_neck() -> void:
+	var n: Dictionary = st.get("neck", {}) if st.get("neck") is Dictionary else {}
+	var ph: String = str(n.get("phase", "gone"))
+	if not n.has("s") or ph == "gone":
+		if neck_view != null:
+			neck_view.visible = false
+		neck_pose = {}
+		return
+	var car: String = str(n.get("car", "sedan"))
+	var role: String = str(n.get("kind", "cutter"))
+	if neck_view == null or car != _neck_car:
+		if neck_view != null:
+			neck_view.queue_free()
+		_neck_car = car
+		neck_view = HeroVehicleView.new()
+		neck_view.name = "NeckPlug"
+		add_child(neck_view)
+		var col: int = {"victim": 0xeeeeea, "parked": 0x6b7280, "phone": 0x3a6ea5, "straddle": 0x2d3a4a}.get(role, 0xb8bcc2)
+		neck_view.setup(factory, car, factory.variant_for_seed(car, 1000 + stage_id), col)
+		neck_view.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF  # placed from the sim every frame
+		neck_view.manual = manual
+		_neck_beacon = false
+		_neck_last = Vector3(NAN, NAN, 0.0)
+		_neck_yaw = 0.0
+	neck_view.visible = true
+	var s: float = float(n["s"])
+	var x: float = float(n["x"])
+	var v: float = maxf(0.0, float(n.get("v", 0.0)))
+	var ex: String = str(n.get("exit", "")) if ph == "open" else ""
+	var dur: float = maxf(0.1, float(sim.neck.pc.get("exitDur", 1.2))) if sim.neck != null and "pc" in sim.neck else 1.2
+	var t: float = clampf(float(n.get("exit_t", 0.0)) / dur, 0.0, 1.0) if ph == "open" else 0.0
+	# lateral speed from the sim x (per sim time, so manual shots and live frames agree)
+	if is_nan(_neck_last.x) or sim_time < _neck_last.x:
+		_neck_last = Vector3(sim_time, x, 0.0)
+	elif sim_time > _neck_last.x + 1e-6 and not is_equal_approx(x, _neck_last.y):
+		_neck_last = Vector3(sim_time, x, (x - _neck_last.y) / (sim_time - _neck_last.x))
+	elif sim_time > _neck_last.x + 0.1:
+		_neck_last = Vector3(sim_time, x, 0.0)
+	var yaw_t: float = clampf(atan2(-_neck_last.z, maxf(3.0, v)), -0.35, 0.35)  # + yaw = nose toward lane 3 (−x)
+	if role == "straddle" and ph != "open":
+		yaw_t += 0.2
+	elif role == "cutter" and ph in ["block", "yield"]:
+		yaw_t += 0.05  # angled at the gap it wants
+	_neck_yaw = lerpf(_neck_yaw, yaw_t, 0.35)
+	var yaw: float = _neck_yaw
+	var y: float = 0.0
+	var roll: float = 0.0
+	var sc: float = 1.0
+	match ex:
+		"fly":  # flung up and away, rolling over (rage)
+			y = 4.2 * sin(PI * minf(1.0, t * 1.15)) + 1.2 * t
+			roll = t * TAU * 1.25
+			yaw += t * 2.4
+		"tow":
+			if t > 0.7:
+				sc = maxf(0.02, 1.0 - (t - 0.7) / 0.3)
+	var bits: int = 0
+	match role:
+		"victim":
+			bits |= 16
+		"phone":
+			bits |= 1
+		"cutter", "straddle":
+			if ph in ["block", "yield"]:
+				bits |= 2
+	if int(n.get("blinker", 0)) != 0:
+		bits |= 2
+	if ex in ["cutin", "zip"]:
+		bits = (bits & ~16) | 2
+	elif ex == "tow":
+		bits |= 16
+	elif ex == "fly":
+		bits = 0
+	if role != "parked" and v < 1.0 and ex != "fly":
+		bits |= 1
+	if role == "parked" and ex != "tow":
+		bits = 0
+	if ex == "tow" and not _neck_beacon:
+		neck_view.enable_beacon()
+		_neck_beacon = true
+	if _neck_beacon:
+		neck_view.set_beacon(ex == "tow" and int(floorf(sim_time / 0.18)) % 2 == 0)
+	neck_view.set_lamps(NpcMultiMesh.drawn_bits(bits, sim_time, 1777))
+	neck_view.speed = v
+	var xf: Transform3D = road.world(s, x, yaw)
+	xf.origin.y += y
+	if roll != 0.0:
+		xf.basis = xf.basis * Basis(Vector3.FORWARD, roll)
+	if sc != 1.0:
+		xf.basis = xf.basis * Basis.from_scale(Vector3.ONE * sc)
+	neck_view.transform = xf
+	neck_pose = {"s": s, "x": x, "y": y, "yaw": yaw, "roll": roll, "scale": sc, "phase": ph, "exit": ex, "t": t, "lamps": bits,
+		"role": role, "car": car}
 
 
 func _sync_camera_target(pxf: Transform3D) -> void:

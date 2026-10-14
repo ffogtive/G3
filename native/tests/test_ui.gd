@@ -16,6 +16,10 @@ extends RefCounted
 ##  - r3 U4: damage pops merge per target (tack stack), ≤ 2 live per target by priority, stay inside the safe rect,
 ##    and the kill clears the stale ones.
 ##  - r3 U2: combo badge n / 20-cell bar / next reward / timeout line / break states; neck verb chip clear of the HUD.
+##  - r3 U3: the bottleneck plug view on game.tscn (neck forced on, C++ and fallback traffic): on the sim's s every frame
+##    (≤ 0.1 m), cutter left blinker, "neck" bubbles anchored on it, the verb chip on the HUD, the four exits (cutin / zip /
+##    tow / fly) each visibly animated and gone after exitDur; the 충격파's rage_horn asks no hornTruck and shakes the
+##    startled cars in the view.
 ## 가설(r3 U1/U4): ✅ the overlap was the bubble body knowing only the N5 icon rects (side slide); a top guard from the
 ##       HUD + flip / dock makes it 0 by construction. ✅ a tack stack per target + a 2-per-target cap ends the
 ##       "column of numbers" over the villain.
@@ -40,10 +44,18 @@ func run() -> int:
 	await _fx_determinism()
 	await _camera_and_reticle()
 	await _gantry()
+	# r3 blocks on the phone canvas (540 × 1170, the 1170 × 2532 / 2 shots): headless root is 64 × 64 → 960 × 960 visible
+	var root_size: Vector2i = _tree.root.size
+	_tree.root.size = Vector2i(540, 1170)
+	await _tree.process_frame
 	await _bubble_guard()
 	await _bubble_dock()
 	await _pops_merge()
 	await _combo_badge()
+	await _neck_view()
+	await _rage_horn_wave()
+	_tree.root.size = root_size
+	await _tree.process_frame
 	return _fails
 
 
@@ -177,7 +189,11 @@ func _bubble_dock() -> void:
 	var lv: Array[Dictionary] = b.layout()
 	_check(lv.size() == 1 and str(lv[0]["mode"]) == "dock" and bool(lv[0]["villain"]) and (lv[0]["border"] as Color).is_equal_approx(Bubbles.VILLAIN_RED),
 		"U1 dock: the villain's taunt docks with the red border")
-	var anchor := Vector2(270, guard + 20.0)
+	var low_r := Rect2()
+	for r: Rect2 in hud.top_rects():
+		if r.end.y > low_r.end.y:
+			low_r = r
+	var anchor := Vector2(low_r.get_center().x, guard + 20.0)  # under the lowest top widget (the badge sets the guard)
 	var fl: Dictionary = b.layout_bubble(anchor, "멀리서 빵빵? 흥!", "taunt")
 	_check(str(fl["mode"]) == "flip" and (fl["body"] as Rect2).position.y >= anchor.y + 10.0 and (fl["tip"] as Vector2).distance_to(anchor) < 0.01,
 		"U1 flip: anchor just under the HUD → body under the anchor, tail tip on it (%s %s)" % [fl["mode"], fl["body"]])
@@ -316,6 +332,141 @@ func _combo_badge() -> void:
 	hud.queue_free()
 	(hi[1] as Node).queue_free()
 	await _tree.process_frame
+
+
+## U3: one forced-neck 1-1 per exit (the plug opens only once a run), autopilot "naive" (never plays the verb) so the
+## plug stays until it is opened here.
+func _neck_game(fb: bool) -> Game:
+	var g: Game = GameScene.instantiate() as Game
+	g.manual = true
+	g.with_debug_panel = false
+	g.autoplay = true
+	g.traffic_mode = "fallback" if fb else "auto"
+	g.sim_options = {"neck": true}
+	_tree.root.add_child(g)
+	g.sim.autopilot.neck_mode = "naive"
+	return g
+
+
+func _neck_view() -> void:
+	for fb: bool in [false, true]:
+		var tag: String = "fallback" if fb else "native"
+		for exit: String in ["cutin", "zip", "tow", "fly"]:
+			var g: Game = _neck_game(fb)
+			var ticks: int = 0
+			var worst: float = 0.0
+			var frames: int = 0
+			while ticks < 120 * 60 and not g.sim.neck.is_active(g.sim):
+				g.advance_ticks(12)
+				ticks += 12
+			if not g.sim.neck.is_active(g.sim):
+				_check(false, "U3 %s %s: the bottleneck never became active (%.1f s, phase %s)" % [tag, exit, ticks / 120.0, g.phase])
+				g.queue_free()
+				await _tree.process_frame
+				continue
+			# active: wait for the verb chip (chipAt 3 s), the plug on its sim s, left blinker, bubble on the plug
+			var lamps_or: int = 0
+			var anchored: float = INF
+			for k: int in 30:
+				g.advance_ticks(12)
+				var n: Dictionary = g.st["neck"]
+				if str(n.get("phase", "")) == "gone" or not g.sim.neck.is_active(g.sim):
+					break
+				frames += 1
+				worst = maxf(worst, absf(float(g.neck_pose.get("s", INF)) - float(n["s"])) + absf(float(g.neck_pose.get("x", INF)) - float(n["x"])))
+				lamps_or |= int(g.neck_pose.get("lamps", 0))
+				if g.bubbles._items.has("h-1000"):
+					var bp: Vector3 = (g.bubbles._items["h-1000"]["pos"] as Callable).call()
+					anchored = minf(anchored, Vector2(bp.x - g.neck_view.global_position.x, bp.z - g.neck_view.global_position.z).length())
+			var chip_ok: bool = g.hud.neck_chip_text() == str(g.st["neck"].get("chip", "")) and not g.hud.neck_chip_text().is_empty()
+			if exit == "cutin":
+				_check(g.neck_view != null and g.neck_view.visible and frames >= 20 and worst <= 0.1 and lamps_or & 2 != 0 and chip_ok
+					and anchored < 0.5,
+					"U3 %s: plug '%s' %s shown on the sim s/x (worst %.4f m over %d frames), left blinker, chip '%s', neck bubble on the plug (%.2f m)" % [
+					tag, g.neck_pose.get("car", ""), g.neck_pose.get("role", ""), worst, frames, g.hud.neck_chip_text(), anchored])
+			# open it with this exit
+			if exit == "fly":
+				g.sim.neck.open(g.sim, "rage")
+			else:
+				g.sim.neck.pc["exit"] = exit
+				g.sim.neck.open(g.sim, "verb")
+			var max_y: float = 0.0
+			var max_roll: float = 0.0
+			var max_yaw: float = 0.0
+			var min_sc: float = 1.0
+			var beacon: bool = false
+			var lamp_seen: int = 0
+			var s0: float = float(g.st["neck"].get("s", 0.0))
+			var ds: float = 0.0
+			var gone_hidden: bool = false
+			var exit_frames: int = 0
+			var exit_worst: float = 0.0
+			for k: int in 40:
+				g.advance_ticks(4)
+				var n2: Dictionary = g.st["neck"]
+				if str(n2.get("phase", "")) == "gone":
+					gone_hidden = not g.neck_view.visible
+					break
+				exit_frames += 1
+				exit_worst = maxf(exit_worst, absf(float(g.neck_pose.get("s", INF)) - float(n2["s"])))
+				max_y = maxf(max_y, float(g.neck_pose.get("y", 0.0)))
+				max_roll = maxf(max_roll, absf(float(g.neck_pose.get("roll", 0.0))))
+				max_yaw = maxf(max_yaw, float(g.neck_pose.get("yaw", 0.0)))
+				min_sc = minf(min_sc, float(g.neck_pose.get("scale", 1.0)))
+				lamp_seen |= int(g.neck_pose.get("lamps", 0))
+				beacon = beacon or (g.neck_view.beacon != null)
+				ds = maxf(ds, float(n2["s"]) - s0 - float(g.sim.boss.villains[0]["v"]) * 0.0)
+			var anim_ok: bool = false
+			var what: String = ""
+			match exit:
+				"cutin", "zip":
+					anim_ok = max_yaw > 0.05 and lamp_seen & 2 != 0
+					what = "nose into lane 3 (yaw max %.2f rad), left blinker %s" % [max_yaw, lamp_seen & 2 != 0]
+				"tow":
+					anim_ok = beacon and lamp_seen & 16 != 0 and min_sc < 0.5
+					what = "hazards %s + beacon %s, shrinks away (scale min %.2f)" % [lamp_seen & 16 != 0, beacon, min_sc]
+				"fly":
+					anim_ok = max_y > 2.5 and max_roll > PI
+					what = "flung up %.1f m, roll %.1f rad" % [max_y, max_roll]
+			_check(anim_ok and gone_hidden and exit_frames >= 5 and exit_worst <= 0.1,
+				"U3 %s exit %s: %s over %d frames (view s err %.4f m), hidden once gone %s" % [tag, exit, what, exit_frames, exit_worst, gone_hidden])
+			g.queue_free()
+			await _tree.process_frame
+
+
+## The pre-lock 충격파's rage_horn (via t1_wave) asks no hornTruck / superHit; the jam t1_horn's does; startled cars shake.
+func _rage_horn_wave() -> void:
+	for fb: bool in [false, true]:
+		var g: Game = GameScene.instantiate() as Game
+		g.manual = true
+		g.with_debug_panel = false
+		g.traffic_mode = "fallback" if fb else "auto"
+		_tree.root.add_child(g)
+		g.advance_ticks(240)
+		var ids: PackedInt32Array = PackedInt32Array()
+		var buf: PackedFloat32Array = g.buffer()
+		for r: int in mini(3, buf.size() / 8):
+			ids.append(int(buf[r * 8]))
+		var n0: int = g.sfx_log.size()
+		g._on_event({"type": "rage_horn", "via": "t1_wave", "smashed": PackedInt32Array(), "towed": PackedInt32Array(),
+			"cheaters": PackedInt32Array(), "startled": ids})
+		var wave_horn: int = g.sfx_log.slice(n0).count(&"hornTruck") + g.sfx_log.slice(n0).count(&"superHit")
+		var n1: int = g.sfx_log.size()
+		g._on_event({"type": "rage_horn", "smashed": PackedInt32Array(), "towed": PackedInt32Array(), "cheaters": PackedInt32Array(),
+			"startled": PackedInt32Array()})
+		var jam_horn: int = g.sfx_log.slice(n1).count(&"hornTruck")
+		var jolted: bool = g._jolt.size() == ids.size() and not ids.is_empty()
+		var jb: PackedFloat32Array = g.buffer().duplicate()
+		g.real_time += 0.05
+		g._apply_jolt(jb)
+		var moved: float = absf(jb[3] - g.buffer()[3])
+		g.real_time += 1.0
+		g._apply_jolt(jb)
+		_check(wave_horn == 0 and jam_horn == 1 and jolted and moved > 0.01 and g._jolt.is_empty(),
+			"U3 %s: 충격파 rage_horn → hornTruck/superHit %d (jam horn %d); %d startled cars shake (Δx %.3f m) then stop" % [
+			"fallback" if fb else "native", wave_horn, jam_horn, ids.size(), moved])
+		g.queue_free()
+		await _tree.process_frame
 
 
 func _touch(inp: LaneInput, idx: int, pos: Vector2, pressed: bool) -> void:

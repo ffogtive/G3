@@ -785,3 +785,52 @@ M1은 게임의 대부분이므로 다섯 단계로 나누고, **사용자의 �
   - iOS export dry-run exit 0(12.7 s, `lane1.pck` 11.5 MB, tests 제외, 기존 경고만).
   - 샷 네이티브·폴백 RESULT ok=true. t5 임팩트 프레임 휘도 표준편차는 51.7 / 49.2다(이전 19.6).
   - Mac 빌드·설치·실행·기능 확인은 각각 ❓다.
+
+### 2026-10-14 (4) — r3: iPhone 3차 피드백(1-1~1-4) 반영 · 통합
+가설: ✅ 6개 그룹(traffic·sim·combat·fx·ui·seed)이 계약대로 만들었고, 통합에서 남은 일은 마개 기본 켬, 그룹 사이 배선 2곳(FightFx 콤보 이벤트·잠금 전 흔들림, ScrMeta 회차 전달), 원흉전 게이트 재기준, 원흉 구간 위 표지판 위치였다. ❌ ~~원흉 뒤 frontGap 30m 빈칸~~ → 실제로는 원흉 2.2~3.8m 뒤부터 꽉 차 있었고 속도 차로 벌어졌다(FEEDBACK_LOG r3). ❓ 기기에서 '할 일이 생겼는가'·'콤보·분노 손맛'·'원흉이 유독 느려 보이지 않는가'. **C++(native/ext) 변경 0**: 폴백과 C++가 같은 판을 낸다(통합 샷 9장이 두 백엔드에서 픽셀 단위로 같다).
+
+**항목** (스펙 `r3_must` 16개, 상세는 FEEDBACK_LOG 2026-10-14 r3 행 · SKILLS.md §0-2)
+- traffic — T1·T2 `sim/traffic_bridge.gd` 폴백 패리티: let_in·has_gap·stuck_assist·auto tow·갓길 경적 전체·판별 갓길 모드·얌체·잔챙이(mini_target/mini_hit)·차로형 train/flow/spaced/pass·양보 포켓·frontRage(cars_behind_front)·release 파도. 신규 `TrafficBridge.set_extras()`(두 백엔드, C++는 기존 set_extra 바인딩). 폴백 `info()` 키 = C++ `get_info`.
+- sim — W 전투 훅(on_tack_hit·on_player_hit·generic_window 부착·neck.open("rage")), A1 원흉 접근 감속 ×0.78 + front glue(`BossSim.set_pace`), A2 `sim/neck_sim.gd` 갓길 마개 + 판별 밸브(데이터 `data/src/neck.json`), A3 원흉까지 체크포인트(150/100/60m, 긴 정체 180/130/90/50m).
+- combat — C1 압정 콤보 c5/c10/c20, C2 `sim/behaviors/generic_window.gd` + HP 비율 피해 + hpMul 1.7, C3 분노 필중 60m·전 차로·잠금 전 타격, C4 연출 데이터(`skills.fx` t1_wave/c5/c10/c20).
+- fx — F1 `skill_cues.fx_key` t1_wave 분리, 콤보 FX·햅틱(combo5/10/20, comboBreak), 원흉 방향 카메라 킥.
+- ui — U1 말풍선 상단 가드·뒤집기·도킹, U2 콤보 배지·분노 버튼 얼굴/진홍색·레티클 '분노' 태그·체크포인트 눈금/토스트·병목 동사 칩, U3 마개 차량 뷰 + 퇴장 4종(cutin/zip/tow/fly) + 마개 말풍선 앵커, U4 데미지 숫자 누적·대상당 2개·화면 안 클램프.
+- seed — S1 회차 시드 `Mulberry32.run_seed(id, n)`, `Progress.plays/next_play/begin_play`, `SEED_SKIP {5:[11]}`. 첫 판 n=0과 골든은 그대로.
+
+**통합에서 고친 것** (각각 실패하는 테스트를 먼저 썼다)
+- `fx/fight_fx.gd`: `SKILL_EVENTS`에 `combo_break`·`combo_milestone`(SkillCues가 이벤트로 끊김 햅틱 1회), `rage_horn`이 `via:"t1_wave"`면 무작위 흔들림 없음(링은 유지). `test_skills_fx` r3 integ 2건(수정 전 FAIL 2).
+- `screens/meta.gd` `plays/next_play/begin_play` 전달 + `screens/dev_progress_stub.gd` 회차 카운터, `screens/app.gd`는 `meta._call` 대신 이 함수를 쓴다. `test_screens` run index(수정 전 SCRIPT ERROR).
+- `data/src/neck.json` `default.enabled = true`(main_overrides neck_enabled, U3 확인 뒤). `test_game_sim` r3 integ 2건(수정 전 FAIL: 마개 판 [], neck_open 0) → 1-5를 뺀 9판에 마개, 기본 autopilot 1-1이 마개를 만나 1번 연다. `test_neck`: 기본값 단언을 true로, A1 구멍 측정에 마개 몸체를 넣었다(1-4 straddle이 3차로를 막아 그 자리를 '구멍'으로 셌다: 8.2m 구멍 → 마개 앞뒤 1.95/1.75m).
+- `view/world.gd` `sign_layout()`: 가운데 VMS front_s+25 → +205, 두 번째 갠트리 +150 → +160. 원흉은 보스 구간 내내 front_s+15~69m(1-5는 +110~141m)에 있고(1-1~1-10 autopilot, A1·마개로 더 오래 머문다), 원흉 45m 뒤~10m 앞의 높이 선 빈 판이 원흉과 LOCK 레티클을 가렸다(통합 샷에서 발견). `test_view_smoke`가 10판 모두 그 띠에 판이 없는지 본다(수정 전 FAIL).
+- `tests/test_e2e_skills.gd` 게이트 재기준: 마개를 켜면 압정·콤보가 잠금 전부터 원흉을 때려서 잠금 → 처치가 줄고(1-1 pilot 10.9 → 6.6s) 원흉전 전체는 그대로다. C2 게이트(잠금 → 처치 중앙값 pilot 10–16 · tacks 13–21 · sloppy ≤26)는 마개 끈(options.neck=false) 상태로 그대로 재고, 출시 기본(마개 켬)은 pilot·tacks × 5시드 × 두 백엔드에서 판당 게이트(바닥 6s, 상한, ×20 ≥1, ×10 2–8, 대상 없음 0, 피니시) + 보스 진입 → 처치 중앙값이 마개 끈 값의 −2.5~+4.0s 안인지 본다. 1-1 skillHpMul 상향은 기각했다(원흉전이 길어진다).
+- `tests/test_seed_variety.gd`: 마개 모드를 '끔(강제)/켬'으로 명시하고 `--n=K`를 더했다(기본값이 켬이 되어 '기본' 모드가 켬과 같아졌다).
+- `native/meta/README.md`: 회차 API와 SEED_SKIP 재측정 규칙.
+
+**원흉전 길이 (출시 기본 = 마개 켬, 보스 진입 → 처치 실시간 중앙값, 1-1 / 1-2 / 1-3 / 1-4, 두 백엔드 같음)**
+
+| 정책 | 마개 끔 | 마개 켬 | 잠금 → 처치 (켬) |
+|---|---|---|---|
+| pilot | 13.6 / 14.4 / 14.3 / 13.6 s | 12.5 / 14.3 / 17.2 / 14.5 s | 6.6 / 9.2 / 9.2 / 8.9 s |
+| 압정 + 콤보 | 19.5 / 19.8 / 20.3 / 20.2 s | 18.8 / 20.4 / 23.8 / 20.3 s | 13.7 / 15.4 / 16.1 / 15.2 s |
+
+- 1-3은 quiet 밸브(조용히 3초) 때문에 잠금까지 7.9s라 원흉전이 +2.8~3.5s 길다 ❓.
+- 1-5~1-10 pilot(시드 1007, 마개 켬) 결과 카드 도달, 잠금 → 처치 4.9~10.5s, 대상 없음 0.
+
+**검증**
+- unit 30파일 fails=0(골든 test_traffic_golden·test_spawn·test_rng 바이트 그대로). e2e 8파일 fails=0. integration fails=0. `native-check.sh` GREEN. 각 로그와 숫자는 아래 마지막 실행 기준이다.
+- 두 백엔드 autoplay 1-1~1-10 × n=0..4(출시 기본): 50/50 완주씩, 정체 p50 16.0s · p90 26.1s · 최장 43.8s(1-5).
+- `test_neck --full`(마개 기본 켬, 9판 × 시드 5 × 두 백엔드): 1202 PASS, A1 최악 첫 범퍼 4.33m · 구멍 ≤1, A2 동사 봇 잠금까지 4.1~8.8s, 연타 봇 10.3~15.7s(1-1 3.3~3.7s). `test_e2e_skills` 360 s fails=0.
+- iOS export dry-run exit 0(28 s, `lane1.pck` 11.6 MB, neck_sim·generic_window·neck.json 포함, tests 제외, Bundle ID `com.ffogtive.lane1Chamgyoyuk`, 경고는 기존 boot_splash 속성·.ipa macOS 전용뿐).
+- 통합 샷(590×1278 = 1179×2556의 1/2, safe area 59/34, 두 백엔드): 원흉 203m 앞 도킹 말풍선, '150m 돌파! 빠름!' 체크포인트, 마개 + 동사 칩 '붙어서 빵!', 경적 퇴장(cutin), 콤보 c5 '따닥!'·c10 '따다닥!'·c20 '타이어 저격!', 1-9 잠금 전 충격파 명중(-150) + 마개 fly 퇴장. 9장이 두 백엔드에서 픽셀 단위로 같다.
+- Mac 빌드·설치·실행·기능 확인은 각각 ❓다. 이 컨테이너는 Mac/iPhone에 닿지 않는다.
+
+**결정 (main_overrides)**: 콤보 5/10/15/20 = c5/c10/c5/c20(사용자 원문 "5, 10"), 병목 안전장치 1-1 6s · 나머지 8s, 잠금 전 분노는 t1만, 접근 감속 0.78(1-5 frontGlue 끔), 분노 t1은 마개 즉시 돌파(보너스는 1-9만), C++ 0줄, 마개 기본 켬(통합).
+
+**4차 이월**
+- 정체 이벤트 덱 D0 JamDirector + E1 브레이크 파도·E2 틈 도둑·E3 구급차·E4 지퍼·E5 숨은 위반차·E6 원흉 신호 파도: C++ hold/force_lane/nudge 바인딩 3개와 iOS 재빌드가 필요하다.
+- N1 C++ neck IDM 덮어쓰기 / F1 v0MulNative(원흉 뒤 구멍이 4.9m를 넘을 때만), N4 정지파 '골'에서만 끼워주기.
+- 밸브 완전판: 1-7 카메라 매듭, 1-8 원흉 6m 돌출 미끼, 1-10 마개 2대, 1-6 V04 '구출 교대 → frontLock', 1-5 ignoredWhileYielding.
+- R3-3 니어미스 · 칼끼어들기 보너스, R3-4 접근 콤보 ×5 질주, R3-5 원흉 원거리 도발 무전 칩 · 100m PIP, R3-6(C1 주기로 대체, 기기 판정 뒤 주기 조정), R3-8 판별 온보딩 동사 순서 · 1-7 카메라 게이트.
+- R1 분노 경제(timeRage 0.016 → 0.010, 이벤트 보상): 체크포인트·밸브 보상이 들어간 뒤 도착 시 분노 칸을 재고 결정.
+- P3 잠금 전 autopilot t1 정책·접근당 t1 사용률(목표 0.3~1회), P4 잔여(원흉 반응 t1 휘청·t3 주저앉기·t5 스핀, 숫자 크기 = HP 비율 구간, Audio.duck_for, '화면 흔들림 약하게'), P7 스킬 배너 y 계산(통합 샷: 잠금 전 '충격파!!' 배너가 콤보 배지와 HP판을 덮는다).
+- 통합에서 새로 본 것: VMS·정체 표지판 판 글자(M1c, 지금 빈 흰 판), PlayerSim 정체 자동 브레이크가 실제 약 13 m/s²라 느린 선두차를 rel_v 6~9로 들이받음(sim 지적), live 모드에서 guard_bubbles가 직전 프레임 HUD 가시성을 써서 위젯 첫 페이드인 1프레임 겹침 가능, occupy·GW 말풍선 '(경직)'·'(빈틈!)'과 HUD '경직!' 팝 중복, T1 '경적 → 1.5s 안 can_merge(3)==0'은 중앙값 0.97s지만 바로 옆 약간 뒤 차 배치 2/5에서 1.88~2.09s(C++도 같음, letIn.pull 데이터 결정), 1-4 시드 5 정지 37%(C++도 같음, 공사 갓길 설계), 폴백 GameSim 틱 0.43 ms(C++ 0.16 ms) 기기 프레임 확인, SEED_SKIP은 n<20만 측정, 부팅 로그 'native=' 값으로 기기 traffic 백엔드 확인.

@@ -5,10 +5,13 @@ extends Control
 ## slowly, a "LOCK" tag above; inside the signature window they go gold with "약점!" and pulse faster. Out of range:
 ## a grey dashed ring with chevrons pointing to the lane the player has to move to (dir −1 = ◀, +1 = ▶). Off screen
 ## or behind the camera: an edge arrow at the screen border. Time is real time fed by advance() (deterministic shots).
+## r3 U2 (device feedback 2 "분노 범위에 안 닿아"): rage_tag (Hud: boss phase, fight / rescue, a rage tier ready — before
+## the lock too) puts an orange "분노" tag on the bracket's upper right: this villain is what the 분노 button hits now.
 
 const GREEN := Color8(0x3c, 0xe0, 0x8e)
 const GOLD := Color8(0xff, 0xc4, 0x1f)
 const GREY := Color8(0xb8, 0xc0, 0xcc)
+const RAGE_ORANGE := Color8(0xff, 0x8a, 0x1a)
 const INK := UiDraw.INK
 
 var camera: Camera3D
@@ -25,6 +28,11 @@ var _alpha: float = 0.0
 var screen_pos := Vector2(-1, -1)
 var screen_r: float = 0.0
 var on_screen: bool = false
+## r3 U2: show the orange "분노" tag (a rage tier can hit this villain now).
+var rage_tag: bool = false
+## y under the top HUD (Hud.top_guard_y()): the tag moves to the bracket's right side / below the HUD instead of
+## hiding under the villain plate when the villain is far up the screen (before the lock).
+var top_guard: float = 0.0
 
 
 func _ready() -> void:
@@ -126,6 +134,25 @@ func _draw() -> void:
 				var ox: float = -float(dir) * (r * 0.9 + 16.0 + (1.0 - ph) * 44.0)
 				var col2 := Color(Color.WHITE, _alpha * sin(PI * ph))
 				_chevron(c + Vector2(ox, 0), float(dir), 14.0, col2)
+	if rage_tag:
+		_rage_tag(c, r)
+
+
+## Orange "분노" tag at the bracket's upper right (tilted, pulsing gently).
+func _rage_tag(c: Vector2, r: float) -> void:
+	var pul: float = 1.0 + 0.06 * sin(now * 10.0)
+	var tw: float = UiDraw.text_w("분노", 18) + 18.0
+	var at := Vector2(c.x + r * 0.78, c.y - r * 0.92)
+	if at.y - 18.0 < top_guard:  # under the top HUD: beside the bracket, never above the guard
+		at = Vector2(c.x + r * 0.95 + tw * 0.5, maxf(c.y, top_guard + 18.0))
+	var keep: Rect2 = bounds if bounds.has_area() else Rect2(Vector2.ZERO, size)
+	at.x = clampf(at.x, keep.position.x + tw * 0.5 + 6.0, keep.end.x - tw * 0.5 - 6.0)
+	draw_set_transform(at, deg_to_rad(8.0), Vector2(pul, pul))
+	var tr := Rect2(Vector2(-tw * 0.5, -14.0), Vector2(tw, 26.0))
+	draw_style_box(UiDraw.box(Color(INK, 0.85 * _alpha), 9.0), Rect2(tr.position + Vector2(0, 3), tr.size))
+	draw_style_box(UiDraw.box(Color(RAGE_ORANGE, _alpha), 9.0, 3.0, Color(INK, _alpha)), tr)
+	UiDraw.text_c(self, Vector2.ZERO, "분노", 18, Color(INK, _alpha), 0, true, 0.0)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## L-shaped corner bracket of a square of half-diagonal r rotated by `rot`; sg = corner signs (±1, ±1).

@@ -806,6 +806,49 @@ func _f1_hud(tree: SceneTree) -> void:
 	hud.queue_free()
 	inp.queue_free()
 	await tree.process_frame
+	await _integ_fight_fx(tree)
+
+
+## r3 integration (fx request 3): FightFx forwards combo_break / combo_milestone to SkillCues (the comboBreak haptic
+## comes from the event itself, not only the state fallback), and the pre-lock 충격파's rage_horn (via t1_wave) keeps
+## its ring but adds no random shake — the directional kick is the only camera move of the cast.
+func _integ_fight_fx(tree: SceneTree) -> void:
+	var fx := FightFx.new()
+	fx.manual = true
+	tree.root.add_child(fx)
+	fx.setup(RoadGraph.new(), 5)
+	var cam := CameraRig.new()
+	tree.root.add_child(cam)
+	cam.road = RoadGraph.new()
+	fx.camera_rig = cam
+	var st: Dictionary = {"phase": "boss", "player": {"s": 100.0, "x": 1.8}, "villains": []}
+	fx.cues.cue_log.clear()
+	fx.on_event({"type": "combo_milestone", "n": 10, "id": "c10", "target_id": 1, "skill": "c10_burst", "label": "따다닥!"}, st)
+	fx.on_event({"type": "combo_break", "reason": "hit", "n": 7}, st)
+	var haps: PackedStringArray = _haps(fx.cues)
+	_check(haps.count("comboBreak") == 1,
+		"r3 integ FightFx: combo_break{hit, n 7} reaches SkillCues as an event → comboBreak haptic once (haptics %s)" % [haps])
+	var t0: float = float(cam.get(&"_trauma"))
+	var rings0: int = _horn_rings(fx)
+	fx.on_event({"type": "rage_horn", "via": "t1_wave", "range": 24.0}, st)
+	var t_wave: float = float(cam.get(&"_trauma")) - t0
+	var rings1: int = _horn_rings(fx)
+	fx.on_event({"type": "rage_horn", "range": 24.0}, st)
+	var t_horn: float = float(cam.get(&"_trauma")) - t0 - t_wave
+	_check(t_wave < 1e-6 and t_horn > 0.2 and rings1 > rings0,
+		"r3 integ FightFx: rage_horn via t1_wave adds no random shake (+%.2f), a plain rage_horn still shakes (+%.2f); ring parts %d → %d" % [t_wave, t_horn, rings0, rings1])
+	fx.queue_free()
+	cam.queue_free()
+	await tree.process_frame
+
+
+## Rings of the rage_horn size (14 m) in FightFx's ring pool.
+static func _horn_rings(fx: FightFx) -> int:
+	var n: int = 0
+	for rg: Dictionary in fx.get(&"_rings"):
+		if absf(float(rg.get("r1", 0.0)) - 14.0) < 0.01:
+			n += 1
+	return n
 
 
 ## Real GameSim t1 (both traffic paths): the cast reaches cues / FightFx / camera with the t1_wave key — no hornTruck,

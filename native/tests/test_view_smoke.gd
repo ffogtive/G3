@@ -5,6 +5,9 @@ extends RefCounted
 ## Rendering checks (draw budget, ΔE, look) live in tests/shot_jam.gd (needs Xvfb).
 
 const GameScene: PackedScene = preload("res://view/game.tscn")
+const DB := preload("res://core/db.gd")
+## Villain s − front_s over the boss phase (autopilot 1-1..1-10, seed id*1000+7, r3 integration probe): [min, max].
+const BOSS_BAND: Dictionary = {0: [15.0, 69.0], 5: [110.0, 141.0]}
 
 var _fails: int = 0
 
@@ -190,6 +193,26 @@ func _scene(tree: SceneTree) -> void:
 	_check(int(g.world.stats.get("instances", 0)) > 150 and int(g.world.stats.get("chunk_meshes", 0)) <= 48,
 		"world.js layout ported (%d props/segments merged into %d chunk meshes)" % [int(g.world.stats.get("instances", 0)),
 		int(g.world.stats.get("chunk_meshes", 0))])
+	# r3 integration: the villain spends the boss phase at front_s + 15..69 m (1-5: + 110..141; 1-1..1-10 autopilot,
+	# slower with the A1 pace and the plug); an elevated sign plate from ~45 m behind it to 10 m past it covers it (and the
+	# LOCK reticle) from the boss camera. Every stage's layout keeps its plates out of that band.
+	var bad: PackedStringArray = []
+	var stages_db: Variant = DB.load_json("res://data/stages.json")
+	var tables: Dictionary = DB.load_traffic_tables()
+	for id: int in range(1, 11):
+		var sim := GameSim.new()
+		sim.force_fallback = true
+		sim.setup(DB.find_stage(stages_db, id), tables, id * 1000 + 7)
+		var band: Array = BOSS_BAND.get(id, BOSS_BAND[0])
+		var lay: Dictionary = WorldView.sign_layout(sim.start_s, sim.front_s)
+		for k: String in ["gantry", "vms"]:
+			for ss: float in lay[k]:
+				var d: float = ss - sim.front_s
+				if d >= float(band[0]) - 45.0 and d <= float(band[1]) + 10.0:
+					bad.append("1-%d %s %+.0f" % [id, k, d])
+	var signs_shown: Variant = g.world.get(&"sign_s")
+	_check(signs_shown is Array and (signs_shown as Array).size() == 5 and bad.is_empty(),
+		"no overhead sign plate over the boss band on 1-1..1-10 (game signs %s, in band %s)" % [signs_shown, bad])
 	var s0: float = g.player.s
 	var t0: int = Time.get_ticks_usec()
 	g.advance_ticks(480)  # intro 2.05 s, then the jam creep

@@ -148,6 +148,8 @@ func run() -> int:
 	var low: Dictionary = pr2.call(&"record_result", 9, {"cleared": true, "hp_end": 10, "minis_done": 0, "minis_total": 0, "photo": "user://other.jpg", "seed": 5})
 	_check(str(low["photo"]) == pth and low["album_count"] == 2, "lower ★ replay keeps the old photo, count 2")
 
+	_plays()
+
 	if FileAccess.file_exists(pth):
 		DirAccess.remove_absolute(pth)
 	sg.call(&"wipe")
@@ -156,9 +158,54 @@ func run() -> int:
 	return _fails
 
 
-func _store() -> Node:
+## S1 (r3): plays{id} run index — begin_play returns the count before the increment, saves, survives a reload;
+## a save without plays (every device save before r3, web saves) reads 0 everywhere; bad values read 0; next_play
+## steps over seed_skip but never over run 0; reset clears it; app runs get Mulberry32.run_seed(id, n).
+func _plays() -> void:
+	var sg: Node = _store("plays.json")
+	# A device save from before r3 (schema 1, no plays key) must load unchanged and read plays 0.
+	var old: Dictionary = {"schema": 1, "unlocked": 3, "stars": {"1": 3, "2": 1}, "best": {"1": 5000}, "wallet": 77000, "subs": 12,
+		"album": {}, "owned": ["car_porter"], "equip": {"car": "car_porter"}, "settings": {"music": false}}
+	sg.call(&"save_progress", old)
+	var pr: Node = _progress(sg)
+	_check(pr.call(&"plays", 1) == 0 and pr.call(&"next_play", 1) == 0 and pr.call(&"plays", 99) == 0
+		and pr.call(&"unlocked_count") == 3 and pr.wallet == 77000 and pr.call(&"stars_of", 1) == 3 and pr.call(&"equipped", "car") == "car_porter"
+		and pr.call(&"get_setting", "music") == false, "pre-r3 save (no plays): loads unchanged, plays = 0 → first run is n = 0 (old seed)")
+	_check(pr.call(&"begin_play", 1) == 0 and pr.call(&"begin_play", 1) == 1 and pr.call(&"begin_play", 1) == 2 and pr.call(&"plays", 1) == 3
+		and pr.call(&"plays", 2) == 0 and pr.call(&"begin_play", 2) == 0, "begin_play returns 0, 1, 2 (count before ++), per stage")
+	var disk: Dictionary = sg.call(&"load_progress")
+	_check(disk.get("plays") is Dictionary and int(disk["plays"].get("1", -1)) == 3 and int(disk["plays"].get("2", -1)) == 1
+		and int(disk.get("schema", 0)) == 1 and int(disk.get("wallet", 0)) == 77000, "plays saved as {\"1\": 3, \"2\": 1} in the same schema-1 file")
+	var pr2: Node = _progress(sg)
+	_check(pr2.call(&"plays", 1) == 3 and pr2.call(&"next_play", 1) == 3 and pr2.call(&"state") == pr.call(&"state"),
+		"reload from disk: plays{1} = 3, state identical")
+	pr2.set(&"seed_skip", {1: [3, 4, 6], 2: [0]})
+	_check(pr2.call(&"next_play", 1) == 5 and pr2.call(&"begin_play", 1) == 5 and pr2.call(&"begin_play", 1) == 7 and pr2.call(&"plays", 1) == 8,
+		"seed_skip {1: [3, 4, 6]}: next_play 5, begin_play 5 then 7")
+	_check(pr2.call(&"next_play", 3) == 0, "run 0 is never skipped")
+	pr2.set(&"seed_skip", {2: [1]})
+	_check(pr2.call(&"begin_play", 2) == 2, "seed_skip {2: [1]}: run 1 of 1-2 → 2")
+	sg.call(&"save_progress", {"schema": 1, "unlocked": 1, "plays": {"1": -4, "2": "x", "3": 2.0, "4": 5}})
+	var pr3: Node = _progress(sg)
+	_check(pr3.call(&"plays", 1) == 0 and pr3.call(&"plays", 2) == 0 and pr3.call(&"plays", 3) == 2 and pr3.call(&"plays", 4) == 5,
+		"bad plays values (negative, string) read 0; 2.0 (JSON number) reads 2")
+	pr3.call(&"reset")
+	_check(pr3.call(&"plays", 4) == 0 and (pr3.call(&"state") as Dictionary).get("plays") == {}, "reset clears plays")
+	# Web progress (schema 0) migrates with plays 0.
+	sg.call(&"wipe")
+	var web := FileAccess.open(sg.path, FileAccess.WRITE)
+	web.store_string(JSON.stringify({"ver": 3, "unlocked": 2, "stars": {"1": 2}, "best": {}, "wallet": 1000, "subs": 0, "album": {}}))
+	web.close()
+	var pr4: Node = _progress(sg)
+	_check(pr4.call(&"plays", 1) == 0 and pr4.call(&"unlocked_count") == 2 and pr4.call(&"stars_of", 1) == 2, "web save (schema 0) migrates, plays 0")
+	_check(pr4.call(&"begin_play", 1) == 0 and Mulberry32.run_seed(1, 0) == 1007 and Mulberry32.run_seed(1, pr4.call(&"begin_play", 1)) != 1007,
+		"run 0 → seed 1007 (unchanged first run); run 1 → a different seed")
+	sg.call(&"wipe")
+
+
+func _store(file: String = "progress.json") -> Node:
 	var sg: Node = _SaveGame.new()
-	sg.path = DIR.path_join("progress.json")
+	sg.path = DIR.path_join(file)
 	sg.call(&"wipe")
 	_nodes.append(sg)
 	return sg

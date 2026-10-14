@@ -61,7 +61,8 @@ const MERGE_PUNCH: float = 0.15
 const PER_TARGET: int = 2
 const FADE_S: float = 0.1
 const POP_MARGIN: float = 8.0
-const PRIO_OF_PREFIX: Dictionary = {"k": 5, "s": 4, "x": 4, "p": 3, "c": 2, "t": 1, "i": 1, "m": 1}
+## Merge-key prefix → priority (k kill · s skill sum · p 펑크 · c combo / x status (경직) · t tack stack / i 막힘 / m mini).
+const PRIO_OF_PREFIX: Dictionary = {"k": 5, "s": 4, "p": 3, "c": 2, "x": 2, "t": 1, "i": 1, "m": 1}
 
 var camera: Camera3D
 var font_body: Font
@@ -117,19 +118,21 @@ func show_bubble(key: String, text: String, kind: String, dur: float, pos_fn: Ca
 	queue_redraw()
 
 
-## web hud.popAt(pos, text, kind) + r3 U4 merge / cap (see the header).
+## web hud.popAt(pos, text, kind) + r3 U4 merge / cap (see the header). absolute: `value` (and `text`) already hold the
+## running total (a skill's summed number), so a merge replaces instead of adding.
 func pop(pos: Vector3, text: String, kind: String = "warn", merge_key: String = "", value: float = 0.0, target: String = "",
-		prio: int = -1) -> void:
-	_add_pop({"pos": pos}, text, kind, merge_key, value, target, prio)
+		prio: int = -1, absolute: bool = false) -> void:
+	_add_pop({"pos": pos}, text, kind, merge_key, value, target, prio, absolute)
 
 
 ## A pop anchored on the screen (canvas units) instead of a world point; rises POP_RISE_PX.
 func pop_screen(sp: Vector2, text: String, kind: String = "warn", merge_key: String = "", value: float = 0.0, target: String = "",
-		prio: int = -1) -> void:
-	_add_pop({"sp": sp}, text, kind, merge_key, value, target, prio)
+		prio: int = -1, absolute: bool = false) -> void:
+	_add_pop({"sp": sp}, text, kind, merge_key, value, target, prio, absolute)
 
 
-func _add_pop(anchor: Dictionary, text: String, kind: String, mk: String, value: float, target: String, prio: int) -> void:
+func _add_pop(anchor: Dictionary, text: String, kind: String, mk: String, value: float, target: String, prio: int,
+		absolute: bool = false) -> void:
 	if target.is_empty() and not mk.is_empty():
 		target = Bubbles.target_of(mk)
 	if prio < 0:
@@ -140,11 +143,13 @@ func _add_pop(anchor: Dictionary, text: String, kind: String, mk: String, value:
 			var p: Dictionary = _pops[i]
 			if str(p["key"]) != mk or float(p["fade_at"]) >= 0.0 or now - float(p["upd"]) > MERGE_S:
 				continue
-			var total: float = float(p["value"]) + value
+			var total: float = value if absolute else float(p["value"]) + value
 			p["value"] = total
 			p["win"] = bool(p["win"]) or win
-			var mt: String = Bubbles.merged_text(text, value, total)
+			var mt: String = text if absolute else Bubbles.merged_text(text, value, total)
 			p["text"] = mt + "!" if bool(p["win"]) and mt.begins_with("-") and not mt.ends_with("!") else mt
+			if int(POP_SIZES.get(kind, POP_SIZE)) > int(POP_SIZES.get(str(p["kind"]), POP_SIZE)):
+				p["kind"] = kind  # a window hit joining a tack stack makes it a crit-sized number
 			p["upd"] = now
 			p["punch_t"] = now
 			var life: float = _life(str(p["kind"]))
@@ -189,26 +194,51 @@ static func merged_text(text: String, value: float, total: float) -> String:
 	return text.substr(0, at) + str(roundi(total)) + text.substr(at + v.length())
 
 
-## ≤ PER_TARGET live pops of one target: the lowest priority (oldest on a tie) fades out; false = the new one is the
-## lowest and is dropped.
+## ≤ PER_TARGET live pops of one target: the lowest priority (oldest on a tie, the new pop last) fades out; false = the
+## new one is the lowest and is dropped.
 func _cap(target: String, np: Dictionary) -> bool:
+	var live: Array[Dictionary] = _live_of(target)
+	while live.size() + 1 > PER_TARGET:
+		var li: int = Bubbles._lowest(live, np)
+		if li < 0:
+			return false
+		(live[li] as Dictionary)["fade_at"] = now
+		live.remove_at(li)
+	return true
+
+
+func _live_of(target: String) -> Array[Dictionary]:
 	var live: Array[Dictionary] = []
 	for p: Dictionary in _pops:
 		if str(p["target"]) == target and float(p["fade_at"]) < 0.0:
 			live.append(p)
-	while live.size() + 1 > PER_TARGET:
-		var li: int = -1  # -1 = the new pop
-		var low: Dictionary = np
-		for i: int in live.size():
-			var p: Dictionary = live[i]
-			if int(p["prio"]) < int(low["prio"]) or (int(p["prio"]) == int(low["prio"]) and float(p["born"]) <= float(low["born"])):
-				low = p
-				li = i
-		if li < 0:
-			return false
-		low["fade_at"] = now
+	return live
+
+
+## Index in `live` of the lowest-priority pop (older first on a tie; `extra`, the candidate, counts as the newest);
+## -1 = `extra` itself.
+static func _lowest(live: Array[Dictionary], extra: Dictionary = {}) -> int:
+	var li: int = -1
+	var low: Dictionary = {}
+	for i: int in live.size():
+		var p: Dictionary = live[i]
+		if low.is_empty() or int(p["prio"]) < int(low["prio"]) or (int(p["prio"]) == int(low["prio"]) and float(p["born"]) < float(low["born"])):
+			low = p
+			li = i
+	if not extra.is_empty() and (low.is_empty() or int(extra["prio"]) < int(low["prio"])):
+		return -1
+	return li
+
+
+## Keeps at most n live pops of one target (the highest priority, newest on a tie); the rest fade out in FADE_S
+## (HUD kill: the finishing number stays, the 펑크 / tack stack under it go).
+func limit_target(target: String, n: int) -> void:
+	var live: Array[Dictionary] = _live_of(target)
+	while live.size() > maxi(0, n):
+		var li: int = Bubbles._lowest(live)
+		(live[li] as Dictionary)["fade_at"] = now
 		live.remove_at(li)
-	return true
+	queue_redraw()
 
 
 ## Drops the live pops older than max_age (0 = all) except those of except_kind (HUD "kill": the stale "-40" tack

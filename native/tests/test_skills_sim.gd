@@ -46,6 +46,7 @@ func run() -> int:
 		_combo_break(fb)
 		_combo_duo(fb)
 		_combo_floor(fb)
+		_combo_kill(fb)
 		_combo_det(fb)
 		_frac(fb)
 		_prelock(fb)
@@ -674,6 +675,44 @@ func _combo_floor(fb: bool) -> void:
 		"before minKillT the c5 / c10 hits keep HP ≥ 1 (hp %.2f)" % float(v["hp"]))
 
 
+## The milestone tack is the killing tack: no combo cast over the finisher (last villain), and in the 1-3 duo the burst
+## goes to the survivor (milestone target_id = the alive villain, every hit on it).
+func _combo_kill(fb: bool) -> void:
+	var sim: GameSim = _fight(fb)
+	_quiet(sim)
+	sim.boss_clock = 10.0
+	var v: Dictionary = sim.boss.villains[0]
+	var ev: Array[Dictionary] = []
+	_tacks(sim, 0, 4, 0.1, ev)
+	v["hp"] = 0.5  # the 5th tack (×5 = c5) kills the only villain
+	_tacks(sim, 0, 1, 0.3, ev)
+	var cs: Array[Dictionary] = []
+	for e: Dictionary in _of(ev, "skill_start"):
+		if str(e.get("chan", "")) == "combo":
+			cs.append(e)
+	_check(not bool(v["alive"]) and cs.is_empty() and _of(ev, "combo_milestone").is_empty(),
+		"the ×5 tack kills the last villain → no combo cast over the finisher (starts %d, milestones %d)" % [cs.size(),
+		_of(ev, "combo_milestone").size()])
+	var duo: GameSim = _fight(fb, 3)
+	_quiet(duo)
+	duo.boss_clock = 10.0
+	var dev: Array[Dictionary] = []
+	_tacks(duo, 0, 9, 0.1, dev)
+	duo.boss.villains[0]["hp"] = 0.5  # the ×10 tack kills villain 0, villain 1 lives
+	_land(duo, 0, dev)
+	_run(duo, 0.4, dev)
+	var m: Array[Dictionary] = []
+	for e: Dictionary in _of(dev, "combo_milestone"):
+		if int(e["n"]) == 10:
+			m.append(e)
+	var ids: Dictionary = {}
+	for h: Dictionary in _combo_hits(dev, "c10_burst"):
+		ids[int(h["target_id"])] = true
+	_check(m.size() == 1 and int(m[0]["target_id"]) == 1 and ids.keys() == [1] and bool(duo.boss.villains[1]["alive"]),
+		"1-3 duo: the ×10 tack kills villain 0 → milestone + burst on villain 1 (milestone %s, hits on %s)" % [
+		str(m.map(func(e: Dictionary) -> int: return int(e["target_id"]))), str(ids.keys())])
+
+
 func _combo_det(fb: bool) -> String:
 	var hashes: Array[String] = []
 	var c20: Array[int] = []
@@ -756,7 +795,13 @@ func _prelock(fb: bool) -> void:
 	sim.step(Cfg.TICK)
 	ev.append_array(sim.events())
 	var rage_after_cast: float = sim.rage
+	var inv_after_cast: float = sim.player.invuln
+	var hold_after_cast: float = sim.boss.hold
 	_until(sim, func() -> bool: return not _of(ev, "skill_hit", "t1_wave").is_empty(), 0.8, ev)
+	# before the lock the player's body keeps the jam rules (a bump still kicks back: test_neck 1-9's rage verb timing),
+	# while boss.hold keeps a new throw from starting during the cast
+	_check(inv_after_cast < 1e-6 and hold_after_cast > 0.3, "pre-lock wave: no cast invuln (jam bump rules, invuln %.2f), boss hold %.2f s" % [
+		inv_after_cast, hold_after_cast])
 	var ss: Array[Dictionary] = _of(ev, "skill_start", "t1_wave")
 	var sh: Array[Dictionary] = _of(ev, "skill_hit", "t1_wave")
 	var rh: Array[Dictionary] = _of(ev, "rage_horn")

@@ -12,6 +12,10 @@ extends Node
 ## Settings are applied here
 ## (Music/SFX bus mute, Haptics.enabled, Engine.max_fps) and passed to the game as loadout.left_hand.
 ## Progress: /root/Progress when registered, else ScrProgressStub (screens/meta.gd).
+## S1 (r3): every run start (card START, pause 다시하기) takes a run index n = Progress.begin_play(id) and gives the game
+## seed = Mulberry32.run_seed(id, n): the first run of a stage (n = 0) is the old fixed id*1000+7, later runs differ.
+## The game held behind the card is built with Progress.next_play(id), the n that START then returns. Tow retries
+## inside a run keep the seed (GameSim); the game's own --seed=N CLI still wins (view/game.gd _ready runs after set).
 ## CLI (after --): --game=fake|real  --stage=N (open that card)  --safe-pt=TOP,BOTTOM  --fake-auto=S
 
 signal start_stage(id: int, loadout: Dictionary)
@@ -52,6 +56,10 @@ var _boot_stage: int = -1
 var hold_under_card: bool = true
 var _held: bool = false
 var _pause_settings: ScrSettings
+## S1: run index and seed of the current (or held) game; -1 before the first start.
+var run_n: int = -1
+var run_seed: int = -1
+var _held_n: int = -1
 
 
 func _ready() -> void:
@@ -200,15 +208,18 @@ func _start_game(id: int) -> void:
 	card = null
 	stage_id = id
 	var lo: Dictionary = _loadout()
+	var n: int = _begin_play(id)
 	start_stage.emit(id, lo)
-	if game != null and _held and int(game.get(&"stage_id")) == id:
+	if game != null and _held and int(game.get(&"stage_id")) == id and _held_n == n:
 		_held = false
 		game.set(&"intro_hold", false)
 		if game.has_method(&"begin"):
 			game.call(&"begin")
 	else:
 		_free_game()
-		_attach(_instance_game(id, lo))
+		_attach(_instance_game(id, lo, n))
+	run_n = n
+	run_seed = Mulberry32.run_seed(id, n)
 	backdrop.visible = false
 	_set_state(State.GAME)
 
@@ -222,14 +233,24 @@ func _loadout() -> Dictionary:
 	return lo
 
 
-## GAME_SCENE instance with stage_id / loadout / hosted set before _ready (build), not yet in the tree.
-func _instance_game(id: int, lo: Dictionary) -> Node:
+## S1: Progress.begin_play(id) (the run index before its increment); the meta-less stub counts runs too.
+func _begin_play(id: int) -> int:
+	return meta.begin_play(id)
+
+
+## S1: the index the next _begin_play(id) returns, without counting a run.
+func _next_play(id: int) -> int:
+	return meta.next_play(id)
+
+
+## GAME_SCENE instance with stage_id / loadout / hosted / seed (run n) set before _ready (build), not yet in the tree.
+func _instance_game(id: int, lo: Dictionary, n: int = 0) -> Node:
 	if not ResourceLoader.exists(game_scene_path):
 		game_scene_path = REAL_GAME
 	var ps: PackedScene = load(game_scene_path) as PackedScene
 	var g: Node = ps.instantiate()
 	g.name = "Game"
-	for kv: Array in [[&"stage_id", id], [&"loadout", lo], [&"hosted", true]]:
+	for kv: Array in [[&"stage_id", id], [&"loadout", lo], [&"hosted", true], [&"seed", Mulberry32.run_seed(id, n)]]:
 		if kv[0] in g:
 			g.set(kv[0], kv[1])
 	if &"auto_s" in g:   # dev fake game only (no class reference: screens/dev_fake_game.* may be left out of the export)
@@ -256,15 +277,18 @@ func _attach(g: Node) -> void:
 ## G2: load the game behind the card with its intro held (only when the scene has `intro_hold`).
 func _hold_game(id: int) -> void:
 	_held = false
+	_held_n = -1
 	if not hold_under_card:
 		return
-	var g: Node = _instance_game(id, _loadout())
+	var n: int = _next_play(id)
+	var g: Node = _instance_game(id, _loadout(), n)
 	if not (&"intro_hold" in g):
 		g.free()
 		return
 	g.set(&"intro_hold", true)
 	_attach(g)
 	_held = true
+	_held_n = n
 
 
 func _free_game() -> void:
@@ -272,6 +296,7 @@ func _free_game() -> void:
 		_free(game)
 	game = null
 	_held = false
+	_held_n = -1
 
 
 ## The contract result from what the game sent. GameSim's state().result has no `cleared` (it only exists in phase

@@ -6,6 +6,12 @@ extends SceneTree
 ##       [--ambient=sky|hemi|flat] [--tonemap=linear|agx|filmic] [--no-shadows] [--no-glow] [--ao=0..1] [--tag=name]
 ##       [--stub] [--honk-at=seconds] [--demo-signals] [--player-s=m] [--debug-panel] [--shadow-q=0..5 --shadow-blur= --bias= --nbias= --glow-int= --glow-levels=a,b,..]
 ##       [--wave-strip=/abs.png [--wave-lane=2 --wave-ahead=50 --wave-strength=2.5 --wave-frames=5 --wave-dt=1.0]]
+##       [--neck-shots [--fallback]]
+## r3 U3 --neck-shots: the bottleneck plug forced on (GameSim options.neck), autopilot "naive" (it never plays the verb):
+##   neck_1-1 / neck_1-3 / neck_1-10.png = the bottleneck frame (plug + verb chip + a plug bubble), then one frame mid-exit
+##   each: exit_cutin (1-1 verb), exit_zip (1-3 verb), exit_tow (1-10 verb), exit_fly (1-1 rage). RESULT lines carry the
+##   plug pose vs the sim (view s error), whether it is on screen, the chip text and the bubbles; exit 1 when a frame is
+##   missing its plug / chip / bubble, the plug is off screen or the view s is > 0.1 m off.
 ## Renders game.tscn (manual ticks: --ff-to seconds of 120 Hz sim, camera smoothed with the same fixed dt) into a
 ## SubViewport of the phone-equivalent size (1170×2532 / 2), saves
 ##   <out>/native_jam<tag>.png (3D only), <out>/native_jam_ui<tag>.png (HUD + N5 icons),
@@ -76,6 +82,9 @@ func _main() -> void:
 	_vp.use_debanding = true
 	_vp.audio_listener_enable_3d = false
 	root.add_child(_vp)
+	if _opts.has("neck-shots"):
+		quit(await _neck_shots())
+		return
 	_game = GameScene.instantiate() as Game
 	_game.manual = true
 	_game.seed = _seed
@@ -182,6 +191,106 @@ func _main() -> void:
 		_side_by_side(web, img3d).save_png(_out.path_join("sbs_jam3d%s.png" % _tag))
 	print("RESULT ok=%s" % ok)
 	quit(0 if ok else 1)
+
+
+# ───────────────────────────── r3 U3 bottleneck plug shots
+
+func _neck_game(stage: int) -> Game:
+	var g: Game = GameScene.instantiate() as Game
+	g.manual = true
+	g.with_debug_panel = false
+	g.autoplay = true
+	g.stage_id = stage
+	g.traffic_mode = "fallback" if _opts.has("fallback") else "auto"
+	g.sim_options = {"neck": true}
+	_vp.add_child(g)
+	if _opts.has("safe-pt"):
+		var sp: PackedStringArray = str(_opts["safe-pt"]).split(",")
+		g.hud.debug_safe_pt = Vector2(sp[0].to_float(), sp[1].to_float() if sp.size() > 1 else 0.0)
+		g.hud.apply_safe_area()
+	g.sim.autopilot.neck_mode = "naive"
+	return g
+
+
+## Runs g until the bottleneck is active and its verb chip is up; false when it never comes.
+func _to_neck(g: Game) -> bool:
+	var ticks: int = 0
+	while ticks < 120 * 70 and not g.sim.neck.is_active(g.sim):
+		g.advance_ticks(12)
+		ticks += 12
+	if not g.sim.neck.is_active(g.sim):
+		return false
+	while ticks < 120 * 80 and str(g.st["neck"].get("chip", "")) == "" and g.sim.neck.is_active(g.sim):
+		g.advance_ticks(6)
+		ticks += 6
+	g.advance_ticks(24)  # the chip has faded in
+	return g.sim.neck.is_active(g.sim)
+
+
+func _neck_frame(g: Game, file: String, need_chip: bool) -> bool:
+	for i: int in 3:
+		g.render_step(0.0)
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var img: Image = _vp.get_texture().get_image()
+	img.save_png(_out.path_join(file))
+	var n: Dictionary = g.st.get("neck", {})
+	var on: bool = g.neck_view != null and g.neck_view.visible
+	var sp := Vector2(-1, -1)
+	var vis: bool = false
+	if on:
+		var wp: Vector3 = g.neck_view.global_position + Vector3(0, 0.8, 0)
+		if not g.camera.is_position_behind(wp):
+			sp = g.camera.unproject_position(wp)
+			vis = Rect2(Vector2.ZERO, g.hud.root.size).grow(-4.0).has_point(sp)
+	var err: float = absf(float(g.neck_pose.get("s", INF)) - float(n.get("s", NAN))) if on else INF
+	var chip: String = g.hud.neck_chip_text()
+	var bub: PackedStringArray = g.bubbles.texts()
+	var plug_b: bool = g.bubbles._items.has("h-1000")
+	var ok: bool = on and vis and err <= 0.1 and (not need_chip or (chip != "" and g.hud._neck_chip.visible and plug_b))
+	print("RESULT neck_shot %s stage 1-%d phase=%s neck_phase=%s exit=%s t=%.2f plug=%s on_screen=%s at %s view_s_err=%.4f role=%s car=%s lamps=%d y=%.2f yaw=%.2f roll=%.2f scale=%.2f chip='%s' bubbles=[%s] plug_bubble=%s ok=%s" % [
+		file, g.stage_id, g.phase, n.get("phase", ""), n.get("exit", ""), float(g.neck_pose.get("t", 0.0)), on, vis, sp, err,
+		g.neck_pose.get("role", ""), g.neck_pose.get("car", ""), int(g.neck_pose.get("lamps", 0)), float(g.neck_pose.get("y", 0.0)),
+		float(g.neck_pose.get("yaw", 0.0)), float(g.neck_pose.get("roll", 0.0)), float(g.neck_pose.get("scale", 1.0)), chip,
+		", ".join(bub), plug_b, ok])
+	return ok
+
+
+func _neck_shots() -> int:
+	var bad: int = 0
+	var exits: Dictionary = {1: "cutin", 3: "zip", 10: "tow"}
+	for stage: int in [1, 3, 10]:
+		var g: Game = _neck_game(stage)
+		if not await _to_neck(g):
+			print("FAIL shot_jam: 1-%d bottleneck never active (phase %s)" % [stage, g.phase])
+			bad += 1
+			g.queue_free()
+			await process_frame
+			continue
+		g.sim.neck.say(g.sim, "block", "taunt", 2.0)  # a plug line on screen with the chip (naive never honks it open)
+		g.advance_ticks(12)
+		if not await _neck_frame(g, "neck_1-%d.png" % stage, true):
+			bad += 1
+		# its own exit, one frame mid-way
+		g.sim.neck.pc["exit"] = str(exits[stage])
+		g.sim.neck.open(g.sim, "verb")
+		g.advance_ticks(roundi(120.0 * 1.2 * 0.62))
+		if not await _neck_frame(g, "exit_%s.png" % exits[stage], false):
+			bad += 1
+		g.queue_free()
+		await process_frame
+	var gf: Game = _neck_game(1)
+	if await _to_neck(gf):
+		gf.sim.neck.open(gf.sim, "rage")
+		gf.advance_ticks(roundi(120.0 * 1.2 * 0.4))
+		if not await _neck_frame(gf, "exit_fly.png", false):
+			bad += 1
+	else:
+		bad += 1
+	gf.queue_free()
+	await process_frame
+	print("RESULT neck_shots ok=%s (%d bad)" % [bad == 0, bad])
+	return 0 if bad == 0 else 1
 
 
 func _traffic_source() -> String:

@@ -37,7 +37,26 @@ func run() -> int:
 		_check(types.has(t), "event type '%s' raised (%d)" % [t, int(types.get(t, 0))])
 	_shape(stage, tables)
 	_hooks(tables)
+	_neck_default(tables, types)
 	return _fails
+
+
+## r3 integration (main_overrides neck_enabled): the 병목 plug is on by default — data/neck.json default.enabled, no
+## tables.options.neck — on every stage with a valve (1-5 has none), and the plain autopilot 1-1 run opens it.
+func _neck_default(tables: Dictionary, types: Dictionary) -> void:
+	var stages: Variant = _DB.load_json("res://data/stages.json")
+	var on: Array[int] = []
+	for id: int in range(1, 11):
+		var sim := GameSim.new()
+		sim.force_fallback = true
+		sim.setup(_DB.find_stage(stages, id), tables, id * 1000 + 7)
+		if sim.neck.has_plug_stage():
+			on.append(id)
+	_check(on == [1, 2, 3, 4, 6, 7, 8, 9, 10] and not (tables.get("options", {}) as Dictionary).has("neck"),
+		"r3 integ: neck.json default.enabled → plug stages %s (all but 1-5) with no options.neck" % [on])
+	_check(int(types.get("neck_active", 0)) >= 1 and int(types.get("neck_open", 0)) == 1,
+		"r3 integ: the default autopilot 1-1 run meets the plug (neck_active %d) and opens it once (neck_open %d)" % [
+		int(types.get("neck_active", 0)), int(types.get("neck_open", 0))])
 
 
 func _play(stage: Dictionary, tables: Dictionary, seed: int) -> Dictionary:

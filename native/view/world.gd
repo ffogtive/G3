@@ -32,6 +32,8 @@ var sky_mat: ShaderMaterial
 var ground_mat: ShaderMaterial
 var ambient_mode: int = Ambient.SKY
 var stats: Dictionary = {}
+## s of every overhead sign plate (gantry signs + VMS), for the boss-band check (tests).
+var sign_s: Array[float] = []
 var _hemi_sky_lin := Vector3.ZERO
 var _hemi_ground_lin := Vector3.ZERO
 var _sun_dir := Vector3(-0.4, 0.8, 0.3).normalized()
@@ -293,11 +295,21 @@ func _layout(stage: Dictionary, s_min: float, s_max: float, start_s: float, fron
 		_prop("cloud", i * 17 + id, x, s, 0.0, y)
 	# world.js:187-193: two overhead gantry signs + three VMS. Frames and blank plates now (they anchor the
 	# composition and cast the shadow band across the lanes); the plate text is M1c (SubViewport + Label → texture).
-	_overhead("res://assets/props/gantry_sign_2l.res", 0.0, start_s + 46.0)
-	_overhead("res://assets/props/gantry_sign_2l.res", 0.0, front_s + 150.0)
-	for vs: float in [start_s + 105.0, front_s + 25.0, front_s + 260.0]:
+	var signs: Dictionary = sign_layout(start_s, front_s)
+	for gs: float in signs["gantry"]:
+		_overhead("res://assets/props/gantry_sign_2l.res", 0.0, gs)
+	for vs: float in signs["vms"]:
 		_add("res://assets/props/vms.res", 0.0, vs, 0.0, true, "vms")
+		sign_s.append(vs)
 	_prop("cctv", 0, 0.0, start_s + (front_s - start_s) * 0.55, 0.0)
+
+
+## s of the overhead sign plates: {gantry: [..], vms: [..]}. r3: the web's middle VMS at front_s + 25 and the second
+## gantry at + 150 sat over the boss band — the villain spends the boss phase at front_s + 15..69 m (1-5: + 110..141 m;
+## slower with the A1 pace and the 병목 plug) and an elevated plate up to ~45 m behind it (between the camera and the
+## villain) covered it and its LOCK reticle. Gantry + 160, VMS + 205 / + 260 clear every stage's band.
+static func sign_layout(start_s: float, front_s: float) -> Dictionary:
+	return {"gantry": [start_s + 46.0, front_s + 160.0], "vms": [start_s + 105.0, front_s + 205.0, front_s + 260.0]}
 
 
 func _prop(kind: String, seed: int, x: float, s: float, rot_y: float, y: float = 0.0) -> void:
@@ -367,6 +379,7 @@ func _overhead(path: String, x: float, s: float) -> void:
 		lbl.font = load(SIGN_FONT) as Font
 	mi.add_child(lbl)
 	overheads.append({"node": mi, "s": s, "f": 1.0, "frame_fade": frame_fade, "plate_fade": plate_fade, "label": lbl})
+	sign_s.append(s)
 	stats["gantry"] = int(stats.get("gantry", 0)) + 1
 
 

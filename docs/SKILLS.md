@@ -4,6 +4,7 @@
 - ❓ **H-S1 쾌감 = 예고 → 임팩트 → 해소가 같은 틱에 맞물릴 때.** 지금 분노 폭탄은 임팩트 층이 얇고(폭발 1개 + `superHit`, 히트스톱 0) 단계도 하나라 "큰 압정"처럼 느껴진다. 분노 5칸을 **1·3·5칸 사다리**로 나누고, 단계가 오를수록 히트스톱·슬로모·카메라·파티클·SFX·햅틱을 키운다.
 - ❓ **H-S2 분노 버튼은 '탭 = 지금 쓸 수 있는 최고 단계'.** ~~홀드 차징~~ → ❌ 기각: 약점 창이 1.5 s뿐이고 오른손 엄지는 압정을 누르고 있다. 아껴 쓰는 선택은 "누르지 않고 기다리기"로 충분하다.
 - ❓ **H-S3 차고 '날아가는 것'(`mv_jump`, `mv_drone`)을 액티브 버튼 2개로 바꾸면 '사서 쓰는 손맛'이 생긴다**(SHOP.md H19 루프).
+- ❓ **H-S4 (r3, 피드백 2 "압정 콤보 5, 10개 등 특정 구간마다 큰 스킬")** 압정을 끊기지 않고 맞힌 수가 5·10·15·20(20 주기)에 닿으면 큰 스킬이 저절로 나가야 "압정만으로는 너무 오래 걸린다"가 풀린다. ✅ 시뮬: 1-1~1-4 압정+콤보 원흉전이 17.5–18.0 s다(전에는 압정만 1-2 41 s, 1-4 60 s). ❓ 손맛과 '1초마다 터지는 소음'인지는 기기에서 본다(§0-2).
 - ✅ **코드 확인: iPhone에서 도는 GDScript 폴백(`_Creep`)에는 `rage_horn`·`mini_target`·`mini_hit`·`cars_behind_front`·`drop_walls`가 없다**(빈 값 또는 no-op, `sim/traffic_bridge.gd:442-481`). 그 결과는 두 가지다.
   - 정체에서 압정을 누르면 맞힐 잔챙이가 없다. `game_sim.gd`의 `fire_edge and mini_id == 0 → want_honk` 때문에 늘 경적이 된다(피드백 3의 원인).
   - 분노 경적은 부스트만 낸다.
@@ -12,6 +13,54 @@
 관련 문서: DESIGN_REVIEW_2026-10-13 P0#7(큰 피해는 시그니처 창에서), #14(톤 안전장치) · NATIVE_PORT N2/N4, 햅틱 맵(2절) · SHOP.md · V04_SPEC(퍼펙트 회피 +0.04) · 웹 오라클 `game/js/main.js` rageHorn/onWeaponHit/kill, `weapons.js` fireMissile, `boss.js` _updateFinish.
 
 ---
+
+## 0-2. r3 압정 콤보 · 범용 빈틈 창 · 분노 필중 (3차 기기 피드백 2, 값의 기준은 `native/data/src/config.json` `skills.combo`)
+
+가설: ✅ 피드백 2의 원인은 세 가지였다. ① 압정을 쌓아도 보상이 없다. ② 1-2~1-10에는 약점 창이 아예 없어서(`BEHAVIORS = {occupy}`뿐) 압정 1과 분노 dmgOut만 들어간다. ③ 분노 t1은 잠금 전에는 갓길 경적이라 원흉 피해가 0이고, 잠금 뒤에는 30 m·±1차로라 헛방이 난다. C++ 변경 없이 GDScript(`skills_sim.gd`, `behaviors/generic_window.gd`)만으로 풀고, 폴백과 C++가 같은 숫자를 낸다.
+~~기본은 ×10 따다닥 / ×20 타이어 저격, 5·15는 신호만~~ → 사용자 원문 "5, 10개 등"을 따라 5도 실제 스킬이다(main_overrides). 5발/s라 ×5마다 큰 스킬을 주면 1초마다 터지므로, c5는 가벼운 2타로 둔다.
+
+**콤보 규칙** (`SkillsSim` 채널 `combo`: busy·무적·boss hold에 관여하지 않는다)
+- +1: 보스 단계(잠금 전후 모두)에서 살아 있는 원흉에 맞은 압정 1발(`GameSim._on_landing` → `skills.on_tack_hit`). 스킬·콤보 타격과 잔챙이는 세지도 끊지도 않는다.
+- 끊김: 집계된 적중 없이 sim 1.5 s(`timeout`, 근거: 적중 간격 p90 0.21 s, 엄지를 뗐을 때 0.56 s, 차로 회피 최대 1.79 s) → `combo_break{reason:"timeout"}`(n ≥ 5일 때만 이벤트). 피해가 들어간 피격(`on_player_hit`) → `combo_break{reason:"hit"}`(항상).
+- 마일스톤 = `milestones[n mod cycle]`(0이면 cycle). 대상은 그 압정이 맞은 원흉(1-3 듀오). 마일스톤 압정이 마지막 원흉의 처치타면 발동하지 않는다(피니시 위에 겹치지 않게). 듀오면 살아 있는 쪽으로 간다.
+
+| n | id | 이름 / 라벨 | 타격 (마일스톤 압정 뒤 sim s) | 한 타 피해 (max HP, 창 밖 / 창 안) | 그 밖 | 점수 |
+|---|---|---|---|---|---|---|
+| 5, 15 | `c5_double` | 따닥 / `따닥!` | 0.12, 0.18 | 0.5 % / 1.2 % | 압정음 2개, 카메라·플래시 없음, 햅틱 `combo5` | +50 |
+| 10 | `c10_burst` | 따다닥 / `따다닥!` | 0.15, 0.21, 0.27 | 1.0 % / 2.5 % | 금색 압정 3개가 지붕에 박힌다, tack 피치 1.1/1.25/1.4 + crit, `combo10` | +100 |
+| 20 | `c20_snipe` | 타이어 저격 / `타이어 저격!` | 0.25 | 5 % / 9 % | 펑크 1 + 공격 취소 + 경직 0.8 s(stunCap·stunImmune 준수 = 약점 창), 히트스톱 0.04, 2.2배 압정이 앞바퀴에, whoosh → pop + crit + explosion, `combo20` | +300 |
+
+- 20 주기로 반복한다(25 = c5, 30 = c10, 40 = c20 …). `skills.minKillT` 하한을 지킨다.
+- 이벤트: `combo_milestone{n, id, target_id, skill, label, name}`, `skill_start/skill_hit/skill_end{chan:"combo", id, key, n, combo}`, `combo_break{reason, n}`. `FightFx.SKILL_EVENTS`가 `combo_break`·`combo_milestone`을 SkillCues로 넘긴다(r3 통합, 끊김 햅틱 `comboBreak`는 이벤트로 1회, state 하락은 보조 경로).
+- `state().skills.combo` = `{n, left, next_n, next_id, next_name, best, timeout, cycle, marks [5,10,15,20]}`. HUD 콤보 배지(우상단): `×N`, 20칸 진행바, 5·10·15·20 눈금, 다음 보상 이름 `→10 따다닥`, 타임아웃 선. 마일스톤 라벨은 배지 아래에 팝으로 뜨고(중앙 배너 아님), `hit` 끊김은 회색으로 흔들리며 `콤보 끊김`, `timeout`은 0.45 s 페이드. 보스 단계 밖이나 n = 0이면 숨긴다.
+- `stats.combo`(점수 배율)와 `max_combo`(별점)의 의미는 바뀌지 않았다.
+
+**범용 빈틈 창** (`sim/behaviors/generic_window.gd`, `config.boss.genericWindow {on, period 4.5, dur 1.2, first = period − dur}`)
+- 시그니처 모듈이 아직 없는 판(지금 1-2~1-10)에 GameSim이 붙인다. 잠금 뒤 BossSim 시간으로 4.5 s마다 1.2 s 동안: `vulnerable` 1.5(압정 ×vulnMul), 공격 정지, 예고 취소, 원흉 말풍선 `헉헉… (빈틈!)` + stun 이벤트(`약점!` 레티클). 힌트 `발사 꾹 · 빈틈 노려`. 진짜 시그니처가 이식되면 저절로 빠진다.
+
+**HP 비율 피해 · 배율**
+- t1 `dmgInFrac` 0.05 / `dmgOutFrac` 0.04, t3 0.18 / 0.14(4타 분할), t5는 그대로. 판마다 t3 비율이 같고(1-1·1-4 창 밖 14.00 %), 칸당 피해가 t3 ≥ t1이다.
+- `skills.hpMul` 1.45 → 1.7. `stages.json` `skillHpMul` 1-1 1.8, 1-2 1.5, 1-3 0.75(듀오). 1-1·1-2는 배율 없이 pilot 8.6/9.2 s라 10 s 게이트에 못 미쳐서 측정으로 정했다.
+
+**분노 필중 (C3)**
+- `mode()`는 보스 단계에서 원흉이 살아 있으면 잠금 전에도 `fight`다. 잠금 전 사다리는 `preLockLadder [1]`(t1만, t3·t5는 잠금 뒤).
+- t1 대상 = `|ds| ≤ reach 60 m`인 살아 있는 원흉 전원, `laneRange 99`(차로 무관). 지연 = 0.12 + max(0, |ds| − 15) × 0.00833 s(20 m 0.162, 55 m 0.453, 60 m 0.495).
+- 잠금 전 시전이면 같은 틱에 `_rage_horn_effect(2.2)`(갓길 24 m 청소 + 부스트, `via:"t1_wave"`)도 나가고 경직은 `stunPreLock` 0.4 s다. 잠금 전 시전은 `boss.hold`만 걸고 플레이어 무적은 주지 않는다(정체 범퍼 규칙 유지).
+- 60 m 밖이면 `chase` 0.8 s 동안 부스트로 다가간 뒤 다시 본다. 그래도 밖이면 분노를 돌려주고 `skill_denied{reason:"far", refunded:true}` + `너무 멀다!`. 비활성 표시는 하지 않는다.
+- 분노 t1은 병목 마개를 즉시 날린다(`neck.open("rage")`, exit fly, 보너스는 1-9 정답 동사일 때만).
+- 연출(C4·F1): 전투 t1은 키 `t1_wave` `충격파!!`(sk_wave → superHit → explosion, hornTruck 없음, 원흉 쪽 카메라 킥 0.6 m / 0.12 s). 잠금 전 충격파의 `rage_horn`은 경적음(hornTruck·superHit)과 무작위 흔들림 없이 링만 낸다(`game.gd`, `fight_fx.gd`). 정체 t1_horn은 `갓길 청소!!` + 경적음 그대로. 분노 버튼 색 #e0245e(경적 #f08a1a와 hue 48° 차), 얼굴은 `state.skills.face`(청소 / 충격파 / 폭격 / 참교육).
+
+**측정** (`tests/test_e2e_skills.gd`, 1-1~1-4 × 시드 5 × {C++, 폴백}, 두 백엔드 숫자가 같다)
+
+| 정책 | 게이트 (마개 끔, 잠금 → 처치 중앙값) | 결과 (1-1 / 1-2 / 1-3 / 1-4) |
+|---|---|---|
+| pilot (분노·아이템 사용) | 10–16 s | 10.9 / 12.1 / 12.0 / 11.3 s |
+| 압정 + 콤보 (분노 안 씀) | 13–21 s | 17.6 / 17.5 / 18.0 / 17.9 s (전: 압정만 1-2 41 s, 1-3 52 s, 1-4 60 s) |
+| 엉성한 엄지 (사격 69 %) | ≤ 26 s | 20.1 / 22.2 / 22.0 / 21.5 s |
+
+- 판당(1-1~1-4, 마개 끔) c20 2~4회, c10 2~5회, c5 4~10회. 첫 c20은 잠금 후 1.6~7.5 s(콤보를 잠금 전부터 세므로 프로토의 4.7~6.9 s보다 이를 수 있다, 게이트 `FIRST_C20_MAX` 8 s).
+- 보스 구간 `skill_denied{target}` 0회(두 백엔드 × 3 정책 × 5 시드, 1-5~1-10 포함).
+- 마개 켬(출시 기본, r3 통합): 아래 NATIVE_PORT §9 r3 절의 '원흉전 길이' 표.
 
 ## 0-1. 2026-10-14 리뷰 반영 (검토 rvA·rvB 뒤, 값의 기준은 `native/data/src/config.json`)
 

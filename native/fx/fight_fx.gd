@@ -549,7 +549,8 @@ func on_event(e: Dictionary, st: Dictionary = {}) -> void:
 			_shake(0.9)
 		"rage_horn":
 			ring(_player_pos(st, 0.3), 14.0, Color(1.0, 0.55, 0.15, 0.9), 0.5)
-			_shake(0.3)
+			if str(e.get("via", "")) != "t1_wave":  # r3: the pre-lock 충격파 moves the camera by its directional kick only
+				_shake(0.3)
 		"release":
 			start_wave(front_s, tail_s)
 			var cp: Vector3 = _player_pos(st, 4.0)
@@ -559,7 +560,7 @@ func on_event(e: Dictionary, st: Dictionary = {}) -> void:
 
 
 const SKILL_EVENTS: PackedStringArray = ["skill_start", "skill_hit", "skill_end", "skill_denied", "tier_ready",
-	"item_ready", "finisher", "kill", "gone"]
+	"item_ready", "finisher", "kill", "gone", "combo_break", "combo_milestone"]
 
 
 func _vcol(v: Dictionary) -> Color:

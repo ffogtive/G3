@@ -15,13 +15,25 @@ extends CanvasLayer
 ## Buttons are drawn here; touches are read by LaneInput from the rects registered via bind_input() (multi-touch).
 ## All animation runs on real time: _process(delta), or advance(dt) when `manual` (deterministic shots).
 ## Skills (docs/SKILLS.md 2-4, 3-3, interface §6 ui/hud.gd): the 분노 ring is the only rage gauge — 5 segments, long
-## ticks + labels at 1 · 3 · MAX (locked in the jam: only t1 there), fill colour by level (orange → red-orange → gold
-## with a sparkle running round), the face shows state.skills.next_tier (경적 / 폭격 / 참교육 + the equipped finish).
+## ticks + labels at 1 · 3 · MAX (locked in the jam: only t1 there), fill colour by level (crimson → red-orange → gold
+## with a sparkle running round), the face shows state.skills.next_tier (청소|충격파 / 폭격 / 참교육 + the equipped finish).
 ## Item buttons item1 (left thumb, above ▶) / item2 (above 경적) appear when the loadout has items: cooldown pie +
 ## seconds, charge pips, grey + reason when unusable. Boss bar: gold 처형선 at execute_frac. Events: skill_start →
 ## banner (stamp for t5) + focus lines (t5), skill_hit → per-hit ticks and one summed number + recipe flash,
 ## "한 번 더!" for a t5 that did not finish, skill_denied → wobble + reason, tier_ready / item_ready → ring / button
 ## pop. Cinematics (t5, finisher) dim the controls; "탭: 건너뛰기" shows once skipping is allowed.
+##
+## r3 (device feedback 2026-10-14 1–4):
+##   가설: ✅ U1 a bubble covered the "원흉까지" bar because the bubble layer never knew the top HUD: top_guard_y() /
+##         top_rects() (bar · pill · villain plate · combo badge · neck chip · checkpoint toast · release sign) handed
+##         over every frame by guard_bubbles(b) make the overlap 0 (flip under the anchor / dock under the HUD).
+##         ✅ U2 combat / sim changes only read when the HUD shows them: combo badge (state.skills.combo: ×N, 20 cells with
+##         the 5 · 10 · 15 · 20 marks, next reward, timeout line, milestone label beside it, grey shake on a hit break),
+##         crimson 분노 (#e0245e, ≥ 30° from the 경적 orange) whose face follows state.skills.face (청소 / 충격파 / 폭격 /
+##         참교육), the reticle's orange 분노 tag while a tier can hit, checkpoint ticks on the bar (state.checkpoints,
+##         pulse + "100m 돌파!" toast 0.8 s), the neck verb chip (state.neck.chip, orange, under the pill / the plate).
+##         ✅ U4 tack hits stack into one number per villain (merge key t<id>), ≤ 2 live pops per villain by priority
+##         (kill > skill sum > 펑크 > combo / 경직 > tack stack), the kill keeps only its own number.
 
 signal card_choice(choice: StringName)
 
@@ -29,7 +41,7 @@ const FONT_PATH: String = "res://ui/fonts/BlackHanSans-Regular.ttf"
 const C_PANEL := Color(0.07, 0.08, 0.11, 0.78)
 const C_EDGE := Color(1, 1, 1, 0.16)
 const C_HP := Color8(0x3d, 0xd6, 0x5a)
-const C_RAGE := Color8(0xff, 0x7a, 0x1a)
+const C_RAGE := Color8(0xe0, 0x24, 0x5e)  # 분노 ring fill 1–2 칸 (crimson; 3–4 C_T3 red-orange, MAX C_GOLD)
 const C_OFF := Color(0.22, 0.24, 0.28, 0.9)
 const C_RANGE := Color8(0x3c, 0xe0, 0x8e)
 const C_NORANGE := Color8(0x9a, 0xa3, 0xae)
@@ -37,7 +49,8 @@ const INK := UiDraw.INK
 const BTN_BLUE: Array = [Color8(0x6a, 0xa6, 0xff), Color8(0x2f, 0x6f, 0xd6), Color8(0x1f, 0x4f, 0xa3)]
 const BTN_RED: Array = [Color8(0xff, 0x8a, 0x80), Color8(0xff, 0x3b, 0x30), Color8(0xc8, 0x24, 0x1a)]
 const BTN_HORN: Array = [Color8(0xff, 0xc0, 0x6a), Color8(0xf0, 0x8a, 0x1a), Color8(0xb8, 0x5a, 0x08)]
-const BTN_RAGE: Array = [Color8(0xff, 0xb0, 0x5a), Color8(0xff, 0x6a, 0x1a), Color8(0xc8, 0x3a, 0x08)]
+## r3 U2: crimson 분노 (#e0245e) — the old #ff6a1a sat 8° from the 경적 #f08a1a, so 분노 read as a second horn (rvB).
+const BTN_RAGE: Array = [Color8(0xff, 0x6a, 0x8c), Color8(0xe0, 0x24, 0x5e), Color8(0x9a, 0x10, 0x3a)]
 const BTN_RAGE_OFF: Array = [Color8(0x8a, 0x93, 0x9e), Color8(0x5c, 0x66, 0x72), Color8(0x3c, 0x44, 0x50)]
 const IDLE_ALPHA: float = 0.45
 ## Touch targets (canvas units; 64 pt = 88.6 u): lanes 96, horn 92, 압정 140, 분노 104.
@@ -57,6 +70,20 @@ const C_GOLD := Color8(0xff, 0xd2, 0x3f)
 ## t1 "경적" → "충격파" (rvB / feedback ③): the 분노 dial showed the same horn face and word as the 경적 button 80 px
 ## away, right above 압정, so a high 압정 press read as "a honk". The t1 face is a shockwave glyph now.
 const TIER_FACE: Dictionary = {0: "분노", 1: "충격파", 3: "폭격", 5: "참교육"}
+## r3 U2: state.skills.face → the 분노 button word (clear = jam t1_horn 갓길 청소, wave = the boss-phase t1 — before the
+## lock too, C3).
+const FACE_LABEL: Dictionary = {"clear": "청소", "wave": "충격파", "carpet": "폭격", "finish": "참교육"}
+## r3 U2 combo badge: next-reward names when the sim gives none (config.skills.combo.<id>.name).
+const COMBO_NAMES: Dictionary = {"c5": "따닥", "c10": "따다닥", "c20": "타이어 저격"}
+const COMBO_BREAK_S: float = 0.7
+const COMBO_FADE_S: float = 0.45
+const COMBO_POP_S: float = 0.8
+## r3 U2 neck verb chip / checkpoint toast (orange chips under the top HUD) and the checkpoint toast life.
+const C_CHIP := Color8(0xff, 0x8a, 0x1a)
+const CHIP_W: float = 280.0
+const CHIP_H: float = 36.0
+const CP_TOAST_S: float = 0.8
+const CP_PULSE_S: float = 0.6
 ## Damage numbers are shown ×10 (view only; no HP number is shown anywhere): "-3" ticks read as a weak skill (rvB).
 const DMG_SHOW_MUL: int = 10
 const ITEM_LABEL: Dictionary = {"mv_jump": "점프", "mv_drone": "드론", "mv_tow": "레커"}
@@ -196,6 +223,27 @@ var _cine_until: float = -99.0
 var _cine_mul: float = 1.0
 var _kill_real: float = -99.0
 var _skill_sum: Dictionary = {}        # "<id>:<target>" → summed damage of the current cast
+## r3 U2: state.skills.face (clear | wave | carpet | finish; "" = derive from mode / tier).
+var skill_face: String = ""
+
+# ── r3 U2 combo badge (state.skills.combo + combo_milestone / combo_break)
+var _combo_w_on: bool = false
+var _cb: Dictionary = {}               # last state.skills.combo {n, left, next_n, next_id, next_name, timeout, cycle, marks}
+var _cb_state: String = "off"          # off | live | broken | fading
+var _cb_t: float = -99.0               # when broken / fading began
+var _cb_n: int = 0                     # the count the badge shows (kept through broken / fading)
+var _cb_pop: String = ""
+var _cb_pop_t: float = -99.0
+# ── r3 U2 neck verb chip + A3 checkpoints
+var _neck_chip: Control
+var _cp_chip: Control
+var neck: Dictionary = {}
+var checkpoints: Array = []
+var _chip_text: String = ""
+var _cp_pulse: Dictionary = {}         # checkpoint index → time of its event
+var _cp_toast: String = ""
+var _cp_toast_t: float = -99.0
+var _top_slot_y: float = -1.0           # layout cache (_layout_top)
 
 
 ## N1 single truth: (fraction 0..1, distance m) from the same two positions.
@@ -226,12 +274,14 @@ func _ready() -> void:
 	root.add_child(safe)
 	# ── top: progress (N1)
 	_bar = _custom(_draw_bar)
+	_bar.name = "ProgressBar"
 	_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_bar.offset_left = 12
 	_bar.offset_right = -12
 	_bar.offset_top = 10
 	_bar.offset_bottom = 46
 	_pill = _custom(_draw_pill)
+	_pill.name = "DistancePill"
 	_pill.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_pill.offset_top = 52
 	_pill.offset_bottom = 88
@@ -247,17 +297,25 @@ func _ready() -> void:
 	_dist.visible = false  # the pill draws the same text with '200' emphasised; the Label keeps the N1 string for tests
 	# ── top: villain plate (boss), combo, release counter
 	_boss = _custom(_draw_boss)
+	_boss.name = "VillainPlate"
 	_boss.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_boss.offset_left = 12
 	_boss.offset_right = -70
 	_boss.offset_top = 54
 	_boss.offset_bottom = 132
 	_combo_w = _custom(_draw_combo)
+	_combo_w.name = "ComboBadge"
 	_combo_w.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_combo_w.offset_left = -190
+	_combo_w.offset_left = -226
 	_combo_w.offset_right = -14
 	_combo_w.offset_top = 138
-	_combo_w.offset_bottom = 184
+	_combo_w.offset_bottom = 196
+	# r3 U2: neck verb chip + checkpoint toast, placed by _layout_top() under the pill (jam) / the villain plate (boss)
+	_neck_chip = _custom(_draw_neck_chip)
+	_neck_chip.name = "NeckChip"
+	_cp_chip = _custom(_draw_cp_chip)
+	_cp_chip.name = "CheckpointChip"
+	_layout_top(true)
 	_release_w = _custom(_draw_release)
 	_release_w.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_release_w.offset_left = -124
@@ -368,11 +426,53 @@ func reserved_rects() -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	if not visible:
 		return out
-	for c: Control in [_bar, _pill, _boss, _chip, _hp_row, _gauge, _btn_left, _btn_right, _btn_horn, _btn_fire,
-			_btn_rage, _btn_pause, _btn_items[0], _btn_items[1]]:
+	for c: Control in [_bar, _pill, _boss, _combo_w, _neck_chip, _cp_chip, _chip, _hp_row, _gauge, _btn_left, _btn_right, _btn_horn,
+			_btn_fire, _btn_rage, _btn_pause, _btn_items[0], _btn_items[1]]:
 		if c.visible:
 			out.append(c.get_global_rect().grow(4.0))
 	return out
+
+
+# ───────────────────────────── r3 U1: top HUD guard for the speech bubbles
+
+## The top HUD widgets shown now (progress bar, distance pill, villain plate, combo badge, neck chip, checkpoint toast,
+## release counter): the rects a bubble body must not cover.
+func _top_widgets() -> Array[Control]:
+	var out: Array[Control] = []
+	if not visible:
+		return out
+	for c: Control in [_bar, _pill, _boss, _combo_w, _neck_chip, _cp_chip, _release_w]:
+		if c.visible and float(_vis.get(c, 1.0)) > 0.01:
+			out.append(c)
+	return out
+
+
+## Screen rects of the top HUD widgets (+ the pause button: a bubble must not sit on it either).
+func top_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for c: Control in _top_widgets():
+		out.append(c.get_global_rect())
+	if visible and _btn_pause.visible:
+		out.append(_btn_pause.get_global_rect())
+	return out
+
+
+## y under the visible top HUD (the lowest widget end + 6), 0 when none is shown: bubble bodies stay below it (flip /
+## dock, Bubbles.layout_bubble).
+func top_guard_y() -> float:
+	var g: float = 0.0
+	for c: Control in _top_widgets():
+		g = maxf(g, c.get_global_rect().end.y + 6.0)
+	return g
+
+
+## Every frame (Game._update_view; tests): the bubble layer learns the safe rect, the top guard and the top rects.
+func guard_bubbles(b: Bubbles) -> void:
+	if b == null:
+		return
+	b.safe_rect = safe_rect()
+	b.top_guard = top_guard_y()
+	b.top_rects = top_rects()
 
 
 ## Touch-target sizes in points (tests: every control ≥ 64 pt).
@@ -544,10 +644,7 @@ func apply_state(st: Dictionary) -> void:
 	shown = Vector2(clampf(float(st.get("progress", shown.x)), 0.0, 1.0), maxf(0.0, float(st.get("distance_m", shown.y))))
 	_dist.text = distance_text(shown.y)
 	var stats: Dictionary = st.get("stats", {})
-	var nc: int = int(stats.get("combo", 0))
-	if nc > combo:
-		_combo_t = now
-	combo = nc
+	var nc: int = int(stats.get("combo", 0))  # pre-r3 tack streak; the badge reads state.skills.combo when present (_apply_r3)
 	_fails = int(stats.get("fails", _fails))
 	_pay_mul = float(stats.get("pay_mul", _pay_mul))
 	# villain plate: first alive (else the dying / last one)
@@ -598,6 +695,8 @@ func apply_state(st: Dictionary) -> void:
 	if ph != &"boss" and ph != &"jam":
 		hint_text = ""
 	_apply_skills(st)
+	_apply_r3(st, nc)
+	reticle.rage_tag = ph == &"boss" and skill_mode in ["fight", "rescue"] and next_tier > 0
 
 
 ## state.skills (interface §6) → ring / face / items / execute line; derived from rage + phase + lock when the sim has
@@ -617,6 +716,7 @@ func _apply_skills(st: Dictionary) -> void:
 		skill_active = {}
 		_sim_skip = -1
 		items = []
+		skill_face = ""
 	else:
 		skill_segs = int(sk.get("segs", rage_level()))
 		skill_mode = str(sk.get("mode", "off"))
@@ -631,6 +731,7 @@ func _apply_skills(st: Dictionary) -> void:
 		for it: Variant in sk.get("items", []):
 			if it is Dictionary:
 				items.append(it)
+		skill_face = str(sk.get("face", ""))
 	var want_items: bool = not items.is_empty()
 	if want_items != _items_layout:
 		_items_layout = want_items
@@ -644,6 +745,125 @@ func _apply_skills(st: Dictionary) -> void:
 		if used != bool(_btn_items[i].get_meta(&"slot_used", false)):
 			_zones_size = Vector2.ZERO
 		_btn_items[i].set_meta(&"slot_used", used)
+
+
+## r3 U2: combo badge (state.skills.combo, else the old stats.combo counter), neck verb chip (state.neck.chip while the
+## bottleneck is active), checkpoint ticks (state.checkpoints).
+func _apply_r3(st: Dictionary, stats_combo: int) -> void:
+	var sk: Dictionary = st.get("skills", {}) if st.get("skills") is Dictionary else {}
+	var cb: Dictionary = sk.get("combo", {}) if sk.get("combo") is Dictionary else {}
+	var n: int = int(cb.get("n", 0)) if not cb.is_empty() else (stats_combo if stats_combo >= 3 else 0)
+	if not cb.is_empty():
+		_cb = cb
+	elif n > 0:
+		_cb = {"n": n, "left": 0.0, "timeout": 0.0, "cycle": 20, "marks": [5, 10, 15, 20], "next_n": 0, "next_id": "", "next_name": ""}
+	if phase != &"boss":
+		_cb_state = "off"
+		_cb_n = 0
+	elif n > 0:
+		if n > _cb_n or _cb_state != "live":
+			_combo_t = now
+		_cb_state = "live"
+		_cb_n = n
+	elif _cb_state == "live":  # dropped without a combo_break event (a timeout under breakEventMin): fade it out
+		_cb_state = "fading"
+		_cb_t = now
+	combo = _cb_n
+	neck = st.get("neck", {}) if st.get("neck") is Dictionary else {}
+	var chip: String = str(neck.get("chip", "")) if bool(neck.get("active", false)) and phase == &"boss" else ""
+	_chip_text = chip
+	if not chip.is_empty():
+		hint_text = ""  # one instruction at a time: the verb chip under the top HUD replaces the bottom hint
+	checkpoints = st.get("checkpoints", []) if st.get("checkpoints") is Array else []
+
+
+## Combo badge model (tests): {state: off | live | broken | fading, n, cells (filled of `cycle`), cycle, next (reward
+## name), next_n, left_frac (timeout line), pop (milestone label beside the badge, "" when none), text}.
+func combo_view() -> Dictionary:
+	var cyc: int = maxi(1, int(_cb.get("cycle", 20)))
+	var n: int = _cb_n
+	var cells: int = n % cyc
+	if n > 0 and cells == 0:
+		cells = cyc
+	var to: float = float(_cb.get("timeout", 0.0))
+	var lf: float = clampf(float(_cb.get("left", 0.0)) / to, 0.0, 1.0) if to > 0.0 and _cb_state == "live" else 0.0
+	var nid: String = str(_cb.get("next_id", ""))
+	var nm: String = str(_cb.get("next_name", ""))
+	if nm.is_empty():
+		nm = str(COMBO_NAMES.get(nid, ""))
+	return {"state": _cb_state, "n": n, "cells": cells, "cycle": cyc, "next": nm, "next_n": int(_cb.get("next_n", 0)),
+		"left_frac": lf, "pop": _cb_pop if now - _cb_pop_t < COMBO_POP_S else "",
+		"text": "콤보 끊김" if _cb_state == "broken" else "×%d" % n}
+
+
+## 분노 button word for the tier a tap casts now: 분노 (nothing ready), else by state.skills.face (청소 / 충격파 / 폭격 /
+## 참교육), else by tier.
+func rage_face_label() -> String:
+	if next_tier <= 0:
+		return "분노"
+	var f: String = _face_now()
+	if FACE_LABEL.has(f):
+		return str(FACE_LABEL[f])
+	return str(TIER_FACE.get(next_tier, "분노"))
+
+
+func _face_now() -> String:
+	if not skill_face.is_empty():
+		return skill_face
+	if next_tier <= 0:
+		return ""
+	if skill_mode == "jam":
+		return "clear"
+	return "finish" if next_tier >= 5 else ("carpet" if next_tier >= 3 else "wave")
+
+
+## 분노 ring fill colour at `lvl` full segments: 1–2 crimson, 3–4 red-orange, MAX gold.
+func rage_fill_color(lvl: int) -> Color:
+	var n: int = Hud.rage_segments(rage_frac, rage_cost).size()
+	return C_RAGE if lvl <= 2 else (C_T3 if lvl < n else C_GOLD)
+
+
+## Neck verb chip text shown now ("" = hidden).
+func neck_chip_text() -> String:
+	return _chip_text
+
+
+## Canvas x of the progress bar track at fraction f (0 = start, 1 = the villain).
+func bar_x(f: float) -> float:
+	var r: Rect2 = _bar.get_global_rect()
+	var tr: Rect2 = _bar_track(Rect2(Vector2.ZERO, r.size))
+	return r.position.x + tr.position.x + tr.size.x * clampf(f, 0.0, 1.0)
+
+
+func _bar_track(r: Rect2) -> Rect2:
+	return Rect2(r.position + Vector2(22, 13), Vector2(r.size.x - 60, r.size.y - 26))
+
+
+## Canvas x of the player marker on the progress bar (the same `shown` fraction the bar fill uses).
+func bar_marker_x() -> float:
+	return bar_x(1.0 if phase in [&"kill", &"release", &"cruise"] else shown.x)
+
+
+## Bar fraction of a checkpoint d m before the villain: 1 − d / span, span = villain s − start s (the bar's own span).
+func checkpoint_frac(d: float) -> float:
+	return clampf(1.0 - d / maxf(1.0, villain_s - start_s), 0.0, 1.0)
+
+
+## Canvas x of every state.checkpoints tick (same order).
+func checkpoint_xs() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	for c: Variant in checkpoints:
+		out.append(bar_x(checkpoint_frac(float((c as Dictionary).get("d", 0.0)))) if c is Dictionary else NAN)
+	return out
+
+
+func checkpoint_pulsing(i: int) -> bool:
+	return now - float(_cp_pulse.get(i, -99.0)) < CP_PULSE_S
+
+
+## Checkpoint toast shown now ("150m 돌파!" [+ " 빠름!"]; "" after CP_TOAST_S).
+func cp_toast_text() -> String:
+	return _cp_toast if now - _cp_toast_t < CP_TOAST_S else ""
 
 
 func _slot_of(id: String) -> int:
@@ -671,18 +891,36 @@ func on_event(e: Dictionary) -> void:
 		"hit":
 			var big: bool = bool(e.get("window", false)) or str(e.get("kind", "")) == "bomb"
 			var dmg: float = float(e.get("dmg", 0.0))
+			var tid: int = int(e.get("target_id", -2))
 			if road != null and e.has("s"):
 				var wp: Vector3 = road.position(float(e["s"]), float(e.get("x", 0.0))) + Vector3(0, 2.2, 0)
 				if str(e.get("kind", "")) == "mini":
-					pops.pop(wp, "-%d" % (roundi(dmg) * DMG_SHOW_MUL), "hit")
+					var mv: int = roundi(dmg) * DMG_SHOW_MUL
+					pops.pop(wp, "-%d" % mv, "hit", "m%d" % int(e.get("mini_id", tid)), float(mv))
 				elif bool(e.get("immune", false)):
-					pops.pop(wp, "막힘!", "miss")
-				elif not _under_skill(int(e.get("target_id", -2))):  # the skill sum shows that damage
-					pops.pop(wp, ("-%d!" if big else "-%d") % (maxi(1, roundi(dmg)) * DMG_SHOW_MUL), "crit" if big else "hit")
+					pops.pop(wp, "막힘!", "miss", "i%d" % tid)
+				elif not _under_skill(tid):  # the skill sum shows that damage
+					# r3 U4: one stacked number per target ("-40" → "-80" …, gold once a window hit joins)
+					var hv: int = maxi(1, roundi(dmg)) * DMG_SHOW_MUL
+					pops.pop(wp, ("-%d!" if big else "-%d") % hv, "crit" if big else "hit", "t%d" % tid, float(hv))
 				if int(e.get("popped", 0)) > 0:
-					pops.pop(wp + Vector3(0, 1.2, 0), "펑크!", "crit")
+					pops.pop(wp + Vector3(0, 1.2, 0), "펑크!", "crit", "p%d" % tid)
 			if big:
 				flash(Color(1, 0.95, 0.7, 0.35), 0.1)
+		"combo_milestone":  # r3 U2: the label pops beside the combo badge (never the centre banner)
+			_cb_pop = str(e.get("label", "")) if str(e.get("label", "")) != "" else "%s!" % str(COMBO_NAMES.get(str(e.get("id", "")), "콤보"))
+			_cb_pop_t = now
+			_combo_t = now
+		"combo_break":
+			if _cb_state == "live" or _cb_n > 0:
+				_cb_n = maxi(_cb_n, int(e.get("n", _cb_n)))
+				_cb_state = "broken" if str(e.get("reason", "")) == "hit" else "fading"
+				_cb_t = now
+		"checkpoint":  # r3 U2 (A3): the tick pulses and the toast says how far is left
+			var ci: int = int(e.get("i", -1))
+			_cp_pulse[ci] = now
+			_cp_toast = "%dm 돌파!%s" % [roundi(float(e.get("d", 0.0))), " 빠름!" if bool(e.get("fast", false)) else ""]
+			_cp_toast_t = now
 		"fire_dry":  # 압정 in the jam with nothing to aim at (never a honk): dull wobble + a short pop
 			_miss_t = now
 			_haptic("miss")
@@ -712,7 +950,10 @@ func on_event(e: Dictionary) -> void:
 		"kill":
 			_kill_t = now
 			flash(Color(1, 0.96, 0.85, 0.4), 0.1)  # was white 0.85 / 0.22 s: with the t5 flash it bleached the kill frame
-			pops.clear_pops()  # the killing blow shows no sum; stale tack / item pops must not ride into the finisher
+			# r3 U4: the stale tack stacks / item pops must not ride into the finisher; the kill tick's own number stays,
+			# one per villain
+			pops.clear_pops(0.15)
+			pops.limit_target("v%d" % int(e.get("id", -1)), 1)
 		"pullover":
 			pass
 		"release":
@@ -732,7 +973,7 @@ func on_event(e: Dictionary) -> void:
 			hide_cards()
 		"stun":
 			if int(e.get("id", -1)) >= 0 and phase == &"boss":
-				pops.pop(_villain_pos(int(e["id"])) + Vector3(0, 2.8, 0), "경직!", "crit")
+				pops.pop(_villain_pos(int(e["id"])) + Vector3(0, 2.8, 0), "경직!", "crit", "x%d" % int(e["id"]))
 
 
 ## Skill events (UI side): banners, focus lines, flashes, damage pops, denied wobble, ready pops.
@@ -748,11 +989,14 @@ func _on_skill_event(e: Dictionary) -> void:
 				var ib: String = str(rec.get("castBanner", rec.get("banner", "")))
 				if ib != "":
 					banner.show_banner(ib, "skill", 0.6, "", SKILL_BANNER_Y, 0.66)
-			else:
-				_rage_ready_t = now  # the button kicks on the cast
-			match key:
+			elif str(e.get("chan", "rage")) == "rage":
+				_rage_ready_t = now  # the button kicks on the cast (combo casts are the 압정's, not the 분노 button's)
+			match SkillCues.base_key(key):  # t1_wave (fight / pre-lock t1, r3 F1) shares the t1 banner path
 				"t1":
-					var t1b: String = str(rec.get("bannerWave", "경적 충격파!!")) if id == "t1_wave" else str(rec.get("banner", "분노 경적!!"))
+					# recipe(t1_wave).banner '충격파!!'; the jam t1_horn recipe(t1).banner '갓길 청소!!' (C4)
+					var t1b: String = str(rec.get("banner", "충격파!!" if id == "t1_wave" else "갓길 청소!!"))
+					if id == "t1_wave" and key != "t1_wave":  # no t1_wave recipe: the t1 recipe's wave banner
+						t1b = str(rec.get("bannerWave", "충격파!!"))
 					banner.show_banner(t1b, "skill", 0.75, "", SKILL_BANNER_Y, 0.78)  # fight t1 = the 충격파 face
 					if id == "t1_horn":
 						flash(Color(1.0, 0.82, 0.23, 0.3), 0.12)  # jam: the rage_horn tick is the impact
@@ -784,8 +1028,9 @@ func _on_skill_event(e: Dictionary) -> void:
 				else:
 					var dflt: Dictionary = {"t1": [Color(1, 0.82, 0.23, 0.3), 0.09], "t3": [Color(1, 0.48, 0.1, 0.25), 0.12],
 						"t5": [Color(1, 0.96, 0.85, 0.45), 0.07], "mv_jump": [Color(1, 0.95, 0.85, 0.18), 0.08]}
-					if dflt.has(key):
-						flash((dflt[key] as Array)[0] as Color, float((dflt[key] as Array)[1]))
+					var bk: String = SkillCues.base_key(key)
+					if dflt.has(bk):
+						flash((dflt[bk] as Array)[0] as Color, float((dflt[bk] as Array)[1]))
 				if key == "mv_jump" and road != null:  # at the landing (the hit s/x is the villain's)
 					var pl: Dictionary = _state.get("player", {})
 					pops.pop(road.position(float(pl.get("s", player_s)), float(pl.get("x", 0.0))) + Vector3(0, 3.4, 0),
@@ -794,17 +1039,26 @@ func _on_skill_event(e: Dictionary) -> void:
 					_focus_t = -99.0
 			if not wp.is_finite():
 				return
+			# r3 U4: every pop names its villain (≤ 2 live per target by priority: kill > skill sum > 펑크 > combo > tack)
+			var tid: int = int(e.get("target_id", -1))
+			var vt: String = "v%d" % tid
 			if bool(e.get("immune", false)):
-				pops.pop(wp, "막힘!", "miss")
+				pops.pop(wp, "막힘!", "miss", "i%d" % tid)
+			elif str(e.get("chan", "rage")) == "combo":  # c5 / c10 / c20 hits stack into one number per target
+				var cv: int = maxi(1, roundi(dmg)) * DMG_SHOW_MUL
+				pops.pop(wp + Vector3(0, 1.0, 0), ("-%d!" if bool(e.get("window", false)) else "-%d") % cv, "crit", "c%d" % tid, float(cv))
 			elif n > 1 and idx < n - 1:
 				if n <= 4:  # t3 ticks; the drone's 6 bomblets only show the sum (6 ticks were clutter)
-					pops.pop(wp + Vector3(0.6 * float(idx % 2 * 2 - 1), -0.4, 0), "-%d" % (maxi(1, roundi(dmg)) * DMG_SHOW_MUL), "tick")
+					pops.pop(wp + Vector3(0.6 * float(idx % 2 * 2 - 1), -0.4, 0), "-%d" % (maxi(1, roundi(dmg)) * DMG_SHOW_MUL), "tick",
+						"", 0.0, vt, 2)
 			elif not killed and tot > 0.0:  # "치명!" only here: on every window tack hit it meant nothing (rvB)
-				pops.pop(wp + Vector3(0, 1.4, 0), ("치명! -%d" if bool(e.get("window", false)) else "-%d") % (maxi(1, roundi(tot)) * DMG_SHOW_MUL), "big")
+				var sv: int = maxi(1, roundi(tot)) * DMG_SHOW_MUL
+				pops.pop(wp + Vector3(0, 1.4, 0), ("치명! -%d" if bool(e.get("window", false)) else "-%d") % sv, "big",
+					"s%d_%s" % [tid, id], float(sv), vt, -1, true)
 			if int(e.get("popped", 0)) > 0:
-				pops.pop(wp + Vector3(0, 1.9, 0), "펑크!", "crit")
+				pops.pop(wp + Vector3(0, 1.9, 0), "펑크!", "crit", "p%d" % tid)
 			if key == "t5" and not killed and idx >= n - 1:
-				pops.pop(wp + Vector3(0, -0.6, 0), "한 번 더!", "again")
+				pops.pop(wp + Vector3(0, -0.6, 0), "한 번 더!", "again", "", 0.0, vt, 4)
 		"skill_end":
 			if key == "t5" or bool(e.get("skipped", false)):
 				_cine_until = minf(_cine_until, now)
@@ -894,7 +1148,9 @@ func _apply_phase_vis(instant: bool) -> void:
 	want[_bar] = 1.0 if phase in [&"intro", &"jam", &"boss", &"kill", &"release", &"cruise"] else 0.0
 	want[_pill] = 1.0 if phase in [&"intro", &"jam"] else 0.0
 	want[_boss] = 1.0 if phase in [&"boss", &"kill"] else 0.0
-	want[_combo_w] = 1.0 if fight else 0.0
+	want[_combo_w] = 1.0 if fight and _cb_state != "off" else 0.0
+	want[_neck_chip] = 1.0 if not _chip_text.is_empty() else 0.0
+	want[_cp_chip] = 1.0 if cp_toast_text() != "" and phase in [&"intro", &"jam", &"boss"] else 0.0
 	want[_release_w] = 1.0 if phase in [&"release", &"cruise"] else 0.0
 	want[_chip] = 1.0 if driving else 0.0
 	want[_btn_pause] = 1.0 if driving or phase in [&"kill", &"release", &"cruise"] else 0.0
@@ -925,6 +1181,17 @@ func advance(dt: float) -> void:
 	# cinematics (t5 cast until 1.0 s, kill) dim the controls; they come back within 0.25 s
 	var cine: bool = now < _cine_until or bool(skill_active.get("cine", false))
 	_cine_mul = move_toward(_cine_mul, 0.3 if cine else 1.0, dt / (0.12 if cine else 0.25))
+	# r3 U2: the combo badge's break / fade run out; the badge, neck chip and checkpoint toast show only while they say
+	# something (so the bubble guard does not reserve empty space)
+	if (_cb_state == "broken" and now - _cb_t >= COMBO_BREAK_S) or (_cb_state == "fading" and now - _cb_t >= COMBO_FADE_S):
+		_cb_state = "off"
+		_cb_n = 0
+		combo = 0
+	_group_alpha[_combo_w] = 1.0 if phase == &"boss" and _cb_state != "off" else 0.0
+	_group_alpha[_neck_chip] = 1.0 if not _chip_text.is_empty() else 0.0
+	_group_alpha[_cp_chip] = 1.0 if cp_toast_text() != "" and phase in [&"intro", &"jam", &"boss"] else 0.0
+	_layout_top()
+	pops.safe_rect = safe_rect()
 	for i: int in 2:  # a slot that just got an item fades in with the controls
 		if bool(_btn_items[i].get_meta(&"slot_used", false)) and phase in [&"intro", &"jam", &"boss"]:
 			_group_alpha[_btn_items[i]] = 1.0
@@ -936,6 +1203,7 @@ func advance(dt: float) -> void:
 		c.visible = a > 0.01
 		if not _btn_alpha.has(c):
 			c.modulate.a = a * (_cine_mul if _controls.has(c) else 1.0)
+	reticle.top_guard = top_guard_y()  # after this frame's visibility (the plate fading in on the boss entry)
 	# white damage lag on the villain bar (web: holds while hits keep coming, then drains)
 	if boss_lag > boss_hp:
 		var drain: float = 0.04 if now - _boss_hit_t < 0.42 else 0.25 + (boss_lag - boss_hp) * 4.0
@@ -1058,7 +1326,7 @@ func _draw_bar(c: Control) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	_panel(c, r, 18)
 	var pv: Vector2 = shown
-	var track := Rect2(r.position + Vector2(22, 13), Vector2(r.size.x - 60, r.size.y - 26))
+	var track: Rect2 = _bar_track(r)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.13, 0.14, 0.18, 0.9)  # empty track: not a red "danger / boss HP" bar
 	sb.set_corner_radius_all(5)
@@ -1074,6 +1342,25 @@ func _draw_bar(c: Control) -> void:
 	var tl := track.position
 	c.draw_polygon(PackedVector2Array([tl, tl + Vector2(fw, 0), tl + Vector2(fw, track.size.y), tl + Vector2(0, track.size.y)]),
 		PackedColorArray([c0, c1, c1, c0]))
+	# r3 U2 (A3): checkpoint ticks at 1 − d / span (gold once passed; a pulse ring + taller tick on the event), the
+	# metres under each
+	if not phase in [&"kill", &"release", &"cruise", &"result"]:
+		var cy: float = track.get_center().y
+		for i: int in checkpoints.size():
+			if not (checkpoints[i] is Dictionary):
+				continue
+			var cp: Dictionary = checkpoints[i]
+			var tx: float = track.position.x + track.size.x * checkpoint_frac(float(cp.get("d", 0.0)))
+			var done: bool = bool(cp.get("done", false))
+			var pt: float = now - float(_cp_pulse.get(i, -99.0))
+			var k: float = clampf(pt / CP_PULSE_S, 0.0, 1.0)
+			var hh: float = track.size.y * 0.5 + 5.0 + (6.0 * (1.0 - k) if pt < CP_PULSE_S else 0.0)
+			c.draw_line(Vector2(tx, cy - hh), Vector2(tx, cy + hh), INK, 5.0)
+			c.draw_line(Vector2(tx, cy - hh + 1.0), Vector2(tx, cy + hh - 1.0), C_GOLD if done else Color.WHITE, 2.5)
+			if pt < CP_PULSE_S:
+				c.draw_arc(Vector2(tx, cy), 6.0 + 16.0 * k, 0.0, TAU, 24, Color(C_GOLD, 0.9 * (1.0 - k)), 3.0, true)
+			UiDraw.text_c(c, Vector2(tx, track.end.y + 8.0), str(roundi(float(cp.get("d", 0.0)))), 11,
+				C_GOLD if done else Color(1, 1, 1, 0.85), 3, true, 0.0)
 	# player marker: top-view hero car (yellow body, 2 black stripes) at the same fraction
 	var px: float = track.position.x + track.size.x * (pv.x if not phase in [&"kill", &"release", &"cruise"] else 1.0)
 	var car := Rect2(Vector2(px - 13, track.get_center().y - 7), Vector2(26, 14))
@@ -1159,17 +1446,147 @@ func _draw_boss(c: Control) -> void:
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
+## r3 U2 combo badge (state.skills.combo): "×17" + the next reward ("→ 20 타이어 저격"), a 20-cell bar with long ticks at
+## the milestones (5 · 10 · 15 · 20) and the next one outlined, the timeout line shrinking over combo.timeout; a
+## milestone label pops beside it (left, rising); combo_break{hit} = grey + shake + "콤보 끊김", a timeout fades it.
 func _draw_combo(c: Control) -> void:
-	if combo < 3:
+	var cv: Dictionary = combo_view()
+	var stt: String = str(cv["state"])
+	if stt == "off":
 		return
+	var r := Rect2(Vector2.ZERO, c.size)
+	var tb: float = now - _cb_t
+	var a: float = 1.0
+	var sh: float = 0.0
+	var grey: bool = stt == "broken"
+	if stt == "fading":
+		a = clampf(1.0 - tb / COMBO_FADE_S, 0.0, 1.0)
+	elif grey:
+		sh = sin(tb * 70.0) * 6.0 * maxf(0.0, 1.0 - tb / 0.35)
+		a = clampf(1.0 - maxf(0.0, tb - 0.4) / 0.3, 0.0, 1.0)
 	var t: float = now - _combo_t
-	var sc: float = 1.0 + 0.3 * (1.0 - UiDraw.back_out(t / 0.18, 3.0)) if t < 0.18 else 1.0
-	var txt: String = "×%d" % combo
-	c.draw_set_transform(Vector2(c.size.x - 8, c.size.y * 0.5), deg_to_rad(-6.0), Vector2(sc, sc))
-	var w: float = UiDraw.text_w(txt, 38) + UiDraw.text_w(" COMBO", 18)
-	UiDraw.text(c, Vector2(-w, 14), txt, 38, Color8(0xff, 0xd2, 0x3f), 7, true, 3.0)
-	UiDraw.text(c, Vector2(-w + UiDraw.text_w(txt, 38) + 4, 12), "COMBO", 18, Color.WHITE, 5, true, 2.0)
+	var sc: float = 1.0 + 0.12 * (1.0 - UiDraw.back_out(t / 0.18, 3.0)) if t < 0.18 else 1.0
+	c.draw_set_transform(Vector2(sh, 0) + r.get_center(), 0.0, Vector2(sc, sc))
+	var rr := Rect2(-r.size * 0.5, r.size)
+	c.draw_style_box(UiDraw.box(Color(0.07, 0.08, 0.11, 0.82 * a), 14.0, 2.0, Color(1, 1, 1, 0.16 * a)), rr)
+	var gold := Color(C_GOLD, a) if not grey else Color(0.62, 0.65, 0.7, a)
+	var ink := Color(1, 1, 1, a)
+	# row 1: count + next reward (or the break text)
+	var big: String = "×%d" % int(cv["n"])
+	UiDraw.text(c, rr.position + Vector2(10, 30), big, 30, gold, 6, true, 2.0)
+	var right: String = str(cv["text"]) if grey else ""
+	if not grey and str(cv["next"]) != "":
+		right = "→%d %s" % [int(cv["next_n"]), str(cv["next"])] if int(cv["next_n"]) > 0 else str(cv["next"])
+	if right != "":
+		var fs: int = 17 if grey else 15
+		var w: float = UiDraw.text_w(right, fs)
+		UiDraw.text(c, Vector2(rr.end.x - 10 - w, rr.position.y + 27), right, fs, Color(1, 0.45, 0.4, a) if grey else ink, 4, true, 0.0)
+	# row 2: cells
+	var cyc: int = int(cv["cycle"])
+	var cells: int = int(cv["cells"])
+	var gx: float = 2.0
+	var bx: Rect2 = Rect2(rr.position + Vector2(10, 36), Vector2(rr.size.x - 20, 10))
+	var cw: float = (bx.size.x - gx * float(cyc - 1)) / float(cyc)
+	var nxt: int = int(cv["next_n"]) % cyc
+	if int(cv["next_n"]) > 0 and nxt == 0:
+		nxt = cyc
+	var marks: Array = _cb.get("marks", [5, 10, 15, 20]) if _cb.get("marks") is Array else [5, 10, 15, 20]
+	for i: int in cyc:
+		var cr := Rect2(Vector2(bx.position.x + float(i) * (cw + gx), bx.position.y), Vector2(cw, bx.size.y))
+		var on: bool = i < cells
+		var col: Color = (gold if i < cells - 1 or grey else Color(1, 1, 0.85, a)) if on else Color(0.22, 0.24, 0.28, 0.9 * a)
+		c.draw_rect(cr, col)
+		if i + 1 == nxt and not on and not grey:
+			c.draw_rect(cr.grow(1.0), Color(C_CHIP, a), false, 2.0)
+	for m: Variant in marks:
+		var k: int = int(m)
+		if k <= 0 or k > cyc:
+			continue
+		var mx: float = bx.position.x + float(k) * (cw + gx) - gx * 0.5
+		c.draw_line(Vector2(mx, bx.position.y - 3), Vector2(mx, bx.end.y + 3), Color(INK, 0.9 * a), 3.0)
+		c.draw_line(Vector2(mx, bx.position.y - 2), Vector2(mx, bx.end.y + 2), Color(1, 1, 1, 0.85 * a), 1.5)
+	# row 3: timeout line
+	var lf: float = float(cv["left_frac"])
+	if lf > 0.0:
+		var lc: Color = Color(1, 1, 1, 0.9 * a) if lf > 0.3 else Color(1, 0.35, 0.3, a)
+		c.draw_rect(Rect2(Vector2(bx.position.x, rr.end.y - 7), Vector2(bx.size.x * lf, 3)), lc)
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# milestone label right under the badge (right-aligned, rising into it): never the centre banner, and clear of the
+	# skill banner row (SKILL_BANNER_Y) the badge shares
+	var pop: String = str(cv["pop"])
+	if pop != "":
+		var pt: float = now - _cb_pop_t
+		var ps: float = 1.0 + 0.5 * (1.0 - UiDraw.back_out(clampf(pt / 0.2, 0.0, 1.0), 3.0))
+		var pa: float = clampf(1.0 - maxf(0.0, pt - COMBO_POP_S + 0.25) / 0.25, 0.0, 1.0)
+		var fs2: int = 28
+		var pw: float = UiDraw.text_w(pop, fs2)
+		c.draw_set_transform(Vector2(r.size.x - 6.0 - pw * 0.5, r.size.y + 24.0 - 8.0 * pt), deg_to_rad(-5.0), Vector2(ps, ps))
+		UiDraw.text_c(c, Vector2.ZERO, pop, fs2, Color(C_GOLD, pa), 7, true, 3.0)
+		c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## r3 U2 neck verb chip (state.neck.chip): orange, horn glyph + ≤ 10 chars, under the top HUD (_layout_top).
+func _draw_neck_chip(c: Control) -> void:
+	if _chip_text.is_empty():
+		return
+	var r := Rect2(Vector2.ZERO, c.size)
+	var pul: float = 1.0 + 0.04 * sin(now * 9.0)
+	c.draw_set_transform(r.get_center(), 0.0, Vector2(pul, pul))
+	var rr := Rect2(-r.size * 0.5, r.size)
+	UiDraw.panel(c, rr, C_CHIP, 16, 3, 4)
+	var ic := Vector2(rr.position.x + 22, 0)
+	if not UiDraw.draw_icon(c, "horn", ic, 26, INK):
+		c.draw_circle(ic, 9, INK)
+	UiDraw.text(c, Vector2(rr.position.x + 40, 8), _chip_text, 22, INK, 0, true, 0.0)
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## r3 U2 checkpoint toast ("100m 돌파!", 0.8 s): gold chip that pops in and fades out.
+func _draw_cp_chip(c: Control) -> void:
+	var txt: String = cp_toast_text()
+	if txt.is_empty():
+		return
+	var r := Rect2(Vector2.ZERO, c.size)
+	var t: float = now - _cp_toast_t
+	var sc: float = lerpf(0.6, 1.0, UiDraw.back_out(clampf(t / 0.18, 0.0, 1.0), 2.6))
+	var a: float = clampf((CP_TOAST_S - t) / 0.2, 0.0, 1.0)
+	c.draw_set_transform(r.get_center(), 0.0, Vector2(sc, sc))
+	var w: float = minf(r.size.x, UiDraw.text_w(txt, 22) + 44.0)
+	var rr := Rect2(Vector2(-w * 0.5, -r.size.y * 0.5), Vector2(w, r.size.y))
+	c.draw_style_box(UiDraw.box(Color(C_GOLD, a), 16, 3, Color(INK, a)), rr)
+	UiDraw.text_c(c, Vector2.ZERO, txt, 22, Color(INK, a), 0, true, 0.0)
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## r3 U2: the neck chip / checkpoint toast slots — under the pill in the jam (centred), under the villain plate in the
+## boss phase (left column, clear of the combo badge on the right). The neck chip takes the first slot.
+func _layout_top(force: bool = false) -> void:
+	var boss_row: bool = phase in [&"boss", &"kill"]
+	var y0: float = 140.0 if boss_row else 94.0
+	var neck_on: bool = not _chip_text.is_empty() or (_neck_chip.visible and float(_vis.get(_neck_chip, 0.0)) > 0.01)
+	var key: float = y0 + (1000.0 if neck_on else 0.0)
+	if not force and is_equal_approx(key, _top_slot_y):
+		return
+	_top_slot_y = key
+	_place_chip(_neck_chip, boss_row, y0)
+	_place_chip(_cp_chip, boss_row, y0 + (CHIP_H + 6.0 if neck_on else 0.0))
+
+
+func _place_chip(c: Control, left_col: bool, y: float) -> void:
+	c.anchor_top = 0.0
+	c.anchor_bottom = 0.0
+	c.offset_top = y
+	c.offset_bottom = y + CHIP_H
+	if left_col:
+		c.anchor_left = 0.0
+		c.anchor_right = 0.0
+		c.offset_left = 12.0
+		c.offset_right = 12.0 + CHIP_W
+	else:
+		c.anchor_left = 0.5
+		c.anchor_right = 0.5
+		c.offset_left = -CHIP_W * 0.5
+		c.offset_right = CHIP_W * 0.5
 
 
 ## Release counter (web .ui-rel): green road sign "해방된 차량 / N대", bumps on every released car.
@@ -1347,9 +1764,9 @@ func _draw_fire_ring(c: Control) -> void:
 			c.draw_arc(ctr, rad, a1, a1 + TAU / float(n) * 0.55, 6, C_NORANGE, 5.0, true)
 
 
-## 분노 button: the face is the tier a tap casts now (state.skills.next_tier): 경적 (t1, orange), 폭격 (t3, red-orange,
-## a tack rain), 참교육 (t5, gold, the equipped finish's icon); grey 분노 when nothing is ready. Kicks on ready / cast,
-## wobbles on a denied tap.
+## 분노 button: the face is the tier a tap casts now (state.skills.next_tier): 청소 (jam t1, a breaking cone) / 충격파
+## (fight t1, wave arcs) in crimson, 폭격 (t3, red-orange, a tack rain), 참교육 (t5, gold, the equipped finish's icon);
+## grey 분노 when nothing is ready (rage_face_label()). Kicks on ready / cast, wobbles on a denied tap.
 func _rage_pop() -> float:
 	var rt: float = now - _rage_ready_t
 	return 1.0 + 0.18 * (1.0 - UiDraw.back_out(rt / 0.25, 3.0)) if rt < 0.25 else 1.0
@@ -1369,11 +1786,14 @@ func _draw_rage_btn(c: Control) -> void:
 	c.draw_set_transform(ctr + (o - Vector2(0, 11)) * pop, wig, Vector2(pop, pop))
 	var ink: Color = Color.WHITE if tier > 0 else Color(1, 1, 1, 0.55)
 	match tier:
-		1:  # 충격파: a burst dot and three wave arcs (not the 경적 button's horn)
-			c.draw_circle(Vector2(-14, 0), 6.0, ink)
-			for k: int in 3:
-				var rr: float = 9.0 + 8.0 * float(k)
-				c.draw_arc(Vector2(-14, 0), rr, -0.85, 0.85, 12, Color(ink, 1.0 - 0.22 * float(k)), 4.0 - 0.6 * float(k), true)
+		1:
+			if _face_now() == "clear":  # 청소 (jam t1_horn): a traffic cone breaking apart under a burst
+				_cone_glyph(c, ink)
+			else:  # 충격파: a burst dot and three wave arcs (not the 경적 button's horn)
+				c.draw_circle(Vector2(-14, 0), 6.0, ink)
+				for k: int in 3:
+					var rr: float = 9.0 + 8.0 * float(k)
+					c.draw_arc(Vector2(-14, 0), rr, -0.85, 0.85, 12, Color(ink, 1.0 - 0.22 * float(k)), 4.0 - 0.6 * float(k), true)
 		3:
 			for k: int in 3:
 				var off := Vector2(-14.0 + 14.0 * float(k), -6.0 + (6.0 if k == 1 else 0.0))
@@ -1389,8 +1809,28 @@ func _draw_rage_btn(c: Control) -> void:
 				c.draw_circle(Vector2.ZERO, 14, Color8(0xff, 0x5a, 0x1f))
 	c.draw_set_transform(ctr, wob, Vector2(pop, pop))
 	var fs: int = 20 if tier == 5 else 21
-	UiDraw.text_c(c, o + Vector2(0, 23), str(TIER_FACE.get(tier, "분노")), fs, INK if tier == 5 else ink, 5 if tier != 5 else 0, true, 0.0)
+	UiDraw.text_c(c, o + Vector2(0, 23), rage_face_label(), fs, INK if tier == 5 else ink, 5 if tier != 5 else 0, true, 0.0)
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 청소 glyph: an orange-white cone split in two halves flying apart, with burst ticks.
+func _cone_glyph(c: Control, ink: Color) -> void:
+	var o := Color8(0xff, 0x8a, 0x1a)
+	var l := PackedVector2Array([Vector2(-15, 12), Vector2(-4, -14), Vector2(-3, 12)])
+	var r := PackedVector2Array([Vector2(3, 12), Vector2(5, -14), Vector2(15, 12)])
+	for half: PackedVector2Array in [l, r]:
+		var sh := PackedVector2Array()
+		for q: Vector2 in half:
+			sh.append(q + Vector2(0, 2))
+		c.draw_colored_polygon(sh, Color(INK, 0.8))
+		c.draw_colored_polygon(half, o)
+	c.draw_line(Vector2(-12, 3), Vector2(-4, 3), ink, 3.0)
+	c.draw_line(Vector2(4, 3), Vector2(12, 3), ink, 3.0)
+	c.draw_line(Vector2(-18, 12), Vector2(18, 12), INK, 4.0)
+	for k: int in 3:
+		var a: float = -PI / 2.0 + (float(k) - 1.0) * 0.6
+		var d := Vector2(cos(a), sin(a))
+		c.draw_line(d * 17.0 + Vector2(0, -2), d * 24.0 + Vector2(0, -2), ink, 2.5, true)
 
 
 ## Small finisher glyphs (rocket = the svg icon; balloon / heli / ufo drawn).
@@ -1424,7 +1864,7 @@ func _finish_icon(c: Control, id: String, o: Vector2, w: float) -> void:
 
 ## The 분노 ring (its own control: never ghosted — it is the only rage gauge). 5 segments (6° gaps); long ticks with the
 ## labels 1 · 3 · MAX at the tier boundaries (lock glyph instead of 3 / MAX while only t1 can fire: jam, before the
-## lock); fill colour by level (1–2 orange, 3–4 red-orange, 5 gold with a sparkle running round); a tier that just got
+## lock); fill colour by level (1–2 crimson, 3–4 red-orange, 5 gold with a sparkle running round); a tier that just got
 ## ready flashes white; full rage = pulsing halo + MAX tag ("지금!" in the signature window).
 func _draw_rage_ring(c: Control) -> void:
 	var pop: float = _rage_pop()
@@ -1439,7 +1879,7 @@ func _draw_rage_ring(c: Control) -> void:
 	var rr: float = rad - 2.0
 	var full: bool = rage_max()
 	var lvl: int = clampi(skill_segs, 0, n)
-	var fill: Color = C_RAGE if lvl <= 2 else (C_T3 if lvl < n else C_GOLD)
+	var fill: Color = rage_fill_color(lvl)
 	if full:
 		var burst: float = maxf(0.0, 1.0 - (now - _rage_max_t) / 0.35)
 		var pul: float = 0.5 + 0.5 * sin(now * 10.0)

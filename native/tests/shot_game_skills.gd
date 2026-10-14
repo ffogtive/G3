@@ -5,6 +5,10 @@ extends SceneTree
 ##       -s res://tests/shot_game_skills.gd -- --out=/abs/dir [--seed=1007] [--size=585x1266] [--fallback]
 ## Saves <n>_<moment>.png (jam_t1_cast … result) and skills_sheet.png (all frames, half size, labelled order in the
 ## RESULT lines). Exit 0 = the run reached the result with every cast · 1 = a step failed · 2 = cannot render.
+## r3 U2 / U4: a second autopilot run on the same seed adds prelock_ready / prelock_t1 (the boss-phase 충격파 before the
+## front lock: face 충격파, the orange 분노 tag on the reticle, then the cast with banner '충격파!!'), combo_c10 (badge ×10 + '따다닥!' beside it) and combo_c20
+## (badge ×20, 펑크, the stun window 약점) frames. Every frame also checks the damage pops: all inside the safe rect (no
+## cut glyph) and ≤ 2 live per villain (RESULT pops …; a violation fails the shot).
 
 const Run := preload("res://tests/skills_touch_run.gd")
 const E2E := preload("res://tests/test_e2e_touch_skills.gd")
@@ -17,6 +21,7 @@ var _vp: SubViewport
 var _g: Game
 var _frames: Array[Image] = []
 var _n: int = 0
+var _pop_bad: PackedStringArray = []
 
 
 func _initialize() -> void:
@@ -60,6 +65,11 @@ func _main() -> void:
 		var d: Dictionary = r.notes.get(k, {})
 		casts.append("%s=%s" % [k, bool(d.get("ok", false))])
 	var ok: bool = r.errors.is_empty() and not ",".join(casts).contains("=false")
+	_g.queue_free()  # its HUD (result card) would sit over the next run's frames
+	await process_frame
+	var cerr: PackedStringArray = await _combo_segment()
+	ok = ok and cerr.is_empty() and _pop_bad.is_empty()
+	print("RESULT r3 frames: errors [%s] pop violations [%s]" % [", ".join(cerr), "; ".join(_pop_bad)])
 	_sheet()
 	print("RESULT traffic=%s casts %s topped [%s] errors [%s]" % ["fallback" if _fallback else "native", " ".join(casts),
 		"; ".join(r.topped), ", ".join(r.errors)])
@@ -81,6 +91,87 @@ func _shot(name: String) -> void:
 	print("RESULT shot %s phase=%s t=%.2f segs=%d next=%d active=%s fx=%s cam_fin=%s" % [file, _g.phase, _g.sim.real_time,
 		int(sk.get("segs", 0)), int(sk.get("next_tier", 0)), str((sk.get("active", {}) as Dictionary).get("id", "")),
 		JSON.stringify(_g.fx.counts()), _g.camera.finish_id])
+	# r3 U4: no pop cut at the screen edge, ≤ 2 live pops per villain
+	var sr: Rect2 = _g.hud.safe_rect()
+	var out: int = 0
+	var rects: Array[Rect2] = _g.hud.pops.pop_rects()
+	for pr: Rect2 in rects:
+		if not sr.encloses(pr):
+			out += 1
+	var per: Dictionary = {}
+	for v: Variant in _g.st.get("villains", []):
+		var vid: int = int((v as Dictionary).get("id", -1))
+		per["v%d" % vid] = _g.hud.pops.live_count("v%d" % vid)
+	var worst: int = 0
+	for k: String in per:
+		worst = maxi(worst, int(per[k]))
+	print("RESULT pops %s: %d drawn, %d outside the safe rect, live per villain %s [%s] combo %s chip '%s' rage_face %s tag %s" % [file, rects.size(),
+		out, JSON.stringify(per), ", ".join(_g.hud.pops.texts_pops(true)), JSON.stringify(_g.hud.combo_view()), _g.hud.neck_chip_text(),
+		_g.hud.rage_face_label(), _g.hud.reticle.rage_tag])
+	if out > 0 or worst > 2:
+		_pop_bad.append("%s out=%d per=%s" % [file, out, JSON.stringify(per)])
+
+
+## r3 U2 frames on a fresh autopilot run: the pre-lock 충격파, the ×10 and ×20 combo milestones.
+func _combo_segment() -> PackedStringArray:
+	var err: PackedStringArray = []
+	var g: Game = E2E.make(self, _vp, _fallback, _seed)
+	g.hud.debug_safe_pt = Vector2(59, 34)
+	g.hud.apply_safe_area()
+	await process_frame
+	await process_frame
+	_g = g
+	var evs: Array[Dictionary] = []
+	g.event_tap = func(e: Dictionary) -> void: evs.append(e)
+	var ticks: int = 0
+	while ticks < 120 * 90 and not (g.phase == &"boss" and not g.sim.front_locked and _near_villain(g, 55.0)):
+		g.advance_ticks(6)
+		ticks += 6
+	if g.phase == &"boss" and not g.sim.front_locked:
+		g.sim.add_rage(maxf(0.0, 0.21 - g.sim.rage))
+		g.advance_ticks(48)  # the reticle (and its tag) has faded in
+		g.sim.add_rage(maxf(0.0, 0.21 - g.sim.rage))
+		await _shot("prelock_ready")  # face 충격파 + the orange 분노 tag on the villain before the lock
+		evs.clear()
+		g.sim.input(&"rage")
+		var seen: bool = false
+		for k: int in 60:
+			g.advance_ticks(2)
+			for e: Dictionary in evs:
+				seen = seen or (str(e.get("type", "")) == "skill_start" and str(e.get("id", "")) == "t1_wave")
+			if seen:
+				break
+		g.advance_ticks(18)
+		await _shot("prelock_t1")
+		if not seen:
+			err.append("prelock t1_wave not cast")
+	else:
+		err.append("no pre-lock boss frame (phase %s, locked %s)" % [g.phase, g.sim.front_locked])
+	for want: String in ["c10", "c20"]:
+		evs.clear()
+		var hit: bool = false
+		ticks = 0
+		while ticks < 120 * 60 and not hit and g.phase == &"boss":
+			g.advance_ticks(2)
+			ticks += 2
+			for e: Dictionary in evs:
+				hit = hit or (str(e.get("type", "")) == "combo_milestone" and str(e.get("id", "")) == want)
+		if not hit:
+			err.append("no %s milestone (phase %s)" % [want, g.phase])
+			continue
+		g.advance_ticks(30 if want == "c10" else 38)
+		await _shot("combo_%s" % want)
+	g.queue_free()
+	await process_frame
+	return err
+
+
+static func _near_villain(g: Game, m: float) -> bool:
+	for v: Variant in g.st.get("villains", []):
+		var d: Dictionary = v
+		if bool(d.get("alive", false)) and absf(float(d.get("s", 0.0)) - g.player.s) <= m:
+			return true
+	return false
 
 
 ## All frames side by side at third size, rows of 6.

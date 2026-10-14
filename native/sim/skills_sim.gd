@@ -27,12 +27,14 @@ extends RefCounted
 ##      label, name} + skill_start / skill_hit / skill_end {chan: "combo", tier 0, id: c5_double | c10_burst |
 ##      c20_snipe, n (hits), combo (count)} on the villain the milestone tack hit: frac × max HP per hit (window decided
 ##      at the first hit), minKillT floor, c20 force_pop + cancel_attack + apply_stun 0.8 (stunCap / stunImmune) + hitstop.
+##      A milestone tack that kills its villain fires on a survivor (1-3 duo) and not at all after the last kill.
 ##   C2 _hit_wave / _hit_carpet use dmgInFrac / dmgOutFrac × the target's max HP (flat dmgIn / dmgOut without them).
 ##   C3 mode(): phase boss with a villain alive = fight / rescue whether or not the front is locked (prelock: the
 ##      ladder is preLockLadder [1]); items keep the jam rules before the lock (_imode). t1 hits every alive villain
 ##      within t1.reach m in every lane (laneRange 99), hit delay = delay + max(0, |ds| − delayFrom) × delayPerM per
 ##      target; before the lock it also fires sim._rage_horn_effect (rage_horn tagged via "t1_wave") and stuns
-##      stunPreLock s. Out of reach in the boss phase: the segment is spent, skill_chase {dur} + chase s of boost, the
+##      stunPreLock s; a pre-lock cast holds the attack clock but gives no cast invuln (the player keeps the jam bump
+##      rules until the lock). Out of reach in the boss phase: the segment is spent, skill_chase {dur} + chase s of boost, the
 ##      wave fires on the first tick a villain is in reach, else the segment is refunded: skill_denied {reason "far",
 ##      refunded true} + bubble "너무 멀다!" (has_target(t1) stays true: the button never greys out for range).
 ##   state(): + combo {n, left, next_n, next_id, next_name, best, timeout, cycle, marks}, face (clear | wave | carpet |
@@ -466,8 +468,11 @@ func _start(sim: GameSim, chan: String, tier: int, id: String, target: Dictionar
 	active[chan] = rec
 	counts[id] = int(counts.get(id, 0)) + 1
 	if (mode(sim) if chan == "rage" else _imode(sim)) != "jam":
+		sim.boss.hold = maxf(sim.boss.hold, dur)  # pre-lock rage too: no new throw starts during the cast
+	if _imode(sim) != "jam":
+		# r3 C3: the cast invuln only after the lock — before it the player's body keeps the jam rules (a bump still kicks
+		# back), as every pre-lock cast did before r3 (test_neck 1-9: the rage verb's plug → lock time)
 		sim.player.invuln = maxf(sim.player.invuln, dur + float(cfg.get("invulnPad", 0.2)))
-		sim.boss.hold = maxf(sim.boss.hold, dur)
 	sim._emit({"type": "skill_start", "chan": chan, "tier": tier, "id": id, "target_id": rec["target_id"], "lanes": lanes,
 		"dur": dur, "cine": cine, "s": s, "x": x})
 	return rec
@@ -1024,8 +1029,16 @@ func on_tack_hit(sim: GameSim, v: Dictionary, r: Dictionary) -> void:
 	combo_best = maxi(combo_best, combo_n)
 	_combo_last = sim.time
 	var mid: String = milestone_of(combo_n)
-	if mid != "":
-		_combo_fire(sim, mid, v)
+	if mid == "":
+		return
+	var tgt: Dictionary = v
+	if bool(r.get("killed", false)) or not bool(v.get("alive", true)):
+		# the milestone tack was the killing tack: the burst goes to a survivor (1-3 duo), none over the finisher
+		var al: Array[Dictionary] = sim.boss.alive()
+		if al.is_empty():
+			return
+		tgt = al[0]
+	_combo_fire(sim, mid, tgt)
 
 
 ## GameSim._on_player_hit (r3 W hook): a hit that got through invuln and dealt damage breaks the combo.

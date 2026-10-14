@@ -2,7 +2,8 @@ extends Node
 ## Progress autoload — the player's meta state and the web's economy rules (NATIVE_PARITY A3, A5-A9, A12, A14, A16,
 ## A20, A21, D1-D8; contract in native/meta/README.md).
 ## State (web progress shape + native settings): unlocked, stars{id}, best{id}, wallet, subs, album{id}, owned[], equip{},
-## settings{}, daily{}. Stage keys are strings (JSON). Persisted through the SaveGame autoload after every change.
+## settings{}, daily{}, plays{id} (S1 run index, absent = 0). Stage keys are strings (JSON). Persisted through the
+## SaveGame autoload after every change.
 ## Formulas: Rewards (meta/rewards.gd = rewards.js) composed like main.js:showResult 549-571. Progress is the single
 ## evaluator of stars and payout for a result (NATIVE_PARITY 7 G4): the game reports facts, Progress decides.
 ##
@@ -19,6 +20,11 @@ const SLOT_CATS: Array[String] = ["car", "weapon", "finish"]
 const LOADOUT_EFFECT_BASE: Dictionary = {"pay_mul": 1.0, "airbag": 0, "trot": false, "coffee": false, "rage_start_segs": 0,
 	"jump": false, "jump_cool": 4.0, "drone": false, "drone_every": 0.7}
 const PHOTO_MAX_W: int = 480
+## S1: run indices n ≥ 1 of a stage whose Mulberry32.run_seed(id, n) measured bad (autopilot does not reach the result,
+## or the jam → boss time is > 50 s) on either traffic backend — begin_play steps over them. {stage id: [n, ...]}.
+## Source: tests/test_seed_variety.gd `--full` (1-1~1-10 × n 0..19 × C++/fallback × neck default/on, 2026-10-14:
+## 800/800 finished, jam p90 27 s; only 1-5 n=11 at 58 s, its run 0 is 44 s). Keep it in sync with that test.
+const SEED_SKIP: Dictionary = {5: [11]}
 
 ## The SaveGame node used for disk I/O (default: the autoload). Tests give a private one with its own path.
 var store: Node = null
@@ -26,6 +32,8 @@ var store: Node = null
 var now_ms_override: int = -1
 var today_override: int = -1
 var last_save_error: Error = OK
+## S1: the skip list next_play() uses (SEED_SKIP; tests swap it).
+var seed_skip: Dictionary = SEED_SKIP
 
 var _p: Dictionary = {}
 var _stages: Array = []
@@ -500,6 +508,33 @@ static func _today() -> int:
 	return int(d["year"]) * 10000 + int(d["month"]) * 100 + int(d["day"])
 
 
+# ───────────────────────────── run index (S1, r3 feedback 3: "매번 빌런까지 가는 길이 똑같다")
+
+## Started runs of a stage = the next run index (saved as plays{id}; a save without it reads 0, so the first run after an
+## update is n = 0 = the old fixed seed). Mulberry32.run_seed(id, n) turns the index into the run's traffic seed.
+func plays(id: int) -> int:
+	return maxi(0, int((_p["plays"] as Dictionary).get(str(id), 0)))
+
+
+## The index the next begin_play(id) returns: plays(id) moved past seed_skip[id] (measured bad seeds). The app's held
+## game behind the stage card is built with this, so the card's start keeps it.
+func next_play(id: int) -> int:
+	var n: int = plays(id)
+	var skip: Array = seed_skip.get(id, []) if seed_skip.get(id) is Array else []
+	while n > 0 and skip.has(n):   # run 0 (the golden seed) is never skipped
+		n += 1
+	return n
+
+
+## Called once per run start (stage card START, pause 다시하기). Returns the run index BEFORE the increment (first run
+## of a stage → 0) and saves plays{id} = n + 1. Tow retries inside a run do not call it (same seed).
+func begin_play(id: int) -> int:
+	var n: int = next_play(id)
+	_p["plays"][str(id)] = n + 1
+	_save()
+	return n
+
+
 # ───────────────────────────── settings (native, NATIVE_PARITY A20; applied by FI: buses, Haptics, max_fps, HUD side)
 
 func settings() -> Dictionary:
@@ -582,6 +617,13 @@ func _normalize(raw: Dictionary) -> Dictionary:
 			if SETTINGS_DEFAULT.has(str(k)) and typeof(p["settings"][k]) == typeof(SETTINGS_DEFAULT[str(k)]):
 				settings[str(k)] = p["settings"][k]
 	p["settings"] = settings
+	var plays: Dictionary = {}
+	if p.get("plays") is Dictionary:
+		for id: Variant in p["plays"]:
+			var v: Variant = p["plays"][id]
+			if (v is int or v is float) and int(v) > 0:
+				plays[str(id)] = int(v)
+	p["plays"] = plays
 	if p.get("daily") is Dictionary:
 		p["daily"] = {"date": int(p["daily"].get("date", 0)), "id": int(p["daily"].get("id", 0))}
 	else:

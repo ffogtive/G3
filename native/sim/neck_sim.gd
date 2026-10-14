@@ -15,17 +15,17 @@ extends RefCounted
 ## Active (= the bottleneck) = plug blocking && phase boss before the front lock && player.s > F - activeDist. While
 ## active GameSim sends the traffic player mode "neck" (no stuck assist on either backend) and routes &"honk" here
 ## instead of TrafficBridge.honk.
-## A valve honk counts only from the shoulder within `range` m of the plug's rear and at most `rudeV` m/s faster than it
-## ("붙어서 빵": pulled up behind it); anything else is "far" (charging in / from afar).
+## A valve honk counts only from the shoulder within `range` m of the plug's rear ("붙어서 빵": pulled up behind it); from
+## beyond range it is "far" (sulk `stubborn` s + safetyPenalty); in range but more than `rudeV` m/s faster = "nudge"
+## ('조금 더 붙어!', free); while it sulks an in-range honk is ignored (no refresh, no penalty) — r3 final, device review.
 ## Valves (data plug.valve): honk (n honks within `window` s; blink: 1-8 blinker first; passV/passFor: 1-6 pass slowly)
 ## · race (1-2: honk -> 0.8 s aside; the nose must get `advance` m past its rear by then or the thief takes it back) · quiet (1-3:
 ## within `near` m behind it, not pushing, no honk for `wait` s; honk near the duo = +penalty s + taunt) · push (1-4:
 ## shoulder honk pushes it into lane 3; lane-3 honk pushes it onto the shoulder, honks ignored blockFor s) · deaf
 ## (1-9: only rage) · none (1-5). Honk / race / push: a shoulder honk out of `range` m or one while stubborn makes it
 ## stubborn for `stubborn` s (0 = off, 1-1); spamN > 0: more than spamN honks within spamWin s -> ignored deafFor s.
-## Common: verb chip after chipAt s; safety s after activation it gives way by itself (no bonus) — every honk that
-## makes it dig in (stubborn refresh, deaf, 1-3 backfire) pushes that back by safetyPenalty s (1-3: penalty), at most
-## safetyMax s in all; a verb open = rage +
+## Common: verb chip after chipAt s; safety s after activation it gives way by itself (no bonus) — a far honk and a 1-3
+## backfire push that back by safetyPenalty s (1-3: penalty), at most safetyMax s in all; a verb open = rage +
 ## plug.rage, score + plug.score; rage t1 (GameSim._rage_horn_effect) opens it at once (exit fly; bonus only on deaf).
 ## Exit cutin / zip / tow / fly runs exitDur s, then the plug is removed from the extras: cutin / zip nose towards lane 3
 ## (still on the shoulder) until clearAt × exitDur, then pull out ahead; tow hooks, then goes onto the verge; fly (rage)
@@ -66,6 +66,7 @@ var _t_active: float = 0.0
 var _chip: String = ""
 var _honk_t: Array[float] = []
 var _stubborn: float = 0.0
+var _stubborn_said: float = -99.0
 var _deaf: float = 0.0
 var _yield: Dictionary = {}
 var _quiet: float = 0.0
@@ -147,6 +148,7 @@ func reset_attempt() -> void:
 	_chip = ""
 	_honk_t.clear()
 	_stubborn = 0.0
+	_stubborn_said = -99.0
 	_deaf = 0.0
 	_yield = {}
 	_quiet = 0.0
@@ -420,8 +422,13 @@ func on_honk(sim: GameSim) -> Dictionary:
 	honks += 1
 	var p: PlayerSim = sim.player
 	var g: float = gap(sim)
-	var in_range: bool = g <= float(pc.get("range", 6.0)) and g >= -float(plug["len"]) \
-			and p.v - float(plug["v"]) <= float(pc.get("rudeV", 3.0))
+	# r3 final (device review major): "far" is a honk from beyond `range` m only. A honk on arrival (inside range, still
+	# closing at the leash's v + sqrt(18·(gap − 1)), 5–7 m/s at 3–4 m) used to read as "far" (rudeV 3), started the sulk
+	# and every later honk refreshed it + added safety penalty: eager tappers waited the 12 s safety on 6/9 stages.
+	# Now: in range but faster than rudeV → "nudge" ('조금 더 붙어!', no sulk, no penalty); while sulking an in-range honk
+	# is ignored (no refresh, no penalty); only a far honk sulks (`stubborn` s) and costs safetyPenalty.
+	var in_range: bool = g <= float(pc.get("range", 6.0)) and g >= -float(plug["len"])
+	var rude: bool = p.v - float(plug["v"]) > float(pc.get("rudeV", 3.0))
 	var lane_ok: bool = p.lane == Cfg.SHOULDER_LANE or (valve == "push" and p.lane == Cfg.SHOULDER_LANE - 1)
 	var r: String = ""
 	if valve == "quiet":
@@ -446,20 +453,20 @@ func on_honk(sim: GameSim) -> Dictionary:
 			r = "stubborn"
 			_say(sim, "stubborn", "angry", 1.2)
 			sim._emit({"type": "neck_block", "reason": "spam"})
-	elif _deaf > 0.0 or (valve == "push" and _push_block > 0.0):
-		r = "stubborn"
-		_penalize(float(pc.get("safetyPenalty", 1.0)))
-		_say(sim, "stubborn", "angry", 1.0)
-	elif _stubborn > 0.0:
-		_stubborn = float(pc.get("stubborn", 2.0))
-		r = "stubborn"
-		_penalize(float(pc.get("safetyPenalty", 1.0)))
-		_say(sim, "stubborn", "angry", 1.0)
 	elif not in_range:
 		r = "far"
 		if float(pc.get("stubborn", 0.0)) > 0.0:
 			_stubborn = float(pc.get("stubborn", 2.0))
+			_penalize(float(pc.get("safetyPenalty", 1.0)))
 			_say(sim, "far", "taunt", 1.2)
+	elif _deaf > 0.0 or (valve == "push" and _push_block > 0.0) or _stubborn > 0.0:
+		r = "stubborn"  # ignored: the sulk / spam deafness / push block runs out on its own
+		if _t - _stubborn_said > 1.4:
+			_stubborn_said = _t
+			_say(sim, "stubborn", "angry", 1.0)
+	elif rude:
+		r = "nudge"
+		_say(sim, "closer", "warn", 0.9)
 	else:
 		r = _honk_valve(sim)
 	sim._emit({"type": "honk_reply", "id": PLUG_ID, "data": r, "neck": true})

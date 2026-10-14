@@ -308,7 +308,8 @@ func _update_pace(sdt: float) -> void:
 ## r3 A1: the widest gap between the frontmost body and the next one behind it in lanes 0-3 (jamShape spaced / pass
 ## lanes are spaced by design and left out). All four: lane 3 next to the shoulder is the one the player wants back into. A zig stage keeps every lane's followers
 ## behind a virtual wall at front_line - villainWall.back - zigExtra (8 m: the weave buffer, both cores), so it has
-## nothing to glue: 0. Bodies: NPC cars (cars_in_lane), alive villains, the player. 0 when nothing to measure.
+## nothing to glue: 0. Bodies: NPC cars (cars_in_lane), alive villains, the player, the r3 plug (NeckSim.extras). 0 when
+## nothing to measure.
 func front_gap_max() -> float:
 	if stage.get("zig") == true:
 		return 0.0
@@ -328,6 +329,7 @@ func front_gap_max() -> float:
 			if str(kinds[l]) in ["spaced", "pass"]:
 				excl[l] = true
 	var worst: float = 0.0
+	var plug_bodies: Array[Dictionary] = neck.extras()
 	for l: int in Cfg.NUM_LANES:
 		if excl.has(l):
 			continue
@@ -344,6 +346,12 @@ func front_gap_max() -> float:
 				bodies.append([float(v["s"]) + float(v["len"]) / 2.0, float(v["s"]) - float(v["len"]) / 2.0])
 		if player.occupies(l):
 			bodies.append([player.s + player.len / 2.0, player.s - player.len / 2.0])
+		# r3 final (review major): the 병목 plug is a body too. 1-4's straddle plug sits on the lane 3/4 boundary; without it
+		# lane 3 read as an 8 m "hole" and held the villain at the glue floor (0.27× jamSpeed) for the whole approach.
+		# Same x-occupancy rule as the bridge extras and test_neck (|x − lane x| < w/2 + 1.2).
+		for ex: Dictionary in plug_bodies:
+			if absf(float(ex["x"]) - Cfg.lane_x(l)) < float(ex["w"]) / 2.0 + 1.2:
+				bodies.append([float(ex["s"]) + float(ex["len"]) / 2.0, float(ex["s"]) - float(ex["len"]) / 2.0])
 		for b: Array in bodies:
 			if float(b[0]) > b0f:
 				b1f = b0f
@@ -590,12 +598,19 @@ func step(dt: float) -> void:
 		var out: Dictionary = {}
 		var r: String = ""
 		var tl: int = player.lane + lane_dir
+		var blk: int = lane_blocker(tl) if not player.ghost and tl >= 0 and tl <= Cfg.SHOULDER_LANE and player.lc_t >= 0.65 else 0
 		# r3 A2: the plug is a lane blocker on both backends even without TrafficBridge.set_extras
-		if not player.ghost and tl >= 0 and tl <= Cfg.SHOULDER_LANE and player.lc_t >= 0.65 \
-				and neck.blocks(tl, player.s - player.len / 2.0 - 0.35, player.s + player.len / 2.0 + 0.35):
+		if blk == NeckSim.PLUG_ID:
 			player._wiggle(lane_dir)
 			r = "blocked"
 			out["blocker"] = NeckSim.PLUG_ID
+		elif blk == 0 and not player.ghost and tl == Cfg.SHOULDER_LANE and player.lc_t >= 0.65 and bridge.can_merge(tl, 0.35) != 0:
+			# r3 final B1: only smashable shoulder obstacles are in the way — merge and smash them (the shoulder rule)
+			var smash_ids: PackedInt32Array = _smash_in_window(0.35)
+			r = player.request_lane(lane_dir, null, out)
+			if r == "ok":
+				for oid: int in smash_ids:
+					_on_player_event({"type": "smash", "id": oid})
 		else:
 			r = player.request_lane(lane_dir, bridge, out)
 		if r == "ok":
@@ -920,6 +935,71 @@ func _lane_bodies(lane: int, s_min: float, s_max: float) -> Array:
 	if neck.occupies(lane) and float(neck.plug["s"]) > s_min and float(neck.plug["s"]) < s_max:
 		out.append([neck.rear(), neck.front(), "plug", NeckSim.PLUG_ID, float(neck.plug["s"])])
 	out.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	return out
+
+
+## r3 final B1 (feel review blocker): the lane-change rule of the ▶/◀ input, also for bots. 0 = the player may start a
+## change into tl now, else the blocker id (TrafficBridge.can_merge ids; NeckSim.PLUG_ID for the plug; -1 off the road).
+## A smashable shoulder obstacle (cones / debris) does not block a merge onto the shoulder: the player drives into it and
+## smashes it, the same rule as driving on the shoulder. Before, 1-4 n2 took a let-in into lane 3 beside the cone run
+## (104–194 m), can_merge(4) returned a cone on both cores and the run crawled in lane 3 for ~110 s.
+## Other shoulder bodies (breakdown, cheater car, villain) still block. No RNG, both backends.
+func lane_blocker(tl: int, margin: float = 0.35) -> int:
+	if tl < 0 or tl > Cfg.SHOULDER_LANE:
+		return -1
+	if neck.blocks(tl, player.s - player.len / 2.0 - margin, player.s + player.len / 2.0 + margin):
+		return NeckSim.PLUG_ID
+	sync_traffic_player()
+	var b: int = bridge.can_merge(tl, margin)
+	if b == 0 or tl != Cfg.SHOULDER_LANE or not _is_smash_obstacle(b):
+		return b
+	return _shoulder_blocker_but_smash(margin)
+
+
+func _is_smash_obstacle(id: int) -> bool:
+	for o: Variant in bridge.obstacles():
+		if int((o as Dictionary)["id"]) == id:
+			return bool((o as Dictionary).get("smash", false))
+	return false
+
+
+## The first non-smashable body on the shoulder overlapping the player's merge window (0 = none): obstacles that do not
+## smash, NPC cars whose x is on the shoulder band (NeckSim.occupies rule), villains in the shoulder lane. The plug is
+## lane_blocker's own check. C++ keeps a smashed obstacle in its buckets until the next update, so this walks the
+## records instead of asking can_merge again.
+func _shoulder_blocker_but_smash(margin: float) -> int:
+	var lo: float = player.s - player.len / 2.0 - margin
+	var hi: float = player.s + player.len / 2.0 + margin
+	var SL: int = Cfg.SHOULDER_LANE
+	for o: Variant in bridge.obstacles():
+		var od: Dictionary = o
+		var h: float = float(od["len"]) / 2.0
+		if float(od["s"]) + h > lo and float(od["s"]) - h < hi and not bool(od.get("smash", false)):
+			return int(od["id"])
+	var band: float = 1.9 / 2.0 + Cfg.LANE_W / 2.0 - 0.6
+	for l: int in [SL - 1, SL]:
+		for id: int in bridge.cars_in_lane(l, lo - 8.0, hi + 8.0):
+			var ci: Dictionary = bridge.car_info(id)
+			var h2: float = _car_len_of(id) / 2.0
+			if not ci.is_empty() and absf(float(ci["x"]) - Cfg.lane_x(SL)) < band and float(ci["s"]) + h2 > lo and float(ci["s"]) - h2 < hi:
+				return id
+	for v: Dictionary in boss.villains:
+		if (bool(v["alive"]) or bool(v["dying"])) and not bool(v.get("gone", false)) and BossSim.lanes_of(v).has(SL):
+			if float(v["s"]) + float(v["len"]) / 2.0 > lo and float(v["s"]) - float(v["len"]) / 2.0 < hi:
+				return -100 - int(v["index"])
+	return 0
+
+
+## Smashable shoulder obstacles overlapping the player's merge window (the ones a ▶ merge drives into).
+func _smash_in_window(margin: float) -> PackedInt32Array:
+	var lo: float = player.s - player.len / 2.0 - margin
+	var hi: float = player.s + player.len / 2.0 + margin
+	var out := PackedInt32Array()
+	for o: Variant in bridge.obstacles():
+		var od: Dictionary = o
+		var h: float = float(od["len"]) / 2.0
+		if float(od["s"]) + h > lo and float(od["s"]) - h < hi and bool(od.get("smash", false)):
+			out.append(int(od["id"]))
 	return out
 
 

@@ -109,6 +109,25 @@ func reset() -> void:
 	read_only = false
 
 
+# ───────────────────────────── run index (r3 S1; no SEED_SKIP list here, so next_play == plays)
+func plays(id: int) -> int:
+	var pl: Variant = data.get("plays")
+	return maxi(0, int((pl as Dictionary).get(str(id), 0))) if pl is Dictionary else 0
+
+
+func next_play(id: int) -> int:
+	return plays(id)
+
+
+func begin_play(id: int) -> int:
+	var n: int = plays(id)
+	if not (data.get("plays") is Dictionary):
+		data["plays"] = {}
+	data["plays"][str(id)] = n + 1
+	save()
+	return n
+
+
 # ───────────────────────────── stages
 func stages() -> Array:
 	return _stages

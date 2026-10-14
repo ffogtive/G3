@@ -48,3 +48,26 @@ static func traffic_seed(stage_id: int) -> int:
 
 static func world_seed(stage_id: int) -> int:
 	return stage_id * 7919 + 13
+
+
+## murmur3 fmix32 finalizer: a 32-bit avalanche (every input bit flips about half the output bits). [0, 2^32).
+static func mix32(x: int) -> int:
+	var h: int = x & MASK32
+	h ^= h >> 16
+	h = Mulberry32.imul(h, 0x85EBCA6B)
+	h ^= h >> 13
+	h = Mulberry32.imul(h, 0xC2B2AE35)
+	h ^= h >> 16
+	return h & MASK32
+
+
+## S1 (r3, feedback 3): the seed of a stage's n-th run (n = Progress.begin_play's pre-increment count, from 0).
+## n == 0 is traffic_seed(id) — first runs and every golden stay byte-identical. n ≥ 1 mixes the run index into the
+## stage seed (golden-ratio step 0x9E3779B9, fmix32) and keeps it non-negative (game.gd / GameSim read < 0 as "default").
+## The whole run derives from it: spawn (kinds, colours, gaps, shoulder obstacle order, minis), cheater timing, the
+## boss / weapon RNG. Tow retries inside a run keep it.
+static func run_seed(stage_id: int, n: int) -> int:
+	var base: int = Mulberry32.traffic_seed(stage_id)
+	if n <= 0:
+		return base
+	return Mulberry32.mix32(base ^ ((n * 0x9E3779B9) & MASK32)) & 0x7FFFFFFF

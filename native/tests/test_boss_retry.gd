@@ -47,7 +47,9 @@ func _r1(base: Dictionary) -> void:
 	sim.autopilot = Autopilot.new(21)
 	_check(_run(sim, func() -> bool: return sim.front_locked, 120.0), "R1: autopilot reaches the front lock")
 	var v: Dictionary = sim.boss.villains[0]
-	sim.boss.damage(v, 50.0, 50.0, false)
+	# 40 % of max HP (not a flat 50): the phase-2 line is 70 %, and r3 C2 rescales boss HP (skills.hpMul × skillHpMul).
+	var cut: float = 0.4 * float(v["max_hp"])
+	sim.boss.damage(v, cut, cut, false)
 	_run(sim, func() -> bool: return sim.boss.phase_idx == 1, 1.0)
 	_check(sim.boss.phase_idx == 1 and sim.boss.attacks.has("smoke"), "R1: HP %.0f%% → boss phase 2 (attacks %s)" % [sim.boss.hp_frac() * 100.0, sim.boss.attacks])
 	var want_attacks: Dictionary = sim.boss.attacks.duplicate()
