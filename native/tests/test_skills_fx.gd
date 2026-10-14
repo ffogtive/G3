@@ -130,7 +130,7 @@ func _fx_events(tree: SceneTree) -> void:
 	fx.sync(st)
 	var caps: bool = true
 	var shapes: Dictionary = {}
-	# t3: 12 tacks + strip, 4 hits, one pop → tack-strip + skid decals
+	# t3: config tacks + strip, 4 hits, one pop → tack-strip + skid decals
 	fx.on_event({"type": "skill_start", "chan": "rage", "tier": 3, "id": "t3_carpet", "target_id": 0, "lanes": PackedInt32Array([0, 1]),
 		"dur": 1.2, "cine": false, "s": 288.0, "x": RoadGraph.lane_x(0.0)}, st)
 	shapes["tacks"] = int(fx.counts()["tacks"])
@@ -163,8 +163,10 @@ func _fx_events(tree: SceneTree) -> void:
 			"window": true, "immune": false, "stun": 2.0, "popped": 0, "killed": false, "hp_frac": 0.3, "s": 288.0, "x": 0.0}, st)
 		fx.advance(0.016)
 		caps = caps and _caps(fx)
-	_check(shapes.get("tacks") == 12 and int(shapes.get("decals_t3", 0)) >= 2 and shapes.get("drone") == true,
-		"t3 throws 12 caltrops + leaves the tack strip / skid decals, the drone shows (%s)" % JSON.stringify(shapes))
+	var want_tacks: int = int(((SkillCues.cfg().get("t3", {}) as Dictionary) if SkillCues.cfg().get("t3") is Dictionary else {}).get("tacks", 12))
+	_check(shapes.get("tacks") == want_tacks and int(shapes.get("decals_t3", 0)) >= 2 and shapes.get("drone") == true,
+		"t3 throws config.skills.t3.tacks (%d) caltrops + leaves the tack strip / skid decals, the drone shows (%s)"
+		% [want_tacks, JSON.stringify(shapes)])
 	_check(caps, "particles stay ≤ lit 700 · glow 700 · smoke 220 and decals ≤ 8 through every skill + 20 t5 impacts")
 	# finishers: props follow death_t beats; ★ on gone
 	var seen: Dictionary = {}
@@ -288,8 +290,11 @@ func _hud(tree: SceneTree) -> void:
 		texts.append(str(p["text"]))
 	hud.on_event({"type": "skill_denied", "chan": "rage", "tier": 5, "id": "", "reason": "rage"})
 	var denied: bool = hud.pops._pops.back()["text"] == "분노 부족!"
-	_check(stamp and kinds == ["tick", "tick", "tick", "big"] and texts.has("-42!") and texts.has("한 번 더!") and denied,
-		"t5 → stamp '참교육!!'; t3 → 3 ticks + 1 summed '-12'; t5 no kill → '-42!' + '한 번 더!'; denied → '분노 부족!' (%s %s)" % [kinds, texts])
+	var m: int = Hud.DMG_SHOW_MUL
+	_check(stamp and kinds == ["tick", "tick", "tick", "big"] and texts.has("-%d" % (12 * m)) and texts.has("치명! -%d" % (42 * m))
+		and texts.has("한 번 더!") and denied,
+		"t5 → stamp '참교육!!'; t3 → 3 ticks + 1 summed '-%d' (×%d view); t5 no kill in the window → '치명! -%d' + '한 번 더!'; denied → '분노 부족!' (%s %s)"
+		% [12 * m, m, 42 * m, kinds, texts])
 	hud.apply_state(UiStubState.kill())
 	hud.on_event({"type": "kill", "id": 0, "last": true, "s": 254.9, "x": -6.45})
 	var early: bool = hud.skip_hint_visible()

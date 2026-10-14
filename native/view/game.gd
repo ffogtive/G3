@@ -83,6 +83,10 @@ var start_s: float = 0.0
 var front_s: float = 200.0
 var sim_time: float = 0.0
 var real_time: float = 0.0
+var _prev_hop: float = 0.0
+var _land_squash_t: float = -99.0
+## villain index → real_time of its last hit / skill_hit (a taunt bubble over fresh damage pops was clutter, rvB).
+var _vhit_t: Dictionary = {}
 var ticks: int = 0
 var log_events: Array[Dictionary] = []
 var phase_log: Array[StringName] = []
@@ -433,7 +437,19 @@ func _place_heroes() -> void:
 	var yaw: float = float(p.get("yaw", 0.0)) + float(p.get("spin", 0.0))
 	var pxf: Transform3D = road.world(float(p["s"]), float(p["x"]), yaw)
 	pxf.basis = pxf.basis * Basis(Vector3.FORWARD, float(p.get("roll", 0.0)))
-	pxf.origin.y += float(p.get("hop", 0.0))
+	var hop: float = float(p.get("hop", 0.0))
+	pxf.origin.y += hop
+	# mv_jump air (rvB, view only): from the high boss camera a 3.4 m hop barely changed the car, so the jump read only
+	# as a landing burst. Grow it toward the camera (1.25× at the apex), nose up while rising, squash on landing.
+	var k: float = clampf((hop - 0.5) / 2.9, 0.0, 1.0)
+	if k > 0.0:
+		var rising: float = 1.0 if hop > _prev_hop else 0.0
+		pxf.basis = pxf.basis * Basis(Vector3.RIGHT, deg_to_rad(10.0) * k * rising) * Basis.from_scale(Vector3.ONE * (1.0 + 0.25 * k))
+	elif _prev_hop >= 0.5:
+		_land_squash_t = real_time
+	if real_time - _land_squash_t < 0.08:
+		pxf.basis = pxf.basis * Basis.from_scale(Vector3(1.06, 0.85, 1.06))
+	_prev_hop = hop
 	player_view.transform = pxf
 	player_view.speed = float(p["v"])
 	var vs: Array = st["villains"]
@@ -467,6 +483,8 @@ func _on_event(e: Dictionary) -> void:
 	camera.on_event(e)
 	icons.on_event(e, real_time)
 	var p: Dictionary = st.get("player", {})
+	if str(e.get("type", "")) in ["hit", "skill_hit"] and int(e.get("target_id", -1)) >= 0:
+		_vhit_t[int(e["target_id"])] = real_time
 	match str(e.get("type", "")):
 		"phase":
 			_enter_phase(StringName(str(e.get("phase", ""))))
@@ -696,6 +714,8 @@ func _bubble(e: Dictionary, p: Dictionary) -> void:
 		"villain":
 			if sim.phase == &"kill" and not str(stage.get("defeatLine", "")).is_empty():
 				return  # the "참교육 완료!" banner already carries the defeat line (two copies overlapped)
+			if kind == "taunt" and (real_time - float(_vhit_t.get(id, -99.0)) < 0.8 or hud._under_skill(id)):
+				return  # a taunt over fresh damage pops on the same ~80 px was clutter (rvB)
 			var hv: HeroVehicleView = _villain_view(id)
 			if hv == null:
 				return

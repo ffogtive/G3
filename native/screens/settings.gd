@@ -14,6 +14,9 @@ const ROWS: Array = [
 	["left_hand", "왼손 모드", "경적·분노 버튼을 왼쪽으로"],
 ]
 
+## Debug builds only: the hosted game gets both item buttons (점프 · 드론) as if owned (App._loadout).
+const DEV_ITEMS_ROW: Array[String] = ["dev_items", "테스트: 아이템 체험", "Debug 빌드 전용 · 점프·드론 버튼을 산 것처럼"]
+
 var switches: Dictionary = {}
 var _credits: Control
 
@@ -61,6 +64,8 @@ func build() -> void:
 	v.add_child(rm)
 	for row: Array in ROWS:
 		rv.add_child(_row(str(row[0]), str(row[1]), str(row[2])))
+	if OS.is_debug_build():  # device test rounds (2026-10-14 review): try the item skills without buying them
+		rv.add_child(_row(DEV_ITEMS_ROW[0], DEV_ITEMS_ROW[1], DEV_ITEMS_ROW[2]))
 	var cm: MarginContainer = ScrKit.margin(18, 8, 18, 0)
 	var cv: VBoxContainer = ScrKit.vbox(6)
 	cm.add_child(cv)

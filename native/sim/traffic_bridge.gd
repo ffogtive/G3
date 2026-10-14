@@ -400,6 +400,13 @@ func lane_blocked(lane: int, s_min: float, s_max: float) -> int:
 	return 0 if _creep == null or _creep.lane_free(lane, (s_min + s_max) * 0.5, s_max - s_min - 0.7) else -1
 
 
+## The GDScript fallback backs NPC cars off the player when they end up inside it (a jam hop into a short slot), so
+## GameSim.jam_hop may land in slots shorter than the car there (skills.items.mv_jump.jamMinSlot). The C++ IDM only
+## stops them, so the native path keeps the strict slot (car + jamSlotPad).
+func makes_room() -> bool:
+	return _core == null and _creep != null
+
+
 ## {s, x, v, lane} of an NPC car by id (empty when unknown).
 func car_info(id: int) -> Dictionary:
 	if _core != null:
@@ -699,13 +706,18 @@ class _Creep:
 				lead_rear = front_line - 3.0
 				lead_v = jam_speed
 			var order: PackedInt32Array = _order[l]
+			var lead_shoved: bool = false
 			for k: int in order.size():
 				var i: int = order[k]
 				var rear_i: float = s[i] - ln[i] / 2.0
 				var front_i: float = s[i] + ln[i] / 2.0
 				var gap: float = lead_rear - front_i
-				if l == p_lane and p_s - p_len / 2.0 > front_i - 0.01 and p_s - p_len / 2.0 < lead_rear:
+				# The player leads from its centre, not its rear (rvA: after a jam hop landed in a short slot the car
+				# just cleared sat inside the player's rear and, seeing no leader, kept creeping into it).
+				var limit: float = lead_rear if lead_shoved else INF
+				if l == p_lane and p_s > s[i] and p_s - p_len / 2.0 < lead_rear:
 					gap = p_s - p_len / 2.0 - front_i
+					limit = p_s - p_len / 2.0
 				var target: float
 				if released:
 					target = 25.0
@@ -719,6 +731,13 @@ class _Creep:
 				var dv: float = clampf(want - v[i], A_MIN * dt, (4.6 if released else A_MAX) * dt)
 				v[i] = maxf(0.0, v[i] + dv)
 				s[i] += v[i] * dt
+				var ov: float = s[i] + ln[i] / 2.0 + 0.05 - limit
+				lead_shoved = false
+				if ov > 0.0 and is_nan(wall_off[i]) and not released:  # inside the player (or a car it shoved): back off
+					s[i] -= minf(ov, 14.0 * dt)
+					v[i] = 0.0
+					rear_i = minf(rear_i, s[i] - ln[i] / 2.0)
+					lead_shoved = true
 				if lc_t[i] < 1.0:
 					lc_t[i] = minf(1.0, lc_t[i] + dt / 0.85)
 					var e: float = lc_t[i] * lc_t[i] * (3.0 - 2.0 * lc_t[i])

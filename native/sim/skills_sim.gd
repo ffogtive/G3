@@ -480,7 +480,12 @@ func _cast_jump(sim: GameSim, m: String) -> bool:
 	var ic: Dictionary = _ic("mv_jump")
 	var hop: float = float(ic.get("hop", 0.75))
 	var fight: bool = m == "fight"
-	if not sim.player.jump(hop, float(ic.get("invuln", 0.85)) if fight else 0.0, not fight):
+	if not fight:  # jam / before the lock: GameSim.jam_hop picks the landing slot (never past a villain)
+		var why: String = sim.jam_hop(hop)
+		if why != "":
+			_deny(sim, "item", 0, "mv_jump", why)
+			return false
+	elif not sim.player.jump(hop, float(ic.get("invuln", 0.85)), false):
 		_deny(sim, "item", 0, "mv_jump", "busy")
 		return false
 	var rec: Dictionary = _start(sim, "item", 0, "mv_jump", {}, _lanes_around(sim.player.lane, int(ic.get("laneRange", 1))),

@@ -31,6 +31,10 @@ var mode: StringName = &"jam"
 var ghost: bool = false
 var jump_t: float = 0.0
 var jump_dur: float = 0.75
+## Jam hop over the car ahead (device feedback 2026-10-14 #1, rvA): s eases from glide_from to GameSim's ctx.glide_to
+## (a landing slot picked at the cast, never past a villain) instead of flying blind at 10 m/s and snapping back.
+var glide: bool = false
+var glide_from: float = 0.0
 var boost_t: float = 0.0
 var brake_on: bool = false
 var slow_time: float = 0.0
@@ -65,6 +69,8 @@ func reset(p_s: float, p_lane: int) -> void:
 	ghost = false
 	jump_t = 0.0
 	jump_dur = 0.75
+	glide = false
+	glide_from = 0.0
 	boost_t = 0.0
 	brake_on = false
 	slow_time = 0.0
@@ -83,7 +89,7 @@ func request_lane(dir: int, traffic: TrafficBridge, out: Dictionary) -> String:
 	if tl == Cfg.SHOULDER_LANE and shoulder_closed:
 		_wiggle(dir)
 		return "closed"
-	if lc_t < 0.65:
+	if lc_t < 0.65 or (glide and jump_t > 0.0):
 		return "busy"
 	if not ghost and traffic != null:
 		var b: int = traffic.can_merge(tl, 0.35)
@@ -112,13 +118,16 @@ func knock(back: float, kick: float) -> void:
 
 
 ## hop: air time (sim s). p_invuln > 0: invulnerable that long (SKILLS mv_jump in the fight). boost: the jam hop's
-## forward kick (off in the fight, where the boss-mode follow controller owns the speed). GameSim owns cool / ownership.
-func jump(hop_s: float = 0.75, p_invuln: float = 0.0, boost: bool = true) -> bool:
+## forward kick (off in the fight, where the boss-mode follow controller owns the speed). p_glide: the jam hop eases s
+## onto ctx.glide_to (GameSim.jam_hop) and only a villain still collides while airborne. GameSim owns cool / ownership.
+func jump(hop_s: float = 0.75, p_invuln: float = 0.0, boost: bool = true, p_glide: bool = false) -> bool:
 	if jump_t > 0.0:
 		return false
 	jump_dur = maxf(0.05, hop_s)
 	jump_t = jump_dur
 	invuln = maxf(invuln, p_invuln)
+	glide = p_glide
+	glide_from = s
 	if boost:
 		v = maxf(v, 10.0)
 	return true
@@ -147,7 +156,7 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 		var L0: Dictionary = leader.call() if leader.is_valid() else {}
 		if PlayerSim.has_leader(L0):
 			var obstacle: bool = str(L0.get("type", "")) == "obstacle"
-			if not bool(L0.get("smash", false)) and not (jump_t > 0.0) and not (tow and obstacle):
+			if not bool(L0.get("smash", false)) and not (jump_t > 0.0 and glide) and not (tow and obstacle):
 				var v_safe: float = maxf(0.0, float(L0.get("v", 0.0)) + maxf(0.0, float(L0["gap"]) - 0.9) * 2.4)
 				if v > v_safe:
 					v = maxf(v_safe, v - brake_a * dt)
@@ -176,12 +185,22 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 		var dvi: float = float(ctx.get("cruise_v", 0.0)) - v
 		v += clampf(dvi, -8.0 * dt, 6.0 * dt)
 		brake_on = v < 0.5
+	var gliding: bool = glide and jump_t > 0.0 and mode == &"jam" and ctx.has("glide_to")
+	if gliding:
+		var k: float = clampf(1.0 - (jump_t - dt) / jump_dur, 0.0, 1.0)
+		var to: float = float(ctx["glide_to"])
+		var ns: float = glide_from + (to - glide_from) * (k * k * (3.0 - 2.0 * k))
+		v = maxf(0.0, (ns - s) / maxf(dt, 1e-4))
+		s = ns
+	else:
+		s += v * dt
 	a = (v - prev_v) / maxf(dt, 1e-4)
-	s += v * dt
 
-	# collisions (jam only)
+	# collisions (jam only). Airborne on a glide only a villain collides (it is never hopped: the slot is short of it).
 	if mode == &"jam" and not ghost and leader.is_valid():
-		var L2: Dictionary = {} if jump_t > 0.0 else leader.call()
+		var L2: Dictionary = leader.call()
+		if gliding and str(L2.get("type", "")) != "villain":
+			L2 = {}
 		if PlayerSim.has_leader(L2) and float(L2["gap"]) < 0.0:
 			var gap: float = float(L2["gap"])
 			var other_v: float = float(L2.get("v", 0.0))
@@ -231,6 +250,7 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 		hop = maxf(hop, sin(PI * (1.0 - jump_t / jump_dur)) * 3.4)
 		if jump_t == 0.0:
 			land_grace = 0.35
+			glide = false
 	bump_kick = maxf(0.0, bump_kick - dt * 3.2)
 	return events
 

@@ -141,9 +141,18 @@ func _on_touch(index: int, pos: Vector2, pressed: bool) -> void:
 		var zone: String = _zone_at(pos)
 		if zone != "pause" and is_inside_tree() and get_tree().paused:
 			return  # while paused only the pause button works (no queued lane edges on resume)
-		_touch[index] = {"start": pos, "zone": zone, "done": false}
-		if index >= 0 and _touch.size() >= 3:
-			debug_requested.emit()
+		var ms: int = Time.get_ticks_msec()
+		_touch[index] = {"start": pos, "zone": zone, "done": false, "ms": ms}
+		# Dev panel: three fingers on the open screen within 0.3 s. Any three fingers used to do it, and holding 압정 +
+		# ◀ + a 분노 tap (a normal fight chord) opened the overlay mid-fight on the Debug device build (rvA).
+		if index >= 0 and zone == "":
+			var n_open: int = 0
+			for k: Variant in _touch:
+				var tk: Dictionary = _touch[k]
+				if str(tk["zone"]) == "" and ms - int(tk.get("ms", ms)) <= 300:
+					n_open += 1
+			if n_open >= 3:
+				debug_requested.emit()
 		match zone:
 			"horn":
 				_horn_fingers[index] = true

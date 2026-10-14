@@ -350,11 +350,29 @@ func _overhead(path: String, x: float, s: float) -> void:
 	frame_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 	var plate_fade: StandardMaterial3D = _blank_sign_material().duplicate() as StandardMaterial3D
 	plate_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
-	overheads.append({"node": mi, "s": s, "f": 1.0, "frame_fade": frame_fade, "plate_fade": plate_fade})
+	# Plate text (rvB: the blank green slab read as a missing texture across the jam's top-left). The panel quad is
+	# x −6..6, y 6.5..10.1 at z ≈ 0 facing the driver (+Z); the label sits 3 cm in front of it.
+	var lbl := Label3D.new()
+	lbl.name = "PlateText"
+	lbl.text = SIGN_TEXT[overheads.size() % SIGN_TEXT.size()]
+	lbl.font_size = 104
+	lbl.pixel_size = 0.0105
+	lbl.line_spacing = -18.0
+	lbl.modulate = Color.WHITE
+	lbl.outline_size = 0
+	lbl.shaded = false
+	lbl.double_sided = false
+	lbl.position = Vector3(0.0, 8.3, 0.03)
+	if ResourceLoader.exists(SIGN_FONT):
+		lbl.font = load(SIGN_FONT) as Font
+	mi.add_child(lbl)
+	overheads.append({"node": mi, "s": s, "f": 1.0, "frame_fade": frame_fade, "plate_fade": plate_fade, "label": lbl})
 	stats["gantry"] = int(stats.get("gantry", 0)) + 1
 
 
 var _blank_sign: StandardMaterial3D
+const SIGN_FONT: String = "res://ui/fonts/BlackHanSans-Regular.ttf"
+const SIGN_TEXT: Array[String] = ["부산     대구\nBusan    Daegu", "서울     대전\nSeoul    Daejeon"]
 
 
 ## Until the M1c text panel: the web sign's board colour (scenery.js signMaterial #0b7a4b, white rim drawn later).
@@ -387,6 +405,9 @@ func update_overheads(cam_pos: Vector3) -> void:
 		var pf: StandardMaterial3D = o["plate_fade"]
 		ff.albedo_color.a = f
 		pf.albedo_color.a = f
+		var lb: Label3D = o.get("label")
+		if lb != null:
+			lb.modulate.a = f
 		var opaque: bool = f > 0.995
 		for i: int in mi.mesh.get_surface_count():
 			var sname: String = mi.mesh.surface_get_name(i)

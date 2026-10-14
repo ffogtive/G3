@@ -94,6 +94,17 @@ func _input_contract() -> void:
 	for i: int in 3:
 		_touch(inp, 10 + i, Vector2(100 + 50 * i, 400), false)
 	_check(dbg[0] == 1, "three fingers down = debug_requested once (dev panel without an on-screen DBG tab)")
+	# rvA: a fight chord (압정 held + ◀ held + a 분노 tap) must not open the dev panel on the Debug device build
+	inp.set_zone("fire", Rect2(400, 800, 100, 100))
+	inp.set_zone("left", Rect2(0, 800, 100, 100))
+	inp.set_zone("rage", Rect2(400, 650, 100, 100))
+	_touch(inp, 20, Vector2(450, 850), true)
+	_touch(inp, 21, Vector2(50, 850), true)
+	_touch(inp, 22, Vector2(450, 700), true)
+	for i: int in 3:
+		_touch(inp, 20 + i, Vector2.ZERO, false)
+	inp.release_all()
+	_check(dbg[0] == 1, "압정 + ◀ + 분노 (three button fingers) does not open the dev panel")
 	inp.inject("fire:down")
 	var injf: bool = inp.is_fire_down()
 	inp.inject("fire:up")

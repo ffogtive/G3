@@ -110,7 +110,7 @@ func _draw() -> void:
 ## (elastic), shakes once on landing, ink dots fly out; fades with the usual out.
 func _stamp(c: Vector2, t: float, a: float, out_t: float) -> void:
 	var land: float = clampf(t / 0.16, 0.0, 1.0)
-	var sc: float = lerpf(2.6, 1.0, land * land) if land < 1.0 else 1.0 + 0.1 * sin(minf(1.0, (t - 0.16) / 0.18) * PI) * (1.0 - minf(1.0, (t - 0.16) / 0.18))
+	var sc: float = lerpf(1.9, 1.0, land * land) if land < 1.0 else 1.0 + 0.1 * sin(minf(1.0, (t - 0.16) / 0.18) * PI) * (1.0 - minf(1.0, (t - 0.16) / 0.18))
 	sc *= _scale * (1.0 + 0.06 * out_t)
 	var jit: Vector2 = Vector2(sin(t * 90.0), cos(t * 77.0)) * 6.0 * maxf(0.0, 1.0 - (t - 0.16) / 0.12) if t > 0.16 else Vector2.ZERO
 	var fs: int = 84

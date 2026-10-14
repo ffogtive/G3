@@ -17,6 +17,9 @@ var rng := RandomNumberGenerator.new()
 var next_t: float = 0.0
 var fire: bool = false
 var _hold_max: int = -1   # -1 = not rolled for this rage level, 0 = spend, 1 = wait for MAX
+## "default" (above) | "max_exec": a patient human who saves the whole bar for MAX and casts t5 once the villain is
+## under the execute line (tests/test_e2e_economy.gd: the rage ladder must reach 참교육 + execute without top-ups).
+var policy: String = "default"
 
 
 func _init(seed: int = 1) -> void:
@@ -153,6 +156,11 @@ func _skills(sim: GameSim, p: PlayerSim, danger: Dictionary) -> void:
 	elif wl > 0.8 and sk.item_ready(sim, 2):
 		sim.input(&"item2")
 	if sk.busy("rage"):
+		return
+	if policy == "max_exec":
+		if sk.segs(sim) >= 5 and sim.boss.hp_frac() <= float((sk.cfg.get("t5", {}) as Dictionary).get("execute", 0.4)) \
+				and sk.has_target(sim, 5):
+			sim.input(&"rage")
 		return
 	var nt: int = sk.next_tier(sim)
 	if nt == 0:

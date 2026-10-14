@@ -136,29 +136,29 @@
     "fx": {
       "_doc": "View-only recipes (the sim never reads them): per skill sfx stack [[name, delay, volume, pitch]], camera {punch, shake, lift, push}, flash [hex, alpha, ms], banner.",
       "mv_drone": { "banner": "드론 폭격!", "camera": { "shake": 0.15 }, "sfx": [["whoosh", 0, 0.7, 1.5], ["explosion", 0.7, 0.35, 1.2], ["pop", 0.75, 0.5, 1.1], ["crit", 1.0, 0.6, 1.0]] },
-      "mv_jump": { "banner": "쿵!", "camera": { "punch": -4, "shake": 0.45 }, "sfx": [["whoosh", 0, 0.6, 1.3], ["bump", 0.75, 1.0, 0.6], ["explosion", 0.75, 0.3, 1.6]] },
-      "t1": { "banner": "분노 경적!!", "camera": { "punch": -3, "shake": 0.35 }, "flash": ["ffd23a", 0.3, 90], "sfx": [["hornTruck", 0, 1.0, 1.0], ["superHit", 0.12, 0.5, 1.15]] },
+      "mv_jump": { "banner": "쿵!", "castBanner": "점프!", "camera": { "punch": -4, "shake": 0.45 }, "sfx": [["whoosh", 0, 0.6, 1.3], ["bump", 0.75, 1.0, 0.6], ["explosion", 0.75, 0.3, 1.6]] },
+      "t1": { "banner": "분노 경적!!", "bannerWave": "경적 충격파!!", "camera": { "punch": -3, "shake": 0.35 }, "flash": ["ffd23a", 0.3, 90], "sfx": [["hornTruck", 0, 1.0, 1.0], ["superHit", 0.12, 0.5, 1.15]] },
       "t3": { "banner": "압정 폭격!!", "camera": { "lift": 0.25, "punch": -5, "shake": 0.5 }, "flash": ["ff7a1a", 0.25, 120], "sfx": [["launch", 0, 0.7, 1.0], ["tack", 0.05, 0.6, 0.9], ["tack", 0.1, 0.6, 1.05], ["tack", 0.15, 0.6, 1.2]] },
-      "t5": { "banner": "참교육!!", "camera": { "punch": -8, "push": -6, "shake": 0.9 }, "flash": ["ffffff", 0.85, 160], "sfx": [["rageFull", 0, 0.7, 0.8], ["super", 0, 0.6, 1.0], ["superHit", 0.35, 1.0, 1.0], ["explosion", 0.35, 0.95, 1.0]] }
+      "t5": { "banner": "참교육!!", "camera": { "punch": -8, "push": -6, "shake": 0.9 }, "flash": ["fff1c4", 0.45, 70], "sfx": [["rageFull", 0, 0.7, 0.8], ["super", 0, 0.6, 1.0], ["superHit", 0.35, 1.0, 1.0], ["explosion", 0.35, 0.95, 1.0]] }
     },
     "hpMul": 1.45,
     "invulnPad": 0.2,
     "items": {
       "mv_drone": { "bombGap": 0.05, "bomblets": 6, "charges": -1, "cool": 12.0, "coolJam": 8.0, "delay": 0.7, "dmgIn": 15, "dmgOut": 5, "dur": 1.0, "jamRange": 40, "passive": "minis", "passiveEvery": 0.7, "range": 45, "score": 300, "slot": 2 },
-      "mv_jump": { "charges": -1, "cool": 6.0, "coolJam": 4.0, "dmgIn": 8, "dmgOut": 3, "dur": 0.95, "hop": 0.75, "invuln": 0.85, "landRange": 14, "laneRange": 1, "score": 150, "slot": 1, "stun": 0.6 },
+      "mv_jump": { "charges": -1, "cool": 6.0, "coolJam": 4.0, "dmgIn": 8, "dmgOut": 3, "dur": 0.95, "hop": 0.75, "invuln": 0.85, "jamMinSlot": 1.2, "jamReach": 19, "jamSlotPad": 0.7, "landRange": 14, "laneRange": 1, "score": 150, "slot": 1, "stun": 0.6 },
       "mv_tow": { "charges": 1, "cool": 0, "delay": 0.8, "dur": 1.0, "jamRange": 60, "pin": 1.5, "range": 45, "score": 300, "slot": 2, "wreckerBonus": 1 }
     },
     "jamTier": 1,
     "ladder": [1, 3, 5],
     "minKillT": 6.0,
-    "rageGain": { "_doc": "Fight rage: lock = once at the front lock (not capped; the ladder shows at once), then refills ≤ fightCap per fight: a tack hit inside a window (windowHit), a dodged attack (dodge: BossSim event, aimed at the player's lane when it started, ended without a hit). Doc first guess was windowHit 0.01 and no lock bonus: the iPhone fallback jam carries only ~0.12 rage into the fight and the autopilot never reached t3.", "dodge": 0.04, "fightCap": 0.6, "lock": 0.2, "windowHit": 0.03 },
+    "rageGain": { "_doc": "Fight rage: lock = once at the front lock (not capped; the ladder shows at once), then refills ≤ fightCap per fight: a tack hit inside a window (windowHit), a dodged attack (dodge: BossSim event, aimed at the player's lane when it started, ended without a hit). Doc first guess was windowHit 0.01 and no lock bonus: the iPhone fallback jam carries only ~0.12 rage into the fight and the autopilot never reached t3. lock 0.2 → 0.3 (2026-10-14 review): with jump + drone the fallback jam is short (~0.32 rage at the lock) and MAX was never reached before the villain died; 0.3 gives a patient player t5 + execute.", "dodge": 0.04, "fightCap": 0.6, "lock": 0.3, "windowHit": 0.03 },
     "select": "highest",
     "skipAfter": 0.5,
     "stunCap": 2.0,
     "stunImmune": 1.5,
-    "t1": { "cancel": true, "cost": 1, "delay": 0.12, "dmgIn": 16, "dmgOut": 8, "dur": 0.5, "hitstop": 0.06, "jam": { "boost": 2.2 }, "laneRange": 1, "range": 30, "score": 200, "slow": 1.0, "slowFor": 0.0, "stun": 0.6 },
-    "t3": { "cost": 3, "delay": 0.4, "dmgIn": 30, "dmgOut": 12, "dur": 1.2, "hitGap": 0.05, "hits": 4, "hitstop": 0.09, "laneRange": 1, "pop": 1, "score": 600, "slow": 0.35, "slowFor": 0.6, "strip": 12, "stun": 1.2, "tacks": 12 },
-    "t5": { "cost": 5, "delay": 0.35, "dmgInFrac": 0.3, "dmgOutFrac": 0.15, "dur": 2.5, "execute": 0.4, "executeBonus": 1000, "hitstop": 0.14, "score": 1500, "slow": 0.3, "slowFor": 0.8, "stun": 2.0 }
+    "t1": { "cancel": true, "cost": 1, "delay": 0.12, "dmgIn": 12, "dmgOut": 6, "dur": 0.5, "hitstop": 0.06, "jam": { "boost": 2.2 }, "laneRange": 1, "range": 30, "score": 200, "slow": 1.0, "slowFor": 0.0, "stun": 0.6 },
+    "t3": { "cost": 3, "delay": 0.4, "dmgIn": 30, "dmgOut": 20, "dur": 1.2, "hitGap": 0.1, "hits": 4, "hitstop": 0.09, "laneRange": 1, "pop": 1, "score": 600, "slow": 0.35, "slowFor": 0.6, "strip": 12, "stun": 1.2, "tacks": 18 },
+    "t5": { "cost": 5, "delay": 0.45, "dmgInFrac": 0.3, "dmgOutFrac": 0.15, "dur": 2.5, "execute": 0.4, "executeBonus": 1000, "hitstop": 0.14, "score": 1500, "slow": 0.3, "slowFor": 0.8, "stun": 2.0 }
   },
   "source": "game/js/config.js + inline constants of traffic.js/main.js @ web-frozen 753549a",
   "traffic": {

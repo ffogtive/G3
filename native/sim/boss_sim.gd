@@ -755,7 +755,15 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 			v["target_lane_pos"] = v["home_lane"]
 		var prev_x: float = float(v["x"])
 		var k: float = 3.0 if bool(v["zig"]) else 5.0
-		v["lane_pos"] = float(v["lane_pos"]) + (float(v["target_lane_pos"]) - float(v["lane_pos"])) * (1.0 - exp(-dt * k))
+		var nlp: float = float(v["lane_pos"]) + (float(v["target_lane_pos"]) - float(v["lane_pos"])) * (1.0 - exp(-dt * k))
+		# rvA (#1 family, 1-2 zig): the weave never checked the player, so a player following it in its lane was
+		# driven through sideways. A lateral step into the player's body while they overlap in s is held.
+		var nx: float = Cfg.lane_xf(nlp)
+		var side_gap: float = (float(v["w"]) + p.w) / 2.0 + 0.15
+		if not p.ghost and absf(float(v["s"]) - p.s) < (float(v["len"]) + p.len) / 2.0 + 0.3 \
+				and absf(nx - p.x) < side_gap and absf(nx - p.x) < absf(prev_x - p.x):
+			nlp = float(v["lane_pos"])
+		v["lane_pos"] = nlp
 		v["x"] = Cfg.lane_xf(float(v["lane_pos"]))
 		var vx: float = (float(v["x"]) - prev_x) / maxf(dt, 1e-4)
 		v["yaw"] = -atan2(vx, maxf(3.0, float(v["v"]))) * 0.7

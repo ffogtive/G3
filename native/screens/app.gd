@@ -216,6 +216,9 @@ func _start_game(id: int) -> void:
 func _loadout() -> Dictionary:
 	var lo: Dictionary = meta.loadout()
 	lo["left_hand"] = bool(meta.get_setting("left_hand"))
+	if OS.is_debug_build() and meta.get_setting("dev_items") == true:  # settings "테스트: 아이템 체험" (Debug only)
+		lo["jump"] = true
+		lo["drone"] = true
 	return lo
 
 

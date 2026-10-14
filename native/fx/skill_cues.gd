@@ -32,7 +32,10 @@ const DEFAULT: Dictionary = {
 ## Native layers on top of the stack: start / hit / hit_n (every multi-hit after the first) / pop (a tyre burst).
 const LAYERS: Dictionary = {
 	"t1": {"start": [["sk_wave", 0.03, 0.85, 1.0]], "hit": [["crit", 0.0, 0.45, 1.2]]},
-	"t3": {"start": [["sk_carpet", 0.2, 0.9, 1.0]], "hit_n": [["hit", 0.0, 0.6, 1.0]], "pop": [["pop", 0.0, 1.0, 1.0], ["crit", 0.03, 0.7, 1.0]]},
+	# t3 (rvB): the first impact had no sound of its own and sk_carpet peaked 120 ms early (peak 0.08 s into the wav,
+	# so 0.32 lands it on the 0.4 s impact).
+	"t3": {"start": [["sk_carpet", 0.32, 0.9, 1.0]], "hit": [["explosion", 0.0, 0.55, 1.4], ["superHit", 0.0, 0.5, 1.25]],
+		"hit_n": [["hit", 0.0, 0.6, 1.0]], "pop": [["pop", 0.0, 1.0, 1.0], ["crit", 0.03, 0.7, 1.0]]},
 	"t5": {"start": [["sk_charge", 0.0, 1.0, 1.0]], "hit": [["sk_wave", 0.0, 0.7, 0.8]]},
 	"mv_jump": {"hit": [["sk_land", 0.0, 1.0, 1.0]]},
 	"mv_drone": {"start": [["sk_drone", 0.0, 0.9, 1.0]], "hit_n": [["explosion", 0.0, 0.25, 1.3], ["pop", 0.02, 0.4, 1.2]]},
@@ -214,6 +217,8 @@ func on_event(e: Dictionary) -> void:
 						continue  # the kill tick plays them (Audio.phase kill + game.gd kill)
 					_sfx(nm, float(s[1]) - d1, float(s[2]), float(s[3]))
 				for s: Array in (LAYERS.get(key2, {}) as Dictionary).get("hit", []):
+					if killed and str(s[0]) in ["superHit", "explosion"]:
+						continue
 					_sfx(str(s[0]), float(s[1]), float(s[2]), float(s[3]))
 			else:
 				for s: Array in (LAYERS.get(key2, {}) as Dictionary).get("hit_n", []):

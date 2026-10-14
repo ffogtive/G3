@@ -15,7 +15,8 @@ signal settings_changed(key: String, value: Variant)
 const SaveGameScript: GDScript = preload("res://core/save_game.gd")
 const SLOT_CATS: PackedStringArray = ["car", "weapon", "finish"]
 const STAR_MULT: Array[float] = [1.0, 1.0, 1.5, 2.0]
-const SETTINGS_DEFAULT: Dictionary = {"music": true, "sfx": true, "haptics": true, "battery60": false, "left_hand": false}
+const SETTINGS_DEFAULT: Dictionary = {"music": true, "sfx": true, "haptics": true, "battery60": false, "left_hand": false,
+	"dev_items": false}  # dev_items: Debug builds only (settings row + app loadout), never read by a release build
 const MILESTONES: Array = [[1000, "구독자 1천 돌파!"], [10000, "구독자 1만 돌파!"], [100000, "실버 참교육 버튼 획득!"],
 	[1000000, "골드 참교육 버튼 획득!"]]
 const COMMENTS: PackedStringArray = [

@@ -129,6 +129,9 @@ var _fx_rng := RandomNumberGenerator.new()
 var _leader_cb: Callable
 var _shots_total: int = 0
 var _night: bool = false
+## Jam hop landing (jam_hop): {id: NPC car the hop clears (0 = a fixed s), off: landing s relative to it}.
+var _glide: Dictionary = {}
+var _car_len: Dictionary = {}
 
 
 ## stage: stages.json record. tables: DB.traffic_tables() ({config, vehicle_kinds, mini_types, approach});
@@ -195,6 +198,8 @@ func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 
 func _setup_stage() -> void:
 	bridge.setup(stage, tables, seed, force_fallback)
+	_car_len = {}
+	_glide = {}
 	var info: Dictionary = bridge.setup_info()
 	start_s = float(info["start_s"])
 	front_s = float(info["front_s"])
@@ -441,7 +446,7 @@ func step(dt: float) -> void:
 			var lines: Array[String] = ["왜 빵빵거려?", "빵빵해도 안 비켜~", "내 차선인데?"]
 			_emit({"type": "bubble", "who": "villain", "id": int(boss.alive()[0]["index"]), "text": lines[_fx_rng.randi_range(0, 2)], "kind": "taunt", "dur": 1.6})
 
-	if want_jump and jam_like and player.jump():
+	if want_jump and jam_like and jam_hop(0.75) == "":
 		_emit({"type": "bubble", "who": "player", "id": -1, "text": "참교육 점프!", "kind": "score", "dur": 1.0})
 	if want_skip and skills.enabled:
 		skills.skip(self)
@@ -480,9 +485,12 @@ func step(dt: float) -> void:
 		&"result":
 			pmode = &"cruise"
 			cruise_v = maxf(0.0, 22.0 - phase_real * 6.0)
-	var pev: Array[Dictionary] = player.update(sdt, {"mode": pmode, "brake": _brake_held, "cruise_v": cruise_v,
+	var pctx: Dictionary = {"mode": pmode, "brake": _brake_held, "cruise_v": cruise_v,
 		"boss_ref_s": boss.ref_s(), "boss_ref_v": boss.ref_v(), "fight_gap": float(fight.get("gap", bc.get("fightGap", 11.0))),
-		"leash_v": leash_v(), "leader": _leader_cb})
+		"leash_v": leash_v(), "leader": _leader_cb}
+	if player.glide and player.jump_t > 0.0:
+		pctx["glide_to"] = _glide_to()
+	var pev: Array[Dictionary] = player.update(sdt, pctx)
 	for e: Dictionary in pev:
 		_on_player_event(e)
 	player.boost_t = maxf(0.0, player.boost_t - sdt)
@@ -626,6 +634,97 @@ func _villain_records() -> Array[Dictionary]:
 	for v: Dictionary in boss.villains:
 		out.append({"s": v["s"], "baseS": v["base_s"], "x": v["x"], "w": v["w"], "len": v["len"], "v": v["v"],
 			"vNominal": v["v_nominal"], "alive": v["alive"], "kind": v["kind"], "lane": v["lane_pos"]})
+	return out
+
+
+## Jam hop (legacy &"jump" and the mv_jump item before the lock). Device feedback 2026-10-14 #1 / rvA: the old hop
+## dropped every leader for 0.75 s at >= 10 m/s, so from behind the villain it flew through the villain, and on the
+## fallback it landed inside the next car and snapped back ~8 m into the car it had just cleared. Now the landing slot
+## is picked here: walk the bodies ahead in the player's lane (NPC cars, shoulder obstacles, villains), clear at least
+## one, and land in the first gap that fits the car (len + jamSlotPad) within jamReach m. A villain ends the walk: it
+## is never hopped. "" = hop started; "blocked" = a villain is in the way; "room" = no slot in reach. Nothing to clear
+## (open road) = a plain hop in place, collisions on.
+func jam_hop(hop_s: float) -> String:
+	if player.jump_t > 0.0:
+		return "busy"
+	var ic: Dictionary = ((skills.cfg.get("items", {}) as Dictionary).get("mv_jump", {}) as Dictionary) if skills != null else {}
+	var reach: float = float(ic.get("jamReach", 19.0))
+	var need: float = player.len + float(ic.get("jamSlotPad", 0.7))
+	var min_slot: float = float(ic.get("jamMinSlot", 2.0)) if bridge.makes_room() else need
+	var p_front: float = player.s + player.len / 2.0
+	var ahead: Array = []
+	for b: Array in _lane_bodies(player.lane, player.s - player.len, player.s + reach + 15.0):
+		if float(b[1]) > p_front + 0.01:
+			ahead.append(b)
+	if ahead.is_empty() or float(ahead[0][0]) - p_front >= need:
+		return _plain_hop(hop_s)
+	if str(ahead[0][2]) == "villain":
+		return "blocked"
+	var cur: float = p_front
+	var land: Array = []  # [front of the cleared run, the body it is measured from]
+	var why: String = "room"
+	for k: int in ahead.size():
+		var b: Array = ahead[k]
+		cur = maxf(cur, float(b[1]))
+		if cur + 0.45 + player.len / 2.0 - player.s > reach:
+			break
+		var nxt: Array = ahead[k + 1] if k + 1 < ahead.size() else []
+		var gap: float = float(nxt[0]) - cur if not nxt.is_empty() else INF
+		if gap >= need:
+			land = [cur, b]
+			break
+		if gap >= min_slot and land.is_empty():
+			land = [cur, b]
+		if not nxt.is_empty() and str(nxt[2]) == "villain":
+			why = "blocked"
+			break
+	if land.is_empty():
+		return why
+	var over: Array = land[1]
+	var to: float = float(land[0]) + 0.45 + player.len / 2.0
+	var oid: int = int(over[3]) if str(over[2]) == "car" else 0
+	_glide = {"id": oid, "off": to - (float(over[4]) if oid != 0 else 0.0)}
+	player.jump(hop_s, 0.0, false, true)
+	return ""
+
+
+func _plain_hop(hop_s: float) -> String:
+	_glide = {}
+	player.jump(hop_s, 0.0, false, false)
+	return ""
+
+
+func _glide_to() -> float:
+	var oid: int = int(_glide.get("id", 0))
+	if oid != 0:
+		var ci: Dictionary = bridge.car_info(oid)
+		if not ci.is_empty():
+			return float(ci["s"]) + float(_glide["off"])
+		_glide = {"id": 0, "off": player.glide_from + 6.0}
+	return float(_glide.get("off", player.s))
+
+
+## [rear, front, type car|obstacle|villain, id, s] in a lane with s in (s_min, s_max), sorted by rear.
+func _lane_bodies(lane: int, s_min: float, s_max: float) -> Array:
+	if _car_len.is_empty():
+		for sp: Dictionary in bridge.car_specs():
+			_car_len[int(sp["id"])] = float(sp["len"])
+	var out: Array = []
+	for id: int in bridge.cars_in_lane(lane, s_min, s_max):
+		var cs: float = float(bridge.car_info(id).get("s", 0.0))
+		var hl: float = float(_car_len.get(id, 4.4)) / 2.0
+		out.append([cs - hl, cs + hl, "car", id, cs])
+	if lane == Cfg.SHOULDER_LANE:
+		for o: Variant in bridge.obstacles():
+			var od: Dictionary = o
+			var os: float = float(od["s"])
+			if os > s_min and os < s_max:
+				out.append([os - float(od["len"]) / 2.0, os + float(od["len"]) / 2.0, "obstacle", int(od["id"]), os])
+	for v: Dictionary in boss.villains:
+		if (bool(v["alive"]) or bool(v["dying"])) and not bool(v.get("gone", false)) and boss.player_in_lanes(player, BossSim.lanes_of(v)):
+			var vs: float = float(v["s"])
+			out.append([vs - float(v["len"]) / 2.0, vs + float(v["len"]) / 2.0, "villain", int(v["index"]), vs])
+	out.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
 	return out
 
 

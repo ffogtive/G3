@@ -890,14 +890,14 @@
     "skillT3Hit": {
       "android": [
         {
-          "amp": 0.6,
-          "ms": 14,
+          "amp": 0.8,
+          "ms": 20,
           "t": 0
         }
       ],
       "ios": [
         {
-          "intensity": 0.6,
+          "intensity": 0.8,
           "sharpness": 0.8,
           "t": 0,
           "type": "transient"

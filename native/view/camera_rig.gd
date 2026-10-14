@@ -51,7 +51,7 @@ const KILL_ORBIT_MAX_DEG: float = 30.0
 const KILL_HOLD_S: float = 0.2
 ## Per finish: [yaw0 deg (0 = square side, + = toward behind the car), sweep deg, radius, height, look y base, follow]
 const FINISH_SHOT: Dictionary = {
-	"rocket": [40.0, -18.0, 15.0, 10.5, 1.3, 1.0],
+	"rocket": [40.0, -18.0, 19.0, 11.5, 1.3, 1.0],  # rvB: 15 / 10.5 lost the launch under the burst and the HP plate
 	"balloon": [36.0, 0.0, 16.0, 10.0, 1.8, 0.0],
 	"heli": [30.0, 0.0, 20.0, 10.5, 3.2, 0.0],
 	"ufo": [40.0, -8.0, 15.0, 8.0, 4.0, 0.0],

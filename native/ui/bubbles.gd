@@ -19,12 +19,16 @@ const POP_COLOR: Dictionary = {"warn": Color.WHITE, "score": Color8(0x8d, 0xff, 
 	"crit": Color8(0xff, 0x9a, 0x2e), "miss": Color8(0xc9, 0xd3, 0xdf), "dmg": Color8(0xff, 0x5a, 0x4a),
 	"big": Color8(0xff, 0xe1, 0x4d), "tick": Color8(0xff, 0xf3, 0xb8), "again": Color8(0x7a, 0xe8, 0xff)}
 ## Fight pops (HUD on_event): hit numbers, crits in the signature window, "빗나감!" (wobbles), player damage.
-const POP_SIZES: Dictionary = {"hit": 36, "crit": 46, "miss": 30, "dmg": 36, "big": 64, "tick": 26, "again": 34}
+const POP_SIZES: Dictionary = {"hit": 36, "crit": 46, "miss": 30, "dmg": 36, "big": 76, "tick": 26, "again": 34}
 ## Skill pops (docs/SKILLS.md 1-5): "big" = the summed skill damage (one large number), "tick" = a multi-hit tick,
 ## "again" = the t5 "한 번 더!" chip; they live longer than the plain hit pops.
-const POP_LIFE_KIND: Dictionary = {"big": 1.25, "again": 1.3, "tick": 0.55}
+## big 1.25 → 0.85 s (rvB): the jump's "쿵!" sat under the next skill banner.
+const POP_LIFE_KIND: Dictionary = {"big": 0.85, "again": 1.3, "tick": 0.55}
 const POP_OUTLINE := Color8(0x1b, 0x1c, 0x1f)
-const POP_RISE_M: float = 0.6
+## 0.6 → 1.6 m (rvB): 0.6 m was ~10 px at the boss camera, so tack hits, skill ticks, "펑크!" and the taunt bubble
+## all landed in the same ~80 px over the villain. Pops also step up out of each other on screen (_draw, ≤ 3 slots).
+const POP_RISE_M: float = 1.6
+const POP_STACK_MAX: int = 3
 const POP_PUNCH_S: float = 0.25
 const FONT_SIZE: int = 22
 const POP_SIZE: int = 30
@@ -76,6 +80,21 @@ func pop(pos: Vector3, text: String, kind: String = "warn") -> void:
 	queue_redraw()
 
 
+## Drops every live pop except those of except_kind (HUD "kill": the stale "-4!" tack pops must not ride into the
+## finisher frames; the kill's own sum stays).
+func clear_pops(except_kind: String = "") -> void:
+	var keep: Array[Dictionary] = []
+	for p: Dictionary in _pops:
+		if str(p["kind"]) == except_kind:
+			keep.append(p)
+	_pops = keep
+	queue_redraw()
+
+
+func pop_count() -> int:
+	return _pops.size()
+
+
 ## Car ids that currently have a reply bubble (keys "h<id>").
 func anchored_ids() -> Dictionary:
 	var out: Dictionary = {}
@@ -119,7 +138,9 @@ func _draw() -> void:
 		if not wp.is_finite() or camera.is_position_behind(wp):
 			continue
 		_draw_bubble(camera.unproject_position(wp), str(b["text"]), str(b["kind"]))
-	for p: Dictionary in _pops:
+	var taken: Array[Rect2] = []  # pop rects drawn this frame, youngest first: a newer pop never hides under an older one
+	for pi: int in range(_pops.size() - 1, -1, -1):
+		var p: Dictionary = _pops[pi]
 		var wp: Vector3 = p["pos"]
 		if camera.is_position_behind(wp):
 			continue
@@ -137,6 +158,20 @@ func _draw() -> void:
 		var punch: float = 1.0 + amp * sin(PI * clampf(t / POP_PUNCH_S, 0.0, 1.0))  # 1.0 → 1.25 → 1.0
 		var rot: float = sin(t * 40.0) * 0.12 * (1.0 - age) if kind == "miss" else (deg_to_rad(-6.0) if kind in ["crit", "big"] else 0.0)
 		var w: float = font_display.get_string_size(str(p["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var vw: float = size_or_viewport().x
+		sp.x = clampf(sp.x, w * 0.65 + 8.0, maxf(w * 0.65 + 8.0, vw - w * 0.65 - 8.0))  # a pop near the edge stays whole
+		var r := Rect2(sp + Vector2(-w / 2.0, -float(fs)) * 1.2, Vector2(w, float(fs)) * 1.2)  # punch 1.25 + outline
+		for _k: int in POP_STACK_MAX:
+			var hit: bool = false
+			for q: Rect2 in taken:
+				if r.intersects(q):
+					hit = true
+					break
+			if not hit:
+				break
+			sp.y -= float(fs) * 1.2
+			r.position.y -= float(fs) * 1.2
+		taken.append(r)
 		draw_set_transform(sp, rot, Vector2(punch, punch))
 		var at := Vector2(-w / 2.0, 0)
 		var ink := Color(POP_OUTLINE, col.a)

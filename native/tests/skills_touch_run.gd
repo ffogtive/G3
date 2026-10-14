@@ -294,8 +294,8 @@ func run() -> void:
 	# item1 참교육 점프 (left thumb) while 압정 is held
 	until(func() -> bool: return sim.skills.item_ready(sim, 1), 7.0)
 	e = cast_item(1, "jump")
-	adv(16)
-	await at("jump_air")
+	adv(maxi(1, roundi(float(((sim.skills.cfg.get("items", {}) as Dictionary).get("mv_jump", {}) as Dictionary).get("hop", 0.75)) * 0.5 / Cfg.TICK) - 1))
+	await at("jump_air")  # the apex (hop × 0.5 after the cast; rvB: +16 ticks was barely off the road)
 	hit = wait_hit(int((notes["jump"] as Dictionary)["i0"]), "mv_jump", 1.5)
 	(notes["jump"] as Dictionary)["hit"] = not hit.is_empty()
 	await at("jump_land")

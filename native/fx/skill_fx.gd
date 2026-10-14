@@ -85,7 +85,16 @@ func _ready() -> void:
 		add_child(mi)
 		_arcs.append({"mi": mi, "mat": m, "born": -99.0, "dur": 0.2})
 	# carpet tacks (own pool: the projectile MultiMesh is rewritten from the sim every frame)
-	_tk_mm = _mm(fx._caltrop_mesh() if fx != null else BoxMesh.new(), fx._metal() if fx != null else StandardMaterial3D.new(), 24)
+	# Own bright material (rvB): the shared metal (metallic 0.7) renders near black on the Mobile renderer without
+	# reflections, so the carpet read as dark debris on dark asphalt.
+	var tkm := StandardMaterial3D.new()
+	tkm.albedo_color = Color8(0xd8, 0xde, 0xe8)
+	tkm.metallic = 0.25
+	tkm.roughness = 0.35
+	tkm.emission_enabled = true
+	tkm.emission = Color8(0xff, 0xc0, 0x40)
+	tkm.emission_energy_multiplier = 0.5
+	_tk_mm = _mm(fx._caltrop_mesh() if fx != null else BoxMesh.new(), tkm, 24)
 	var bm := CapsuleMesh.new()
 	bm.radius = 0.16
 	bm.height = 0.62
@@ -921,7 +930,7 @@ func _on_hit(e: Dictionary) -> void:
 			_marker.visible = false
 			var c: Vector3 = _w(float(v.get("s", hs)), float(v.get("x", hx)), 0.2)
 			beam(c, 14.0, 0.4, GOLD, 1.3)
-			burst(c + Vector3(0, 2.4, 0), 3.0 if killed else 4.4, Color(1, 1, 0.9), 0.22 if killed else 0.3)
+			burst(c + Vector3(0, 2.4, 0), 2.2 if killed else 4.4, Color(1, 1, 0.9), 0.22 if killed else 0.3)
 			fx.ring(c, 16.0, Color(1.0, 0.85, 0.3, 0.7), 0.55, 1.0)
 			fx.sparks(c + Vector3(0, 1.0, 0), 34, 16.0, GOLD, 0.2)
 			if not killed:  # the kill tick has its own explosion stack
@@ -1199,6 +1208,7 @@ func advance(dt: float) -> void:
 			var k2: float = (t - t0) / maxf(0.01, t1 - t0)
 			p = (tk["p0"] as Vector3).lerp(tk["p1"] as Vector3, k2) + Vector3(0, float(tk["h"]) * 4.0 * k2 * (1.0 - k2), 0)
 			rot = Vector3(t * float(tk["spin"]), t * float(tk["spin"]) * 0.7, 0)
+			sc = lerpf(2.4, 1.7, k2 * k2)  # bigger in the air, settling to the ground size on landing
 			if dt > 0.0 and nt % 2 == 0:  # glint trail: the rain reads as streaks
 				fx._spawn(1, {"p": p, "v": Vector3.ZERO, "r": Vector3.ZERO, "w": Vector3.ZERO, "s0": 0.2, "s1": 0.0, "life": 0.12,
 					"c": Color8(0xff, 0xe6, 0x80), "g": 0.0, "drag": 0.0, "bounce": 0.0, "shape": 3})

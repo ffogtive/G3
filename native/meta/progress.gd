@@ -12,7 +12,8 @@ extends Node
 signal changed(what: StringName)   ## &"progress" (after record_result), &"shop" (buy/equip), &"reset"
 signal setting_changed(key: String, value: Variant)
 
-const SETTINGS_DEFAULT: Dictionary = {"music": true, "sfx": true, "haptics": true, "battery60": false, "left_hand": false}
+const SETTINGS_DEFAULT: Dictionary = {"music": true, "sfx": true, "haptics": true, "battery60": false, "left_hand": false,
+	"dev_items": false}  # dev_items: Debug builds only (settings row + app loadout), never read by a release build
 const SLOT_CATS: Array[String] = ["car", "weapon", "finish"]
 ## loadout() keys with their values when no owned item sets them (item.effect in shop.json overrides, pay_mul multiplies).
 const LOADOUT_EFFECT_BASE: Dictionary = {"pay_mul": 1.0, "airbag": 0, "trot": false, "coffee": false, "rage_start_segs": 0,

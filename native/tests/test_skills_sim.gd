@@ -174,8 +174,10 @@ func _t1(fb: bool) -> void:
 	var still: bool = bool((sim.state()["villains"] as Array)[0]["vulnerable"])
 	_run(sim, 0.4, ev)
 	var after: bool = bool((sim.state()["villains"] as Array)[0]["vulnerable"])
-	_check(hit.size() == 1 and is_equal_approx(float(hit[0]["dmg"]), 8.0) and not bool(hit[0]["window"])
-		and is_equal_approx(float(hit[0]["stun"]), 0.6), "t1: one hit, 8 outside the window, stun 0.6 (%s)" % str(hit))
+	var t1c: Dictionary = sim.skills.cfg.get("t1", {})
+	var t1_out: float = float(t1c.get("dmgOut", 6))
+	_check(hit.size() == 1 and is_equal_approx(float(hit[0]["dmg"]), t1_out) and not bool(hit[0]["window"])
+		and is_equal_approx(float(hit[0]["stun"]), 0.6), "t1: one hit, dmgOut %.0f outside the window, stun 0.6 (%s)" % [t1_out, str(hit)])
 	_check((v["lunge"] as Dictionary).is_empty() and _of(ev, "damage").is_empty() and _of(ev, "player_hit").is_empty(),
 		"t1: the running lunge is cancelled, no damage to the player")
 	_check(stunned and still and not after, "t1: the stun is a window (vulnerable) for 0.6 s sim, then closed")
@@ -185,7 +187,8 @@ func _t1(fb: bool) -> void:
 	w.rage = 0.2
 	w.input(&"rage")
 	var wh: Array[Dictionary] = _of(_run(w, 0.3), "skill_hit")
-	_check(wh.size() == 1 and is_equal_approx(float(wh[0]["dmg"]), 16.0) and bool(wh[0]["window"]), "t1 inside the window: 16")
+	var t1_in: float = float((w.skills.cfg.get("t1", {}) as Dictionary).get("dmgIn", 12))
+	_check(wh.size() == 1 and is_equal_approx(float(wh[0]["dmg"]), t1_in) and bool(wh[0]["window"]), "t1 inside the window: dmgIn %.0f" % t1_in)
 	var far: GameSim = _fight(fb)
 	far.player.s += 40.0
 	far.rage = 0.2
@@ -211,7 +214,8 @@ func _t3(fb: bool) -> void:
 		var idx: Array[int] = []
 		for h: Dictionary in hits:
 			idx.append(int(h["idx"]))
-		var want: float = 30.0 if inside else 12.0
+		var t3c: Dictionary = sim.skills.cfg.get("t3", {})
+		var want: float = float(t3c.get("dmgIn", 30)) if inside else float(t3c.get("dmgOut", 20))
 		_check(hits.size() == 4 and idx == [0, 1, 2, 3] and int(hits[0]["n"]) == 4 and absf(_sum(hits, "dmg") - want) < 1e-3,
 			"t3 %s: 4 hits idx 0..3, sum %.1f == %.0f" % ["inside" if inside else "outside", _sum(hits, "dmg"), want])
 		_check(int(v["tires"]) < tires0 and _sum(hits, "popped") >= 1.0, "t3: at least one tire popped (%d → %d)" % [tires0, int(v["tires"])])

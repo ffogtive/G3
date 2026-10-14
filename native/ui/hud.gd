@@ -45,6 +45,7 @@ const SZ_LANE: float = 96.0
 const SZ_HORN: float = 92.0
 const SZ_FIRE: float = 140.0
 const SZ_RAGE: float = 104.0
+const RAGE_LIFT: float = 44.0
 const SZ_ITEM: float = 90.0  # ≥ 64 pt (88.6 u)
 const BTN_T3: Array = [Color8(0xff, 0x8a, 0x5a), Color8(0xf0, 0x40, 0x1a), Color8(0xa8, 0x22, 0x0a)]
 const BTN_T5: Array = [Color8(0xff, 0xf0, 0x8a), Color8(0xff, 0xc8, 0x1f), Color8(0xc8, 0x84, 0x08)]
@@ -53,12 +54,16 @@ const BTN_DRONE: Array = [Color8(0x8a, 0xe4, 0xff), Color8(0x14, 0xa8, 0xd8), Co
 const BTN_TOW: Array = [Color8(0xff, 0xd8, 0x8a), Color8(0xe8, 0xa0, 0x1a), Color8(0xa0, 0x66, 0x08)]
 const C_T3 := Color8(0xff, 0x4a, 0x1a)
 const C_GOLD := Color8(0xff, 0xd2, 0x3f)
-const TIER_FACE: Dictionary = {0: "분노", 1: "경적", 3: "폭격", 5: "참교육"}
+## t1 "경적" → "충격파" (rvB / feedback ③): the 분노 dial showed the same horn face and word as the 경적 button 80 px
+## away, right above 압정, so a high 압정 press read as "a honk". The t1 face is a shockwave glyph now.
+const TIER_FACE: Dictionary = {0: "분노", 1: "충격파", 3: "폭격", 5: "참교육"}
+## Damage numbers are shown ×10 (view only; no HP number is shown anywhere): "-3" ticks read as a weak skill (rvB).
+const DMG_SHOW_MUL: int = 10
 const ITEM_LABEL: Dictionary = {"mv_jump": "점프", "mv_drone": "드론", "mv_tow": "레커"}
 const DENY_TEXT: Dictionary = {"rage": "분노 부족!", "cool": "쿨타임!", "charges": "다 썼다!", "target": "대상 없음",
-	"phase": "지금은 못 써!", "busy": "시전 중!"}
+	"phase": "지금은 못 써!", "busy": "시전 중!", "blocked": "원흉은 못 넘는다!", "room": "착지 공간 없음"}
 ## Skill banner placement: higher and smaller than the phase banners so the framed cars stay readable.
-const SKILL_BANNER_Y: float = 0.26
+const SKILL_BANNER_Y: float = 0.20  # 0.26 → 0.20 (rvB): the text sat on the player's car in the boss framing
 
 var font: Font
 var player_s: float = 0.0
@@ -289,9 +294,9 @@ func _ready() -> void:
 	_btn_fire = _custom(_draw_fire)
 	_corner(_btn_fire, false, 14, 16, SZ_FIRE)
 	_btn_rage = _custom(_draw_rage_btn)
-	_corner(_btn_rage, false, 32, 16 + SZ_FIRE + 22, SZ_RAGE)
+	_corner(_btn_rage, false, 32, 16 + SZ_FIRE + RAGE_LIFT, SZ_RAGE)  # RAGE_LIFT 22 → 44: a thumb-wide gap over 압정
 	_rage_ring = _custom(_draw_rage_ring)
-	_corner(_rage_ring, false, 32 - 22, 16 + SZ_FIRE + 22 - 22, SZ_RAGE + 44)  # room for the 1 · 3 · MAX labels
+	_corner(_rage_ring, false, 32 - 22, 16 + SZ_FIRE + RAGE_LIFT - 22, SZ_RAGE + 44)  # room for the 1 · 3 · MAX labels
 	for i: int in 2:
 		var slot: int = i + 1
 		var b: Control = _custom(func(c: Control) -> void: _draw_item(c, slot))
@@ -669,11 +674,11 @@ func on_event(e: Dictionary) -> void:
 			if road != null and e.has("s"):
 				var wp: Vector3 = road.position(float(e["s"]), float(e.get("x", 0.0))) + Vector3(0, 2.2, 0)
 				if str(e.get("kind", "")) == "mini":
-					pops.pop(wp, "-%d" % roundi(dmg), "hit")
+					pops.pop(wp, "-%d" % (roundi(dmg) * DMG_SHOW_MUL), "hit")
 				elif bool(e.get("immune", false)):
 					pops.pop(wp, "막힘!", "miss")
-				else:
-					pops.pop(wp, ("치명! -%d" if big else "-%d") % maxi(1, roundi(dmg)), "crit" if big else "hit")
+				elif not _under_skill(int(e.get("target_id", -2))):  # the skill sum shows that damage
+					pops.pop(wp, ("-%d!" if big else "-%d") % (maxi(1, roundi(dmg)) * DMG_SHOW_MUL), "crit" if big else "hit")
 				if int(e.get("popped", 0)) > 0:
 					pops.pop(wp + Vector3(0, 1.2, 0), "펑크!", "crit")
 			if big:
@@ -706,7 +711,8 @@ func on_event(e: Dictionary) -> void:
 			flash(Color(1, 0.3, 0.2, 0.25), 0.15)
 		"kill":
 			_kill_t = now
-			flash(Color(1, 1, 1, 0.85), 0.22)
+			flash(Color(1, 0.96, 0.85, 0.4), 0.1)  # was white 0.85 / 0.22 s: with the t5 flash it bleached the kill frame
+			pops.clear_pops()  # the killing blow shows no sum; stale tack / item pops must not ride into the finisher
 		"pullover":
 			pass
 		"release":
@@ -738,17 +744,22 @@ func _on_skill_event(e: Dictionary) -> void:
 		"skill_start":
 			if str(e.get("chan", "rage")) == "item":
 				_item_pop_t[_slot_of(id) - 1] = now
+				# rvB: item casts had no banner, so a 드론 tap still showed the last "압정 폭격!!" banner
+				var ib: String = str(rec.get("castBanner", rec.get("banner", "")))
+				if ib != "":
+					banner.show_banner(ib, "skill", 0.6, "", SKILL_BANNER_Y, 0.66)
 			else:
 				_rage_ready_t = now  # the button kicks on the cast
 			match key:
 				"t1":
-					banner.show_banner(str(rec.get("banner", "분노 경적!!")), "skill", 0.75, "", SKILL_BANNER_Y, 0.78)
+					var t1b: String = str(rec.get("bannerWave", "경적 충격파!!")) if id == "t1_wave" else str(rec.get("banner", "분노 경적!!"))
+					banner.show_banner(t1b, "skill", 0.75, "", SKILL_BANNER_Y, 0.78)  # fight t1 = the 충격파 face
 					if id == "t1_horn":
 						flash(Color(1.0, 0.82, 0.23, 0.3), 0.12)  # jam: the rage_horn tick is the impact
 				"t3":
 					banner.show_banner(str(rec.get("banner", "압정 폭격!!")), "skill3", 0.9, "", SKILL_BANNER_Y, 0.85)
 				"t5":
-					banner.show_banner(str(rec.get("banner", "참교육!!")), "stamp", 1.1, "", SKILL_BANNER_Y + 0.02, 1.0)
+					banner.show_banner(str(rec.get("banner", "참교육!!")), "stamp", 1.1, "", SKILL_BANNER_Y, 0.85)
 					_focus_t = now
 					_focus_dur = SkillCues.impact_delay("t5")
 					_cine_until = now + 1.0
@@ -763,13 +774,16 @@ func _on_skill_event(e: Dictionary) -> void:
 			var wp: Vector3 = Vector3.INF
 			if road != null and e.has("s"):
 				wp = road.position(float(e["s"]), float(e.get("x", 0.0))) + Vector3(0, 2.4, 0)
+			var killed: bool = bool(e.get("killed", false))
 			if idx == 0:
 				var fl: Variant = rec.get("flash")
-				if fl is Array and (fl as Array).size() >= 3:
+				if killed:
+					pass  # the "kill" flash alone owns the kill tick (two stacked whites bleached the t5 impact frame)
+				elif fl is Array and (fl as Array).size() >= 3:
 					flash(Color(Color.html(str(fl[0])), float(fl[1])), float(fl[2]) / 1000.0)
 				else:
 					var dflt: Dictionary = {"t1": [Color(1, 0.82, 0.23, 0.3), 0.09], "t3": [Color(1, 0.48, 0.1, 0.25), 0.12],
-						"t5": [Color(1, 1, 1, 0.85), 0.16], "mv_jump": [Color(1, 0.95, 0.85, 0.18), 0.08]}
+						"t5": [Color(1, 0.96, 0.85, 0.45), 0.07], "mv_jump": [Color(1, 0.95, 0.85, 0.18), 0.08]}
 					if dflt.has(key):
 						flash((dflt[key] as Array)[0] as Color, float((dflt[key] as Array)[1]))
 				if key == "mv_jump" and road != null:  # at the landing (the hit s/x is the villain's)
@@ -780,14 +794,13 @@ func _on_skill_event(e: Dictionary) -> void:
 					_focus_t = -99.0
 			if not wp.is_finite():
 				return
-			var killed: bool = bool(e.get("killed", false))
 			if bool(e.get("immune", false)):
 				pops.pop(wp, "막힘!", "miss")
 			elif n > 1 and idx < n - 1:
 				if n <= 4:  # t3 ticks; the drone's 6 bomblets only show the sum (6 ticks were clutter)
-					pops.pop(wp + Vector3(0.6 * float(idx % 2 * 2 - 1), -0.4, 0), "-%d" % maxi(1, roundi(dmg)), "tick")
-			elif not killed and tot > 0.0:
-				pops.pop(wp + Vector3(0, 1.4, 0), ("-%d!" if bool(e.get("window", false)) else "-%d") % maxi(1, roundi(tot)), "big")
+					pops.pop(wp + Vector3(0.6 * float(idx % 2 * 2 - 1), -0.4, 0), "-%d" % (maxi(1, roundi(dmg)) * DMG_SHOW_MUL), "tick")
+			elif not killed and tot > 0.0:  # "치명!" only here: on every window tack hit it meant nothing (rvB)
+				pops.pop(wp + Vector3(0, 1.4, 0), ("치명! -%d" if bool(e.get("window", false)) else "-%d") % (maxi(1, roundi(tot)) * DMG_SHOW_MUL), "big")
 			if int(e.get("popped", 0)) > 0:
 				pops.pop(wp + Vector3(0, 1.9, 0), "펑크!", "crit")
 			if key == "t5" and not killed and idx >= n - 1:
@@ -815,6 +828,11 @@ func _on_skill_event(e: Dictionary) -> void:
 				_item_pop_t[sl3 - 1] = now
 		"finisher":
 			_kill_real = now
+
+
+## A rage / item skill is landing on this villain right now (its own sum pop shows the damage; tack pops would pile on).
+func _under_skill(target: int) -> bool:
+	return target >= 0 and str(skill_active.get("id", "")) != "" and int(skill_active.get("target_id", -1)) == target
 
 
 ## Skippable cinematic right now: the sim's state.skills.skip_ready when it publishes one (the hint and the tap
@@ -953,7 +971,7 @@ func _process(delta: float) -> void:
 		_input.set_zone("right", _btn_right.get_global_rect())
 		_input.set_zone("horn", _btn_horn.get_global_rect())
 		_input.set_zone("fire", _btn_fire.get_global_rect().grow(8.0))
-		_input.set_zone("rage", _btn_rage.get_global_rect().grow(4.0))
+		_input.set_zone("rage", _btn_rage.get_global_rect())
 		for i: int in 2:  # item zones only while the slot holds an item (an empty slot must not eat a lane swipe)
 			_input.set_zone("item%d" % (i + 1), _btn_items[i].get_global_rect().grow(4.0) if bool(_btn_items[i].get_meta(&"slot_used", false)) else Rect2())
 		_input.set_zone("pause", _btn_pause.get_global_rect().grow(6.0))
@@ -1351,11 +1369,11 @@ func _draw_rage_btn(c: Control) -> void:
 	c.draw_set_transform(ctr + (o - Vector2(0, 11)) * pop, wig, Vector2(pop, pop))
 	var ink: Color = Color.WHITE if tier > 0 else Color(1, 1, 1, 0.55)
 	match tier:
-		1:
-			if not UiDraw.draw_icon(c, "horn", Vector2.ZERO, 42, ink):
-				c.draw_circle(Vector2.ZERO, 14, ink)
-			for k: int in 2:  # sound arcs
-				c.draw_arc(Vector2(10, -2), 14.0 + 7.0 * float(k), -0.7, 0.7, 10, Color(1, 1, 1, 0.85), 3.0, true)
+		1:  # 충격파: a burst dot and three wave arcs (not the 경적 button's horn)
+			c.draw_circle(Vector2(-14, 0), 6.0, ink)
+			for k: int in 3:
+				var rr: float = 9.0 + 8.0 * float(k)
+				c.draw_arc(Vector2(-14, 0), rr, -0.85, 0.85, 12, Color(ink, 1.0 - 0.22 * float(k)), 4.0 - 0.6 * float(k), true)
 		3:
 			for k: int in 3:
 				var off := Vector2(-14.0 + 14.0 * float(k), -6.0 + (6.0 if k == 1 else 0.0))
