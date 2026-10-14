@@ -115,6 +115,7 @@ func set_flash(amount: float) -> void:
 
 ## true: the owner spins the wheels with advance_wheels() on sim time (Game.manual shots/tests stay reproducible).
 var manual: bool = false
+var flat: Dictionary = {}
 
 
 func _process(delta: float) -> void:
@@ -128,4 +129,17 @@ func advance_wheels(delta: float) -> void:
 	_spin = fmod(_spin + speed * delta / _wheel_r, TAU)
 	for i: int in wheels.size():
 		var b: Transform3D = _wheel_base[i]
-		wheels[i].transform = Transform3D(b.basis * Basis(Vector3.RIGHT, -_spin), b.origin)
+		if flat.has(i):  # burst tyre (GameSim villains[].popped): squashed, sits lower
+			var fb := Basis.from_scale(Vector3(1.0, 0.62, 0.62)) * Basis(Vector3.RIGHT, -_spin * 0.25)
+			wheels[i].transform = Transform3D(b.basis * fb, b.origin - Vector3(0, _wheel_r * 0.3, 0))
+		else:
+			wheels[i].transform = Transform3D(b.basis * Basis(Vector3.RIGHT, -_spin), b.origin)
+
+
+## Burst tyres by wheel index (GameSim state().villains[i].popped, in burst order).
+func set_flat(indices: Array) -> void:
+	if indices.size() == flat.size():
+		return
+	flat.clear()
+	for i: Variant in indices:
+		flat[int(i)] = true

@@ -1,9 +1,9 @@
 extends RefCounted
-## N1 (NATIVE_PORT N1 "진행 바 단일 진실"): over a 60 s run of the real game scene (TrafficBridge, C++ when the ext
-## loads; player driver; scripted lane changes and honks), EVERY tick the HUD bar fraction and the "원흉까지 N m"
-## label equal the values derived from the live distance player → villain:
+## N1 (NATIVE_PORT N1 "진행 바 단일 진실"): over a 60 s run of the real game scene (GameSim on TrafficBridge, C++ when
+## the ext loads; scripted lane changes and honks through LaneInput), EVERY tick until the front lock the HUD bar
+## fraction and the "원흉까지 N m" label equal the values derived from the live distance player → villain:
 ##   bar  = clamp((p − s0) / (v − s0), 0, 1) = 1 − dist / span     label = "원흉까지 round(v − p) m"
-## with p = player s, v = the villain's live s from the sim (TrafficBridge.villains()), s0 = setup_info start_s.
+## with p = player s, v = the villain reference s from the boss sim (BossSim.ref_s()), s0 = setup_info start_s.
 
 const GameScene: PackedScene = preload("res://view/game.tscn")
 const SECONDS: float = 60.0
@@ -56,6 +56,8 @@ func run() -> int:
 			replies.append(kind if not kind.is_empty() else "-")
 			if not kind.is_empty() and g.bubbles.count() > 0:
 				bubbled += 1
+		if g.sim.front_locked or not (g.phase in [&"intro", &"jam", &"boss"]):
+			break  # N1 is the approach bar; after the lock the HUD shows the villain plate
 		var p: float = g.player.s
 		var v_live: float = _villain_s(g)
 		if is_nan(v_first):
@@ -75,7 +77,7 @@ func run() -> int:
 		if first_bad.is_empty() and (e_bar > EPS or label != Hud.distance_text(dist)):
 			first_bad = "tick %d: bar %.6f want %.6f, label '%s' want '%s'" % [i, g.hud.shown.x, want, label, Hud.distance_text(dist)]
 	print("INFO hud_progress: %d ticks, player %.1f → %.1f m, villain %.1f → %.1f m, honks %d, lane changes %d" % [n, p_first,
-		g.player.s, v_first, v_last, _count(g, "honk"), _count(g, "lane_change")])
+		g.player.s, v_first, v_last, _count(g, "honk"), _count(g, "lane")])
 	_check(worst_villain < EPS, "HUD villain_s is the sim's live villain s every tick (max err %.6f m)" % worst_villain)
 	_check(bad_player == 0, "HUD player_s is the driver's s every tick (%d bad)" % bad_player)
 	_check(worst_bar < EPS, "bar fraction == 1 − dist/span every tick for %.0f s (max err %.6f)%s" % [SECONDS, worst_bar,
@@ -92,11 +94,7 @@ func run() -> int:
 
 
 func _villain_s(g: Game) -> float:
-	if g.traffic.has_method(&"villains"):
-		var vs: Array = g.traffic.call(&"villains")
-		if not vs.is_empty():
-			return float((vs[0] as Dictionary)["s"])
-	return g._villain_s
+	return g.sim.boss.ref_s()
 
 
 func _count(g: Game, type: String) -> int:

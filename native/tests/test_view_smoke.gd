@@ -184,26 +184,26 @@ func _scene(tree: SceneTree) -> void:
 	var g: Game = GameScene.instantiate() as Game
 	g.manual = true
 	g.with_debug_panel = false
-	g.traffic_mode = "stub"
 	tree.root.add_child(g)
-	_check(g._built and g.npc.group_count() > 0, "game.tscn builds (stub traffic: %s, %d NPC templates)" % [
-		str(g.traffic.get(&"source")), g.npc.group_count()])
+	_check(g._built and g.npc.group_count() > 0 and g.sim != null, "game.tscn builds on GameSim (traffic %s native=%s, %d NPC templates)" % [
+		g.traffic.get_script().resource_path, g.sim.traffic().is_native(), g.npc.group_count()])
 	_check(int(g.world.stats.get("instances", 0)) > 150 and int(g.world.stats.get("chunk_meshes", 0)) <= 48,
 		"world.js layout ported (%d props/segments merged into %d chunk meshes)" % [int(g.world.stats.get("instances", 0)),
 		int(g.world.stats.get("chunk_meshes", 0))])
 	var s0: float = g.player.s
 	var t0: int = Time.get_ticks_usec()
-	g.advance_ticks(240)
-	var ms: float = float(Time.get_ticks_usec() - t0) / 1000.0 / 240.0
-	_check(g.player.s > s0 + 1.0 and g.ticks == 240, "2 s of 120 Hz ticks: player creeps %.1f m (%.3f ms/tick incl. view)" % [g.player.s - s0, ms])
-	# lane change through the input path
+	g.advance_ticks(480)  # intro 2.05 s, then the jam creep
+	var ms: float = float(Time.get_ticks_usec() - t0) / 1000.0 / 480.0
+	_check(g.player.s > s0 + 1.0 and g.ticks == 480 and g.phase == &"jam", "4 s of 120 Hz ticks: intro → jam, player creeps %.1f m (%.3f ms/tick incl. view)" % [
+		g.player.s - s0, ms])
+	# lane change through the input path: GameSim answers with a lane event or a blocked / closed bubble
 	g.input.inject("lane:-1")
 	g.advance_ticks(60)
 	var lane_log: bool = false
 	for e: Dictionary in g.log_events:
-		if str(e.get("type", "")) in ["lane_change", "lane_blocked"]:
+		if str(e.get("type", "")) == "lane" or (str(e.get("type", "")) == "bubble" and float(e.get("t", 0.0)) > 3.9):
 			lane_log = true
-	_check(lane_log, "input lane:-1 → request_lane → lane_change/lane_blocked (player lane %d)" % g.player.lane)
+	_check(lane_log, "input lane:-1 → GameSim.input(lane) → lane / blocked bubble (player lane %d)" % g.player.lane)
 	# horn through the input path
 	g.input.inject("horn:down")
 	g.advance_ticks(2)
@@ -212,7 +212,7 @@ func _scene(tree: SceneTree) -> void:
 	for e: Dictionary in g.log_events:
 		if str(e.get("type", "")) == "honk":
 			honked = true
-	_check(honked and g.honk_fx.active() > 0, "horn: TrafficBridge.honk + honk wave FX (sfx played %d)" % g.sfx.played)
+	_check(honked and g.honk_fx.active() > 0, "horn: GameSim honk event + honk wave FX (sfx played %d)" % g.sfx_played)
 	_safe_area(g)
 	_camera_follows(g)
 	# N5 icon rules on the live buffer

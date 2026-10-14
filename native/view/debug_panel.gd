@@ -26,7 +26,8 @@ func _ready() -> void:
 	tab.text = "DBG"
 	tab.position = Vector2(8, 96)
 	tab.focus_mode = Control.FOCUS_NONE
-	tab.pressed.connect(func() -> void: _panel.visible = not _panel.visible)
+	tab.pressed.connect(toggle)
+	tab.visible = false  # device report: the tab sat over the N1 bar start; open with F1 or a three-finger tap (toggle())
 	add_child(tab)
 	_panel = PanelContainer.new()
 	_panel.position = Vector2(8, 132)
@@ -63,6 +64,10 @@ func _add(box: VBoxContainer, key: String, label_fn: Callable, toggle_fn: Callab
 		b.text = label_fn.call())
 	box.add_child(b)
 	_buttons[key] = b
+
+
+func toggle() -> void:
+	_panel.visible = not _panel.visible
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
