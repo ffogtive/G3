@@ -10,6 +10,15 @@ extends RefCounted
 ##  - result card P0#6: time / min HP / tows straight from the result, ★2 fails with a tow, "포상금 ×1.5" wording.
 ##  - FX: deterministic under a seed, kill explosion spawns and fully expires, release wave runs front → tail.
 ##  - world: gantry fade uses a depth pre-pass and dissolves completely near the camera (no lattice).
+##  - r3 U1 (device feedback 4 "말풍선이 위에 빌런까지 거리 게이지바에 겹침"): bubble bodies never cover the top HUD
+##    (bar · pill · villain plate · combo badge · neck chip) for anchors above / on / under the HUD, with and without a
+##    notch: flip under the anchor, or dock under the HUD (one docked bubble per frame, red border for the villain).
+##  - r3 U4: damage pops merge per target (tack stack), ≤ 2 live per target by priority, stay inside the safe rect,
+##    and the kill clears the stale ones.
+##  - r3 U2: combo badge n / 20-cell bar / next reward / timeout line / break states; neck verb chip clear of the HUD.
+## 가설(r3 U1/U4): ✅ the overlap was the bubble body knowing only the N5 icon rects (side slide); a top guard from the
+##       HUD + flip / dock makes it 0 by construction. ✅ a tack stack per target + a 2-per-target cap ends the
+##       "column of numbers" over the villain.
 
 const GameScene: PackedScene = preload("res://view/game.tscn")
 
@@ -31,7 +40,282 @@ func run() -> int:
 	await _fx_determinism()
 	await _camera_and_reticle()
 	await _gantry()
+	await _bubble_guard()
+	await _bubble_dock()
+	await _pops_merge()
+	await _combo_badge()
 	return _fails
+
+
+# ───────────────────────────── r3 fixtures (GameSim state() shapes: skills.combo, neck, checkpoints)
+
+static func _combo(n: int, left: float = 1.2, next_n: int = 10, next_id: String = "c10", next_name: String = "따다닥") -> Dictionary:
+	return {"n": n, "left": left, "next_n": next_n, "next_id": next_id, "next_name": next_name, "best": n, "timeout": 1.5,
+		"cycle": 20, "marks": [5, 10, 15, 20]}
+
+
+## Boss fight state with the r3 skills block (mode fight, t1 ready, face wave) + combo + an active neck chip.
+static func _r3_boss(combo: Dictionary, neck_chip: String = "", prelock: bool = false) -> Dictionary:
+	var st: Dictionary = UiStubState.boss(true)
+	st["skills"] = {"segs": 1, "rage_tiers_ready": [1], "next_tier": 1, "mode": "fight", "execute_frac": 0.0, "active": {},
+		"items": [], "skip_ready": false, "enabled": true, "face": "wave", "prelock": prelock, "chase": false, "combo": combo}
+	if prelock:
+		(st["lock"] as Dictionary)["active"] = false
+	st["neck"] = {"on": neck_chip != "", "active": neck_chip != "", "valve": "honk", "chip": neck_chip, "id": -1000,
+		"phase": "block" if neck_chip != "" else "gone", "exit": "", "t": 3.2, "how": "", "safety_left": 2.8, "enabled": true,
+		"s": 245.0, "x": 9.0, "len": 4.5, "w": 1.9, "kind": "cutter", "car": "sedan", "v": 4.0, "blinker": 0, "exit_t": 0.0}
+	return st
+
+
+func _hud_with(safe_pt: Vector2) -> Array:
+	var inp := LaneInput.new()
+	_tree.root.add_child(inp)
+	var hud := Hud.new()
+	hud.manual = true
+	_tree.root.add_child(hud)
+	hud.bind_input(inp)
+	hud.debug_safe_pt = safe_pt
+	hud.apply_safe_area()
+	return [hud, inp]
+
+
+## U1: anchors y −200 / 0 / 60 / 300 × x across the 540 width × notch (0, 0) / (59, 34) × jam / boss (combo badge +
+## neck chip shown): no bubble body meets the bar, pill, villain plate, combo badge or neck chip.
+func _bubble_guard() -> void:
+	var texts: Array[String] = ["빵!", "멀리서 빵빵? 흥!"]
+	for safe_pt: Vector2 in [Vector2.ZERO, Vector2(59, 34)]:
+		var hi: Array = _hud_with(safe_pt)
+		var hud: Hud = hi[0]
+		var b := Bubbles.new()
+		hud.root.add_child(b)
+		hud.root.move_child(b, 0)
+		for ph: String in ["jam", "boss", "prelock"]:
+			var st: Dictionary = UiStubState.jam(0.4) if ph == "jam" else _r3_boss(_combo(7), "붙어서 빵!", ph == "prelock")
+			hud.apply_state(st)
+			hud.advance(0.5)
+			await _tree.process_frame
+			hud.advance(0.05)
+			hud.guard_bubbles(b)
+			var rects: Array[Rect2] = []
+			var names: PackedStringArray = []
+			for c: Control in [hud._bar, hud._pill, hud._boss, hud._combo_w, hud._neck_chip]:
+				if c.visible:
+					rects.append(c.get_global_rect())
+					names.append(str(c.name))
+			var sr: Rect2 = hud.safe_rect()
+			var bad: int = 0
+			var legacy_bad: int = 0
+			var n: int = 0
+			var modes: Dictionary = {}
+			var first: String = ""
+			for y: float in [-200.0, 0.0, 60.0, 300.0]:
+				for x: float in [8.0, 60.0, 150.0, 270.0, 400.0, 480.0, 532.0]:
+					for text: String in texts:
+						for kind: String in ["taunt", "angry"]:
+							var e: Dictionary = b.layout_bubble(Vector2(x, y), text, kind)
+							var lg: Dictionary = b.layout_bubble(Vector2(x, y), text, kind, true)
+							n += 1
+							modes[str(e["mode"])] = int(modes.get(str(e["mode"]), 0)) + 1
+							var body: Rect2 = e["body"]
+							var hit: bool = body.position.x < sr.position.x or body.end.x > sr.end.x or body.position.y < sr.position.y
+							for r: Rect2 in rects:
+								hit = hit or body.intersects(r)
+								if (lg["body"] as Rect2).intersects(r):
+									legacy_bad += 1
+									break
+							if hit:
+								bad += 1
+								if first.is_empty():
+									first = "(%d, %d) %s → %s %s" % [x, y, text, e["mode"], body]
+			var guard: float = hud.top_guard_y()
+			var g_ok: bool = true
+			for r: Rect2 in rects:
+				g_ok = g_ok and guard >= r.end.y + 6.0 - 0.01
+			_check(bad == 0 and n == 112 and g_ok and rects.size() >= 2,
+				"U1 %s notch %s: %d/%d bubble bodies clear of [%s] (guard %.0f, modes %s; pre-r3 layout %d overlaps)%s" % [ph, safe_pt,
+				n - bad, n, ",".join(names), guard, JSON.stringify(modes), legacy_bad, "" if first.is_empty() else " first bad " + first])
+		hud.queue_free()
+		(hi[1] as Node).queue_free()
+	await _tree.process_frame
+
+
+## U1: anchors above the guard dock under the HUD — the newest one only per frame, the villain's with a red border;
+## an anchor under the guard whose body would reach the HUD flips under its anchor (tail up, tip on the anchor).
+func _bubble_dock() -> void:
+	var hi: Array = _hud_with(Vector2(59, 34))
+	var hud: Hud = hi[0]
+	var b := Bubbles.new()
+	hud.root.add_child(b)
+	hud.apply_state(_r3_boss(_combo(7)))
+	hud.advance(0.5)
+	await _tree.process_frame
+	hud.guard_bubbles(b)
+	var guard: float = hud.top_guard_y()
+	b.step(1.0)
+	b.show_bubble("h1", "끼워줘요~", "taunt", 3.0, func() -> Vector2: return Vector2(200, -100))
+	b.step(1.1)
+	b.show_bubble("v0", "어딜 감히!", "taunt", 3.0, func() -> Vector2: return Vector2(300, -40))
+	b.step(1.2)
+	b.show_bubble("h2", "흥!", "angry", 3.0, func() -> Vector2: return Vector2(100, 30))
+	b.show_bubble("h3", "어서 가요", "thanks", 3.0, func() -> Vector2: return Vector2(270, 760))
+	var lay: Array[Dictionary] = b.layout()
+	var docked: Array[String] = []
+	var keys: Array[String] = []
+	for e: Dictionary in lay:
+		keys.append(str(e["key"]))
+		if str(e["mode"]) == "dock":
+			docked.append(str(e["key"]))
+	var dock_y: float = INF
+	for e: Dictionary in lay:
+		if str(e["mode"]) == "dock":
+			dock_y = (e["body"] as Rect2).position.y
+	_check(docked == ["h2"] and keys.has("h3") and not keys.has("h1") and not keys.has("v0") and absf(dock_y - (guard + 4.0)) < 0.5,
+		"U1 dock: 3 anchors above the HUD → only the newest docks at guard + 4 (%s at %.0f, guard %.0f), the on-screen one still draws %s" % [
+		str(docked), dock_y, guard, str(keys)])
+	b.step(5.0)  # all expired
+	b.show_bubble("v0", "어딜 감히!", "taunt", 3.0, func() -> Vector2: return Vector2(300, -40))
+	var lv: Array[Dictionary] = b.layout()
+	_check(lv.size() == 1 and str(lv[0]["mode"]) == "dock" and bool(lv[0]["villain"]) and (lv[0]["border"] as Color).is_equal_approx(Bubbles.VILLAIN_RED),
+		"U1 dock: the villain's taunt docks with the red border")
+	var anchor := Vector2(270, guard + 20.0)
+	var fl: Dictionary = b.layout_bubble(anchor, "멀리서 빵빵? 흥!", "taunt")
+	_check(str(fl["mode"]) == "flip" and (fl["body"] as Rect2).position.y >= anchor.y + 10.0 and (fl["tip"] as Vector2).distance_to(anchor) < 0.01,
+		"U1 flip: anchor just under the HUD → body under the anchor, tail tip on it (%s %s)" % [fl["mode"], fl["body"]])
+	var low: Dictionary = b.layout_bubble(Vector2(270, 700), "어서 가요", "thanks")
+	_check(str(low["mode"]) == "up" and (low["body"] as Rect2).end.y <= 700.0 - 10.0, "U1: a bubble well under the HUD keeps the web look (body above its car)")
+	hud.queue_free()
+	(hi[1] as Node).queue_free()
+	await _tree.process_frame
+
+
+## U4: tack hits on one target stack into one number, ≤ 2 live pops per target, the pop rect stays inside the safe rect,
+## the kill clears the stale pops.
+func _pops_merge() -> void:
+	var hi: Array = _hud_with(Vector2(59, 34))
+	var hud: Hud = hi[0]
+	var cam := Camera3D.new()
+	hud.add_child(cam)
+	hud.bind_world(cam, RoadGraph.new())
+	hud.apply_state(UiStubState.boss(true))
+	hud.advance(0.1)
+	await _tree.process_frame
+	var hit := func(dmg: float, window: bool = false, popped: int = 0) -> Dictionary:
+		return {"type": "hit", "target_id": 0, "dmg": dmg, "window": window, "immune": false, "kind": "tack", "popped": popped, "s": 255.0, "x": -5.4}
+	var counts: Array[int] = []
+	for i: int in 5:
+		hud.on_event(hit.call(4.0))
+		counts.append(hud.pops.pop_count())
+		hud.advance(0.2)
+	var last: String = hud.pops.texts_pops()[-1] if not hud.pops.texts_pops().is_empty() else ""
+	_check(counts.max() <= 2 and last == "-%d" % (5 * 4 * Hud.DMG_SHOW_MUL),
+		"U4: 5 tack hits on one target in 1 s → %s pops, last text '%s' (want -%d)" % [str(counts), last, 5 * 4 * Hud.DMG_SHOW_MUL])
+	hud.on_event(hit.call(4.0, true))
+	var win_txt: String = hud.pops.texts_pops()[-1]
+	_check(win_txt == "-%d!" % (6 * 4 * Hud.DMG_SHOW_MUL) and hud.pops.pop_count() == 1,
+		"U4: a window hit joins the stack and turns it gold ('%s')" % win_txt)
+	# priority cap: tack stack + 펑크 + t3 ticks + sum + 경직 on one target → ≤ 2 live at any time, sum + 펑크 kept
+	hud.pops.clear_pops()
+	var live_max: int = 0
+	var evs: Array[Dictionary] = [hit.call(3.0), hit.call(3.0, false, 1)]
+	for i: int in 4:
+		evs.append({"type": "skill_hit", "chan": "rage", "tier": 3, "id": "t3_carpet", "target_id": 0, "idx": i, "n": 4, "dmg": 3.0,
+			"window": false, "immune": false, "popped": 1 if i == 3 else 0, "killed": false, "s": 254.9, "x": -6.45})
+	evs.append({"type": "stun", "id": 0, "dur": 0.6})
+	for e: Dictionary in evs:
+		hud.on_event(e)
+		live_max = maxi(live_max, hud.pops.live_count("v0"))
+		hud.advance(0.03)
+	var live_txt: PackedStringArray = hud.pops.texts_pops(true)
+	_check(live_max <= 2 and live_txt.has("-%d" % (12 * Hud.DMG_SHOW_MUL)) and live_txt.has("펑크!"),
+		"U4: ≤ 2 live pops per target by priority (max %d; live %s)" % [live_max, live_txt])
+	# x clamp: a big pop anchored at x = 5 stays whole inside the safe rect through its punch
+	hud.pops.clear_pops()
+	hud.pops.pop_screen(Vector2(5, 520), "치명! -150", "big")
+	hud.pops.pop_screen(Vector2(536, 600), "치명! -150", "big")
+	var sr: Rect2 = hud.safe_rect()
+	var outside: int = 0
+	var frames: int = 0
+	for i: int in 16:
+		for r: Rect2 in hud.pops.pop_rects():
+			frames += 1
+			if not sr.encloses(r):
+				outside += 1
+		hud.advance(0.05)
+	_check(outside == 0 and frames >= 20, "U4: big pops anchored at x = 5 / 536 stay inside the safe rect (%d/%d rects out)" % [outside, frames])
+	# kill: stale pops cleared, ≤ 1 left 0.2 s later
+	hud.pops.clear_pops()
+	for i: int in 3:
+		hud.on_event(hit.call(4.0, false, 1 if i == 2 else 0))
+		hud.advance(0.1)
+	hud.on_event({"type": "skill_hit", "chan": "rage", "tier": 1, "id": "t1_wave", "target_id": 0, "idx": 0, "n": 1, "dmg": 9.0,
+		"window": false, "immune": false, "popped": 0, "killed": false, "s": 254.9, "x": -6.45})
+	hud.on_event({"type": "kill", "id": 0, "last": true, "s": 254.9, "x": -6.45})
+	hud.advance(0.2)
+	_check(hud.pops.pop_count() <= 1, "U4: 0.2 s after the kill ≤ 1 pop left (%d: %s)" % [hud.pops.pop_count(), hud.pops.texts_pops()])
+	hud.queue_free()
+	(hi[1] as Node).queue_free()
+	await _tree.process_frame
+
+
+## U2: combo badge (state.skills.combo) — n, 20-cell bar, next reward, timeout line, milestone pop beside it, break
+## states; hidden outside the boss phase. Neck verb chip: shown with its text, clear of the top HUD, registered.
+func _combo_badge() -> void:
+	var hi: Array = _hud_with(Vector2.ZERO)
+	var hud: Hud = hi[0]
+	hud.apply_state(_r3_boss(_combo(7, 1.2)))
+	hud.advance(0.3)
+	await _tree.process_frame
+	var cv: Dictionary = hud.combo_view()
+	_check(str(cv.get("state", "")) == "live" and int(cv.get("n", 0)) == 7 and int(cv.get("cells", 0)) == 7 and str(cv.get("next", "")) == "따다닥"
+		and absf(float(cv.get("left_frac", 0.0)) - 0.8) < 0.01 and hud._combo_w.visible,
+		"U2 combo badge live: ×7, 7/20 cells, next '따다닥', timeout line 0.8 (%s)" % JSON.stringify(cv))
+	hud.on_event({"type": "combo_milestone", "n": 10, "id": "c10", "target_id": 0, "skill": "c10_burst", "label": "따다닥!", "name": "따다닥"})
+	hud.apply_state(_r3_boss(_combo(10, 1.5, 15, "c5", "따닥")))
+	hud.advance(0.05)
+	cv = hud.combo_view()
+	_check(str(cv.get("pop", "")) == "따다닥!" and int(cv.get("cells", 0)) == 10 and str(cv.get("next", "")) == "따닥" and hud.banner.current() != "따다닥!",
+		"U2 combo milestone: '따다닥!' pops beside the badge (not the centre banner), bar 10/20, next '따닥' (%s)" % JSON.stringify(cv))
+	hud.apply_state(_r3_boss(_combo(20, 1.5, 25, "c5", "따닥")))
+	hud.advance(0.05)
+	var full: int = int(hud.combo_view().get("cells", 0))
+	hud.on_event({"type": "combo_break", "reason": "hit", "n": 20})
+	hud.apply_state(_r3_boss(_combo(0, 0.0, 5, "c5", "따닥")))
+	hud.advance(0.1)
+	cv = hud.combo_view()
+	var broken: bool = str(cv.get("state", "")) == "broken" and str(cv.get("text", "")) == "콤보 끊김" and int(cv.get("n", 0)) == 20
+	hud.advance(1.0)
+	var off_after: String = str(hud.combo_view().get("state", ""))
+	hud.apply_state(_r3_boss(_combo(6, 0.1, 10)))
+	hud.advance(0.05)
+	hud.on_event({"type": "combo_break", "reason": "timeout", "n": 6})
+	hud.apply_state(_r3_boss(_combo(0, 0.0, 5, "c5", "따닥")))
+	hud.advance(0.05)
+	var fading: String = str(hud.combo_view().get("state", ""))
+	_check(full == 20 and broken and off_after == "off" and fading == "fading",
+		"U2 combo states: ×20 = full bar (%d), hit → grey '콤보 끊김' then off (%s), timeout → fade (%s)" % [full, off_after, fading])
+	hud.apply_state(UiStubState.jam(0.4))
+	hud.advance(0.5)
+	_check(not hud._combo_w.visible, "U2 combo badge hidden outside the boss phase")
+	# neck verb chip (boss before the lock)
+	hud.apply_state(_r3_boss(_combo(0, 0.0, 5, "c5", "따닥"), "붙어서 빵!", true))
+	hud.advance(0.5)
+	await _tree.process_frame
+	hud.advance(0.05)
+	var chip_r: Rect2 = hud._neck_chip.get_global_rect()
+	var clash: PackedStringArray = []
+	for c: Control in [hud._bar, hud._pill, hud._boss, hud._combo_w, hud._btn_pause, hud._release_w]:
+		if c.visible and c.get_global_rect().intersects(chip_r):
+			clash.append(str(c.name))
+	var reg: bool = false
+	for r: Rect2 in hud.reserved_rects():
+		reg = reg or r.encloses(chip_r)
+	_check(hud._neck_chip.visible and hud.neck_chip_text() == "붙어서 빵!" and clash.is_empty() and reg and hud.safe_rect().encloses(chip_r)
+		and hud.top_guard_y() >= chip_r.end.y + 6.0 - 0.01,
+		"U2 neck chip '%s' shown at %s: clear of the top HUD %s, in reserved_rects %s, under the guard %.0f" % [hud.neck_chip_text(), chip_r,
+		str(clash), reg, hud.top_guard_y()])
+	hud.queue_free()
+	(hi[1] as Node).queue_free()
+	await _tree.process_frame
 
 
 func _touch(inp: LaneInput, idx: int, pos: Vector2, pressed: bool) -> void:

@@ -3,8 +3,69 @@ extends RefCounted
 ## 막대게이지 중복이라. 막대게이지는 없애도 될듯?").
 ## 가설: ✅ the bottom-left "분노" segment bar repeated the 분노 button's charge ring; dropping the bar loses nothing if
 ## the ring itself reads as levels (one tick-separated segment per rage cost) and full rage glows "MAX".
+## r3 U2 (device feedback 2 "분노 스킬도 너무 얌전해", rvB "분노가 경적처럼 보임"):
+## 가설: ✅ the 분노 button read as a second horn because both were orange (#ff6a1a vs #f08a1a, 8° apart) and the t1 face
+##       said 경적; a crimson 분노 (≥ 30° from the horn), the face from state.skills.face (청소 in the jam, 충격파 in the
+##       boss phase — before the lock too) and an orange '분노' tag on the villain bracket tell the player "this hits it".
 
 var _fails: int = 0
+
+
+## Hue (degrees) of the average of a button's gradient colours.
+static func _hue_of(cols: Array) -> float:
+	var s := Color(0, 0, 0)
+	for c: Variant in cols:
+		s += c as Color
+	s /= float(cols.size())
+	return s.h * 360.0
+
+
+static func _hue_diff(a: float, b: float) -> float:
+	var d: float = absf(a - b)
+	return minf(d, 360.0 - d)
+
+
+func _skills_state(base: Dictionary, mode: String, face: String, tier: int, prelock: bool) -> Dictionary:
+	var st: Dictionary = base.duplicate(true)
+	st["skills"] = {"segs": tier, "rage_tiers_ready": [tier] if tier > 0 else [], "next_tier": tier, "mode": mode, "execute_frac": 0.0,
+		"active": {}, "items": [], "skip_ready": false, "enabled": true, "face": face, "prelock": prelock, "chase": false,
+		"combo": {"n": 0, "left": 0.0, "next_n": 5, "next_id": "c5", "next_name": "따닥", "best": 0, "timeout": 1.5, "cycle": 20, "marks": [5, 10, 15, 20]}}
+	(st["player"] as Dictionary)["rage"] = float(tier) / 5.0 + 0.01
+	if prelock:
+		(st["lock"] as Dictionary)["active"] = false
+	return st
+
+
+func _r3_rage(hud: Hud) -> void:
+	var h_rage: float = _hue_of(Hud.BTN_RAGE)
+	var h_horn: float = _hue_of(Hud.BTN_HORN)
+	var h_fill: float = Hud.C_RAGE.h * 360.0
+	_check(_hue_diff(h_rage, h_horn) >= 30.0 and _hue_diff(h_fill, h_horn) >= 30.0,
+		"U2: 분노 button hue %.0f° vs 경적 %.0f° (Δ %.0f° ≥ 30), ring fill 1–2 칸 %.0f° (Δ %.0f°)" % [h_rage, h_horn,
+		_hue_diff(h_rage, h_horn), h_fill, _hue_diff(h_fill, h_horn)])
+	var fills: Array = []
+	for lvl: int in [1, 2, 3, 4, 5]:
+		fills.append(hud.rage_fill_color(lvl))
+	_check((fills[0] as Color).is_equal_approx(Hud.C_RAGE) and (fills[1] as Color).is_equal_approx(Hud.C_RAGE)
+		and (fills[2] as Color).is_equal_approx(Hud.C_T3) and (fills[3] as Color).is_equal_approx(Hud.C_T3) and (fills[4] as Color).is_equal_approx(Hud.C_GOLD),
+		"U2: ring fill 1–2 crimson → 3–4 red-orange → MAX gold")
+	# faces: jam t1 = 청소, boss before the lock (state.skills.face wave) = 충격파, t3 폭격, t5 참교육, nothing = 분노
+	var labels: Array[String] = []
+	var cases: Array = [[UiStubState.jam(0.4), "jam", "clear", 1, false], [UiStubState.boss(true), "fight", "wave", 1, true],
+		[UiStubState.boss(true), "fight", "wave", 1, false], [UiStubState.boss(true), "fight", "carpet", 3, false],
+		[UiStubState.boss(true), "fight", "finish", 5, false], [UiStubState.boss(true), "fight", "wave", 0, false]]
+	for cs: Array in cases:
+		hud.apply_state(_skills_state(cs[0], cs[1], cs[2], cs[3], cs[4]))
+		labels.append(hud.rage_face_label())
+	_check(labels == ["청소", "충격파", "충격파", "폭격", "참교육", "분노"],
+		"U2: 분노 face jam '청소' · boss before the lock '충격파' · t1 / t3 / t5 / none %s" % str(labels))
+	# reticle '분노' tag: fight with a tier ready (before the lock too), never in the jam or with nothing ready
+	var tags: Array[bool] = []
+	for cs: Array in [[UiStubState.boss(true), "fight", "wave", 1, true], [UiStubState.boss(true), "fight", "carpet", 3, false],
+			[UiStubState.boss(true), "fight", "wave", 0, false], [UiStubState.jam(0.4), "jam", "clear", 1, false]]:
+		hud.apply_state(_skills_state(cs[0], cs[1], cs[2], cs[3], cs[4]))
+		tags.append(hud.reticle.rage_tag)
+	_check(tags == [true, true, false, false], "U2: reticle '분노' tag when a rage tier can hit the villain %s" % str(tags))
 
 
 func _check(ok: bool, what: String) -> void:
@@ -61,6 +122,7 @@ func run() -> int:
 	hud.apply_state(_state(1.0))
 	hud.advance(0.1)
 	_check(not below and hud.rage_max(), "MAX glow only at full rage (0.99 → %s, 1.0 → %s)" % [below, hud.rage_max()])
+	_r3_rage(hud)
 	hud.queue_free()
 	inp.queue_free()
 	await tree.process_frame

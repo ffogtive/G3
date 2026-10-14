@@ -8,6 +8,10 @@ extends RefCounted
 ##     it in its lane (the oracle's villain ignored the player, M1a feedback "원흉 차가 뒤에서 앞으로 통과");
 ##   - P0#7 damage: outside the signature window `dmg_out`, inside (vulnerable() > 1) `dmg_in` (GameSim passes both);
 ##   - R1: snapshot()/restore() carry the phase-applied state (attacks, intervalMul, stopped/slow/zig, lane pos).
+##   - r3 A1 approach pace (set_pace): before the front lock GameSim slows every alive, non-stopped villain to
+##     pace × v_nominal (data/neck.json pace.approachVMul 0.78) so the jam queue (0.84× jamSpeed on average) stays
+##     bumper to bumper behind it. v_nominal keeps the spawn / HP-phase value (R1 snapshots stay the phase's), the
+##     pace multiplies it where it is read (update, ref_v, nominal() -> GameSim villain records -> both traffic cores).
 ##   - docs/SKILLS.md (config.skills, GameSim + SkillsSim): skill_damage() = damage() + a generic skill stun
 ##     (v.stun_skill: a window in vuln(), attacks blocked, capped at skills.stunCap per chain, then skills.stunImmune s
 ##     of stun immunity), cancel_attack(), force_pop(), execute(); hold pauses the attack clock while a skill is cast;
@@ -47,6 +51,8 @@ var stun_cap: float = 2.0
 var stun_immune_s: float = 1.5
 ## config.skills.finish ({} = the old constants: rocket 0.85 / 2.15 s, balloon·heli·ufo 0.8 + 3.0 / 2.4 s, sim time).
 var finish_tl: Dictionary = {}
+## r3 A1: approach pace multiplier on v_nominal (1.0 = off; spawn resets it, GameSim sets it).
+var pace: float = 1.0
 
 
 func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dictionary) -> void:
@@ -61,6 +67,7 @@ func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dic
 	stun_cap = float(cfg.get("stunCap", 2.0))
 	stun_immune_s = float(cfg.get("stunImmune", 1.5))
 	hold = 0.0
+	pace = 1.0
 	villains.clear()
 	beams.clear()
 	waves.clear()
@@ -169,7 +176,18 @@ func ref_s() -> float:
 
 func ref_v() -> float:
 	var src: Array[Dictionary] = _ref_set()
-	return float(src[0]["v_nominal"]) if not src.is_empty() else 0.0
+	return nominal(src[0]) if not src.is_empty() else 0.0
+
+
+## r3 A1: the villain's paced nominal speed (v_nominal × pace; a stopped villain stays 0).
+func nominal(v: Dictionary) -> float:
+	return float(v["v_nominal"]) * pace
+
+
+## r3 A1 (data/neck.json pace): m = approachVMul before the front lock (GameSim setup / retry), 1.0 at the lock and the
+## release. Applies to every villain through nominal(); no RNG draw, no state the snapshot has to carry.
+func set_pace(m: float) -> void:
+	pace = maxf(0.0, m)
 
 
 static func occupies_x(x: float, w: float, lane: int) -> bool:
@@ -423,7 +441,7 @@ func _update_death(v: Dictionary, dt: float, rdt: float = -1.0) -> bool:
 			v["parked"] = true
 			return true
 		return false
-	v["base_s"] = float(v["base_s"]) + float(v["v_nominal"]) * dt
+	v["base_s"] = float(v["base_s"]) + nominal(v) * dt
 	if fin == "rocket" or fin == "":
 		if not bool(v["launched"]) and t > 0.85:
 			v["launched"] = true
@@ -446,7 +464,7 @@ func _update_death(v: Dictionary, dt: float, rdt: float = -1.0) -> bool:
 			return true
 		return false
 	# balloon / heli / ufo: settle 0.8 s, then lift (the view draws the prop)
-	v["s"] = float(v["s"]) + float(v["v_nominal"]) * dt
+	v["s"] = float(v["s"]) + nominal(v) * dt
 	if t > 0.8:
 		v["y"] = float(v["y"]) + (2.0 + (t - 0.8) * 4.5) * dt
 	var done: float = 2.4 if fin == "ufo" else 3.0
@@ -482,7 +500,7 @@ func _update_death_tl(v: Dictionary, dt: float, rdt: float) -> bool:
 		v["x"] = float(v["pull_x"]) + (Cfg.lane_x(Cfg.SHOULDER_LANE) - float(v["pull_x"])) * k
 		v["yaw"] = -sin(k * PI) * 0.25
 	else:
-		v["base_s"] = float(v["base_s"]) + float(v["v_nominal"]) * dt
+		v["base_s"] = float(v["base_s"]) + nominal(v) * dt
 		if fin == "rocket":
 			if not bool(v["launched"]) and t > float(tl.get("lift", 0.6)):
 				v["launched"] = true
@@ -502,7 +520,7 @@ func _update_death_tl(v: Dictionary, dt: float, rdt: float) -> bool:
 		else:
 			# balloon (lift) / heli (hook, then away forward) / ufo (beam, spinning): the view draws the prop
 			var up: float = float(tl.get("lift", tl.get("hook", tl.get("beam", tl.get("settle", 0.5)))))
-			v["s"] = float(v["s"]) + float(v["v_nominal"]) * dt + (6.0 * dt if fin == "heli" and t > up else 0.0)
+			v["s"] = float(v["s"]) + nominal(v) * dt + (6.0 * dt if fin == "heli" and t > up else 0.0)
 			if t > up:
 				v["y"] = float(v["y"]) + (2.0 + (t - up) * 4.5) * dt
 				if fin == "ufo":
@@ -694,7 +712,7 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 				v["stun_immune"] = stun_immune_s
 		elif float(v["stun_immune"]) > 0.0:
 			v["stun_immune"] = maxf(0.0, float(v["stun_immune"]) - dt)
-		v["v"] = v["v_nominal"]
+		v["v"] = nominal(v)
 		# native: never drive through the player sitting right in front in our lane
 		if player_in_lanes(p, BossSim.lanes_of(v)) and p.s > float(v["base_s"]):
 			var gap: float = (p.s - p.len / 2.0) - (float(v["base_s"]) + float(v["len"]) / 2.0)
@@ -951,7 +969,7 @@ func restore(snap: Dictionary) -> void:
 			if not _KEEP_FRESH.has(str(k)):
 				dst[k] = src[k] if not (src[k] is Array or src[k] is Dictionary) else (src[k] as Variant).duplicate(true)
 		dst["x"] = Cfg.lane_xf(float(dst["lane_pos"]))
-		dst["v"] = dst["v_nominal"]
+		dst["v"] = nominal(dst)
 		if not bool(src["alive"]):
 			dst["alive"] = false
 			dst["gone"] = true

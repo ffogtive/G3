@@ -31,10 +31,20 @@ extends RefCounted
 ##     {tier, segs} · item_ready {id, slot} · finisher {id, target_id, execute, s, x} (after the last kill) · skip {what}
 ##     · finish_beat {id, finish, beat} (BossSim timeline beats). With config.skills the fight's &"rage" is the ladder
 ##     (no bomb event); without it the old rage horn / bomb run.
+##   r3 (data/neck.json, sim/neck_sim.gd): checkpoint {i (0-based index into state().checkpoints), ord (1-based), d
+##     (threshold m), dist, fast, score, rage, n} · neck_active / neck_chip / neck_yield / neck_block / neck_open / neck_gone
+##     (NeckSim) · honk_reply {.., neck: true} for a honk the bottleneck answered (TrafficBridge.honk not called).
+##   state(): + "neck" (NeckSim.state) and "checkpoints" [{d, done, fast}].
+##   Combat hooks (r3 W; logic in skills_sim.gd / behaviors/generic_window.gd, has_method-guarded here):
+##     skills.on_tack_hit(sim, villain, damage_result) after every 압정 hit on a villain (not minis, not bombs);
+##     skills.on_player_hit(sim) after a hit that got through invuln and dealt damage; a stage whose sig has no
+##     module in BEHAVIORS gets res://sim/behaviors/generic_window.gd (config.boss.genericWindow.on != false).
 
 const _DB := preload("res://core/db.gd")
 const CAUSE_TIER: Dictionary = {"lunge": "fatal", "highbeam": "light", "horn": "light", "smoke": "light", "swerve": "heavy", "selfie": "light"}
 const BEHAVIORS: Dictionary = {"occupy": preload("res://sim/behaviors/occupy.gd")}
+## r3 W/C2: generic signature window for stages whose sig is not ported yet (loaded at runtime, combat group's file).
+const GENERIC_WINDOW_PATH: String = "res://sim/behaviors/generic_window.gd"
 
 var stage: Dictionary = {}
 var tables: Dictionary = {}
@@ -52,6 +62,8 @@ var loadout: Dictionary = {}
 var bridge := TrafficBridge.new()
 var autopilot: Autopilot = null
 var force_fallback: bool = false
+## r3 A2 bottleneck plug + valve, and the A1 pace / A3 checkpoint data (data/neck.json).
+var neck := NeckSim.new()
 
 var phase: StringName = &"intro"
 var phase_t: float = 0.0
@@ -132,6 +144,16 @@ var _night: bool = false
 ## Jam hop landing (jam_hop): {id: NPC car the hop clears (0 = a fixed s), off: landing s relative to it}.
 var _glide: Dictionary = {}
 var _car_len: Dictionary = {}
+## r3 A3: [{d, done, fast, t}] (per 판: kept across retries), stage_clock of the last one, rage per checkpoint.
+var _cps: Array[Dictionary] = []
+var _cp_last: float = 0.0
+var _cp_rage: float = 0.0
+## r3 A1: approach pace multiplier (NeckSim.pace_mul or tables.options.pace) and the front glue on top of it.
+var _pace: float = 1.0
+var _glue_on: bool = true
+var _glue: float = 1.0
+var _glue_target: float = 1.0
+var _glue_n: int = 0
 
 
 ## stage: stages.json record. tables: DB.traffic_tables() ({config, vehicle_kinds, mini_types, approach});
@@ -143,6 +165,8 @@ func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 	tables = p_tables if p_tables.has("config") else _DB.load_traffic_tables()
 	if not tables.has("vehicle_kinds") or tables["vehicle_kinds"] == null:
 		tables["vehicle_kinds"] = _DB.load_json(_DB.DATA_DIR + "/vehicle_kinds.json")
+	if not (tables.get("neck") is Dictionary):
+		tables["neck"] = _DB.load_neck()
 	var config: Dictionary = tables["config"]
 	tune = config.get("tune", {})
 	bc = config.get("boss", {})
@@ -167,6 +191,11 @@ func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 	skills.setup(skc, tune, loadout)
 	seed = p_seed if p_seed >= 0 else Mulberry32.traffic_seed(int(stage.get("id", 1)))
 	_fx_rng.seed = seed * 31 + 5
+	# r3: options.neck (bool) forces the plug on/off (data default.enabled otherwise); options.pace (float) overrides the
+	# approach pace; options.checkpoints == false turns A3 off (baselines in tests).
+	neck.setup(tables.get("neck", {}) as Dictionary, stage, seed, opts.get("neck"))
+	_pace = float(opts["pace"]) if opts.get("pace") is float or opts.get("pace") is int else neck.pace_mul()
+	_glue_on = not (opts.get("pace") is float or opts.get("pace") is int) and opts.get("glue") != false and not neck.glue_cfg().is_empty()
 	_leader_cb = _leader
 	time = 0.0
 	real_time = 0.0
@@ -190,6 +219,7 @@ func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 	_events.clear()
 	_result = {}
 	_setup_stage()
+	_setup_checkpoints(opts.get("checkpoints") != false)
 	rage = minf(1.0, float(int(loadout.get("rage_start_segs", 0))) / float(tune.get("rageSegs", 5)))
 	min_hp = hp
 	phase = &""
@@ -205,13 +235,23 @@ func _setup_stage() -> void:
 	front_s = float(info["front_s"])
 	tail_s = float(bridge.info().get("s_tail", start_s - 45.0))
 	var beh: Object = null
-	var sig: String = str(stage.get("sig", ""))
+	var sig: String = str(stage.get("sig", "")) if stage.get("sig") != null else ""
 	if BEHAVIORS.has(sig):
 		beh = (BEHAVIORS[sig] as GDScript).new()
+	elif _generic_window_on() and ResourceLoader.exists(GENERIC_WINDOW_PATH):
+		var gw: Resource = load(GENERIC_WINDOW_PATH)
+		if gw is GDScript and (gw as GDScript).can_instantiate():
+			beh = (gw as GDScript).new()
 	boss.spawn(stage, info["villains"], beh, seed * 7 + 1, bc)
+	boss.set_pace(_pace)  # r3 A1: setup and every retry start before the front lock
+	_glue = 1.0
+	_glue_target = 1.0
+	_glue_n = 0
+	neck.reset_attempt()
 	fight = {}
-	if beh != null and not (beh.get("fight") as Dictionary).is_empty():
-		fight = beh.get("fight")
+	var bf: Variant = beh.get("fight") if beh != null else null
+	if bf is Dictionary and not (bf as Dictionary).is_empty():
+		fight = bf
 	elif stage.get("fight") is Dictionary:
 		fight = stage["fight"]
 	var kinds: Dictionary = (tables["vehicle_kinds"] as Dictionary).get("kinds", {})
@@ -244,6 +284,127 @@ func _setup_stage() -> void:
 	bridge.set_villains(_villain_records())
 	skills.reset_run()
 	_kill_finish = ""
+
+
+## r3 A1 front glue: before the lock the villain runs at _pace × glue, glue easing (tau) from 1 down to glue.floor while
+## the widest first-bumper gap behind the front row (lanes 0-3) grows from gapIn to gapOut. Packed lanes
+## breathe ±2.7 m at the 0.42 rad/s low-frequency wave, so a constant ×0.78 alone left 2.9-8.3 m behind the villain.
+## Pure sim side (TrafficBridge.cars_in_lane, both backends), no RNG; sampled every glue.every ticks.
+func _update_pace(sdt: float) -> void:
+	if not _glue_on or front_locked or not (phase in [&"intro", &"jam", &"boss"]):
+		return
+	var gc: Dictionary = neck.glue_cfg()
+	_glue_n += 1
+	if _glue_n % maxi(1, int(gc.get("every", 4))) == 1 or int(gc.get("every", 4)) <= 1:
+		var g: float = front_gap_max()
+		var gi: float = float(gc.get("gapIn", 3.0))
+		var fl: float = float(gc.get("floor", 0.35))
+		var k: float = clampf((g - gi) / maxf(0.1, float(gc.get("gapOut", 5.0)) - gi), 0.0, 1.0)
+		_glue_target = 1.0 - k * (1.0 - fl)
+	_glue += (_glue_target - _glue) * (1.0 - exp(-sdt / maxf(0.01, float(gc.get("tau", 0.4)))))
+	boss.set_pace(_pace * _glue)
+
+
+## r3 A1: the widest gap between the frontmost body and the next one behind it in lanes 0-3 (jamShape spaced / pass
+## lanes are spaced by design and left out). All four: lane 3 next to the shoulder is the one the player wants back into. A zig stage keeps every lane's followers
+## behind a virtual wall at front_line - villainWall.back - zigExtra (8 m: the weave buffer, both cores), so it has
+## nothing to glue: 0. Bodies: NPC cars (cars_in_lane), alive villains, the player. 0 when nothing to measure.
+func front_gap_max() -> float:
+	if stage.get("zig") == true:
+		return 0.0
+	var f: float = -INF
+	var vl: Dictionary = {}
+	for v: Dictionary in boss.alive():
+		f = maxf(f, float(v["base_s"]))
+		for l: int in BossSim.lanes_of(v):
+			vl[l] = true
+	if not is_finite(f):
+		return 0.0
+	var excl: Dictionary = {}
+	var shape: Variant = stage.get("jamShape")
+	if shape is Dictionary and (shape as Dictionary).get("lanes") is Array:
+		var kinds: Array = (shape as Dictionary)["lanes"]
+		for l: int in kinds.size():
+			if str(kinds[l]) in ["spaced", "pass"]:
+				excl[l] = true
+	var worst: float = 0.0
+	for l: int in Cfg.NUM_LANES:
+		if excl.has(l):
+			continue
+		var b0f: float = -INF
+		var b0r: float = -INF
+		var b1f: float = -INF
+		var bodies: Array = []
+		for id: int in bridge.cars_in_lane(l, f - 40.0, f + 8.0):
+			var cs: float = float(bridge.car_info(id).get("s", 0.0))
+			var hl: float = _car_len_of(id) / 2.0
+			bodies.append([cs + hl, cs - hl])
+		for v: Dictionary in boss.alive():
+			if BossSim.lanes_of(v).has(l):
+				bodies.append([float(v["s"]) + float(v["len"]) / 2.0, float(v["s"]) - float(v["len"]) / 2.0])
+		if player.occupies(l):
+			bodies.append([player.s + player.len / 2.0, player.s - player.len / 2.0])
+		for b: Array in bodies:
+			if float(b[0]) > b0f:
+				b1f = b0f
+				b0f = float(b[0])
+				b0r = float(b[1])
+			elif float(b[0]) > b1f:
+				b1f = float(b[0])
+		if is_finite(b1f):
+			worst = maxf(worst, b0r - b1f)
+	return worst
+
+
+func _car_len_of(id: int) -> float:
+	if _car_len.is_empty():
+		for sp: Dictionary in bridge.car_specs():
+			_car_len[int(sp["id"])] = float(sp["len"])
+	return float(_car_len.get(id, 4.4))
+
+
+## r3 W: config.boss.genericWindow.on != false (missing block = on).
+func _generic_window_on() -> bool:
+	var gw: Variant = bc.get("genericWindow")
+	return not (gw is Dictionary) or (gw as Dictionary).get("on", true) != false
+
+
+## r3 A3 (neck.json checkpoints): thresholds on d = ref_s - player.s below d0 - minLead; atLong when the jam is ≥ longJam.
+func _setup_checkpoints(on: bool) -> void:
+	_cps = []
+	_cp_last = 0.0
+	var cc: Dictionary = neck.cfg.get("checkpoints", {})
+	if not on or cc.get("on", true) == false:
+		return
+	var d0: float = boss.ref_s() - player.s
+	var jl: float = float(bridge.setup_info().get("jam_len", stage.get("jamLength", 170.0)))
+	var long: bool = jl >= float(cc.get("longJam", 200.0))
+	_cp_rage = float(cc.get("rageLong", cc.get("rage", 0.04))) if long else float(cc.get("rage", 0.04))
+	for d: Variant in (cc.get("atLong", []) if long else cc.get("at", [])):
+		if float(d) < d0 - float(cc.get("minLead", 15.0)):
+			_cps.append({"d": float(d), "done": false, "fast": false, "t": -1.0})
+
+
+## r3 A3: once per 판 each (kept across retries), in order, only in jam-like ticks.
+func _tick_checkpoints() -> void:
+	if _cps.is_empty():
+		return
+	var cc: Dictionary = neck.cfg.get("checkpoints", {})
+	var d: float = boss.ref_s() - player.s
+	for i: int in _cps.size():
+		var c: Dictionary = _cps[i]
+		if bool(c["done"]) or d >= float(c["d"]):
+			continue
+		var fast: bool = stage_clock - _cp_last <= float(cc.get("fastWindow", 8.0))
+		_cp_last = stage_clock
+		c["done"] = true
+		c["fast"] = fast
+		c["t"] = stage_clock
+		var pts: int = roundi(float(cc.get("score", 100)) * float(i + 1) * (float(cc.get("fastMul", 1.5)) if fast else 1.0))
+		score += pts
+		add_rage(_cp_rage)
+		_emit({"type": "checkpoint", "i": i, "ord": i + 1, "d": float(c["d"]), "dist": d, "fast": fast, "score": pts, "rage": _cp_rage,
+			"n": _cps.size()})
 
 
 ## main.js stageDamageMul: 1-1~1-3 ×0.5, 1-4~1-6 ×0.8, then ×1.0 → ×1.3 by chapter 10.
@@ -315,6 +476,8 @@ func _enter(name: StringName) -> void:
 	match name:
 		&"intro":
 			_intro_go = not intro_hold
+		&"jam":
+			neck.start(self)
 		&"boss":
 			boss_rage = rage
 			boss.attack_t = float(bc.get("firstAttack", 2.0))
@@ -336,6 +499,9 @@ func _enter(name: StringName) -> void:
 				slow_until = real_time + maxf(hitstop, float(tl.get("settle", 0.5)))
 				slow_scale = float(fc.get("slow", 0.3))
 		&"release":
+			boss.set_pace(1.0)
+			neck.clear()
+			_set_extras()
 			var ol: int = _open_lane()
 			bridge.release(traffic_time, ol)
 			player.ghost = true
@@ -422,18 +588,32 @@ func step(dt: float) -> void:
 	if ph in [&"jam", &"boss", &"cruise"] and lane_dir != 0:
 		sync_traffic_player()
 		var out: Dictionary = {}
-		var r: String = player.request_lane(lane_dir, bridge, out)
+		var r: String = ""
+		var tl: int = player.lane + lane_dir
+		# r3 A2: the plug is a lane blocker on both backends even without TrafficBridge.set_extras
+		if not player.ghost and tl >= 0 and tl <= Cfg.SHOULDER_LANE and player.lc_t >= 0.65 \
+				and neck.blocks(tl, player.s - player.len / 2.0 - 0.35, player.s + player.len / 2.0 + 0.35):
+			player._wiggle(lane_dir)
+			r = "blocked"
+			out["blocker"] = NeckSim.PLUG_ID
+		else:
+			r = player.request_lane(lane_dir, bridge, out)
 		if r == "ok":
 			_emit({"type": "lane", "dir": lane_dir, "lane": player.lane})
 		elif r == "closed":
 			_bubble_player("갓길 폐쇄!", "warn", 1.2)
 		elif r == "blocked" and int(out.get("blocker", 0)) > 0:
 			_emit({"type": "bubble", "who": "car", "id": int(out["blocker"]), "table": "blocked", "text": "어딜 끼어들어!", "kind": "angry", "dur": 1.1})
+		elif r == "blocked" and int(out.get("blocker", 0)) == NeckSim.PLUG_ID:
+			neck.say(self, "noway", "warn", 1.0)
 
 	if want_honk and real_time - last_horn > float(tune.get("honkCool", 1.0)) and ph in [&"jam", &"boss"]:
 		last_horn = real_time
 		_emit({"type": "honk", "lane": player.lane})
-		if jam_like:
+		if jam_like and neck.is_active(self):
+			sync_traffic_player()
+			neck.on_honk(self)  # r3 A2: the bottleneck answers; TrafficBridge.honk is not called
+		elif jam_like:
 			sync_traffic_player()
 			var hr: Dictionary = bridge.honk(player.lane, player.s)
 			match str(hr.get("kind", "")):
@@ -495,11 +675,14 @@ func step(dt: float) -> void:
 		_on_player_event(e)
 	player.boost_t = maxf(0.0, player.boost_t - sdt)
 
-	# traffic
+	# traffic (r3 A1: approach pace + front glue; A2: the plug moves with the villain and goes to both cores as an extra body)
+	_update_pace(sdt)
+	neck.tick(self, sdt)
+	_set_extras()
 	bridge.set_villains(_villain_records())
 	bridge.set_phase(str(ph), ph == &"jam", jam_like, kill_s if ph == &"release" else NAN)
 	traffic_time += sdt
-	bridge.step(sdt, player.traffic_state(traffic_time))
+	bridge.step(sdt, _traffic_player())
 	for e: Dictionary in bridge.events():
 		_on_traffic_event(e, ph)
 		_emit(e)
@@ -553,6 +736,7 @@ func step(dt: float) -> void:
 			stuck_hint_until = real_time + 2.8
 	if jam_like:
 		add_rage((float(tune.get("baseRage", 0.005)) + (float(tune.get("timeRage", 0.016)) if player.v < 5.0 else 0.0)) * sdt)
+		_tick_checkpoints()
 
 	if ph == &"wreck":
 		var fa: float = float((bc.get("wreck", {}) as Dictionary).get("failAfter", 1.6))
@@ -565,6 +749,8 @@ func step(dt: float) -> void:
 		_enter(&"boss")
 	elif ph == &"boss" and not front_locked and _can_lock():
 		front_locked = true
+		boss.set_pace(1.0)  # r3 A1: the fight runs at the phase's own speed
+		neck.on_lock(self)
 		if boss.beh != null and boss.beh.has_method(&"on_lock"):
 			boss.beh.call(&"on_lock", boss)
 		_emit({"type": "lock"})
@@ -590,15 +776,21 @@ func step(dt: float) -> void:
 
 
 ## P0#1: before the front lock the player's jam-mode speed is capped once it is ahead of the villain.
+## r3 A2: also capped on the way in to the plug (v ≤ plug v + sqrt(2·9·(gap - 1))): PlayerSim's jam auto-brake nets
+## ~13 m/s² (accel and brake in one tick), so at 18 m/s it rammed a crawling plug every time.
 func leash_v() -> float:
+	var cap: float = INF
+	var P: Dictionary = neck.leader_for(player) if phase in [&"jam", &"boss"] else {}
+	if not P.is_empty():
+		cap = float(P["v"]) + sqrt(2.0 * 9.0 * maxf(0.0, float(P["gap"]) - 1.0))
 	if phase != &"boss" or front_locked:
-		return INF
+		return cap
 	var ahead: float = player.s - boss.ref_s()
 	if ahead <= 0.0:
-		return INF
+		return cap
 	var lc: Dictionary = bc.get("leash", {})
 	var far: float = float(lc.get("far", 14.0))
-	return boss.ref_v() + float(lc.get("dv", 4.0)) * clampf((far - ahead) / far, 0.0, 1.0)
+	return minf(cap, boss.ref_v() + float(lc.get("dv", 4.0)) * clampf((far - ahead) / far, 0.0, 1.0))
 
 
 func _can_lock() -> bool:
@@ -633,7 +825,7 @@ func _villain_records() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for v: Dictionary in boss.villains:
 		out.append({"s": v["s"], "baseS": v["base_s"], "x": v["x"], "w": v["w"], "len": v["len"], "v": v["v"],
-			"vNominal": v["v_nominal"], "alive": v["alive"], "kind": v["kind"], "lane": v["lane_pos"]})
+			"vNominal": boss.nominal(v), "alive": v["alive"], "kind": v["kind"], "lane": v["lane_pos"]})
 	return out
 
 
@@ -658,7 +850,7 @@ func jam_hop(hop_s: float) -> String:
 			ahead.append(b)
 	if ahead.is_empty() or float(ahead[0][0]) - p_front >= need:
 		return _plain_hop(hop_s)
-	if str(ahead[0][2]) == "villain":
+	if str(ahead[0][2]) in ["villain", "plug"]:
 		return "blocked"
 	var cur: float = p_front
 	var land: Array = []  # [front of the cleared run, the body it is measured from]
@@ -675,7 +867,7 @@ func jam_hop(hop_s: float) -> String:
 			break
 		if gap >= min_slot and land.is_empty():
 			land = [cur, b]
-		if not nxt.is_empty() and str(nxt[2]) == "villain":
+		if not nxt.is_empty() and str(nxt[2]) in ["villain", "plug"]:
 			why = "blocked"
 			break
 	if land.is_empty():
@@ -704,7 +896,8 @@ func _glide_to() -> float:
 	return float(_glide.get("off", player.s))
 
 
-## [rear, front, type car|obstacle|villain, id, s] in a lane with s in (s_min, s_max), sorted by rear.
+## [rear, front, type car|obstacle|villain|plug, id, s] in a lane with s in (s_min, s_max), sorted by rear. The r3 plug is
+## never hopped (like a villain).
 func _lane_bodies(lane: int, s_min: float, s_max: float) -> Array:
 	if _car_len.is_empty():
 		for sp: Dictionary in bridge.car_specs():
@@ -724,13 +917,36 @@ func _lane_bodies(lane: int, s_min: float, s_max: float) -> Array:
 		if (bool(v["alive"]) or bool(v["dying"])) and not bool(v.get("gone", false)) and boss.player_in_lanes(player, BossSim.lanes_of(v)):
 			var vs: float = float(v["s"])
 			out.append([vs - float(v["len"]) / 2.0, vs + float(v["len"]) / 2.0, "villain", int(v["index"]), vs])
+	if neck.occupies(lane) and float(neck.plug["s"]) > s_min and float(neck.plug["s"]) < s_max:
+		out.append([neck.rear(), neck.front(), "plug", NeckSim.PLUG_ID, float(neck.plug["s"])])
 	out.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
 	return out
 
 
 ## Pushes the current player record to the traffic core (lane-change checks, leader queries, autopilot).
 func sync_traffic_player() -> void:
-	bridge.sync_player(player.traffic_state(traffic_time))
+	bridge.sync_player(_traffic_player())
+
+
+## player.traffic_state + r3 A2: mode "neck" while the bottleneck is on, so neither core runs its stuck assist (C++
+## mode_jam / fallback _player.mode == "jam").
+func _traffic_player() -> Dictionary:
+	var ps: Dictionary = player.traffic_state(traffic_time)
+	if neck.is_active(self):
+		ps["mode"] = "neck"
+	return ps
+
+
+var _extras_n: int = 0
+
+
+## r3 A2: hands the plug to the traffic core (TrafficBridge.set_extras, T1; guarded so this runs without it).
+func _set_extras() -> void:
+	var ex: Array[Dictionary] = neck.extras()
+	if (ex.is_empty() and _extras_n == 0) or not bridge.has_method(&"set_extras"):
+		return
+	bridge.call(&"set_extras", ex)
+	_extras_n = ex.size()
 
 
 func _leader() -> Dictionary:
@@ -742,6 +958,10 @@ func _leader() -> Dictionary:
 				if boss.player_in_lanes(player, BossSim.lanes_of(v)) and float(v["s"]) > player.s:
 					L["v"] = float(v["v"])
 					break
+	# r3 A2: the plug leads on both backends (with or without the bridge's extras), whichever is nearer
+	var P: Dictionary = neck.leader_for(player)
+	if not P.is_empty() and (not PlayerSim.has_leader(L) or float(P["gap"]) <= float(L["gap"]) + 0.01):
+		return P
 	return L
 
 
@@ -809,7 +1029,11 @@ func _on_player_hit(e: Dictionary) -> void:
 	var tiers: Dictionary = hpc.get("tier", {})
 	var tier: String = str(e.get("tier", CAUSE_TIER.get(str(e.get("cause", "")), "mid")))
 	var raw: float = float(hpc.get("miniDmg", 5)) if mini else float(e.get("dmg", tiers.get(tier, 20)))
+	# r3 W: the hit got through invuln and deals damage (apply_damage's own gate; the jam floor may still clamp it)
+	var landed: bool = phase in [&"jam", &"boss"] and not wrecked and roundi(raw * dmg_mul) > 0
 	apply_damage(raw, str(e.get("text", "피격")), str(e.get("cause", "")))
+	if landed and skills.has_method(&"on_player_hit"):
+		skills.call(&"on_player_hit", self)
 	if wrecked:
 		return
 	_emit({"type": "bubble", "who": "player", "id": -1, "text": str(e.get("text", "으악!")), "kind": "bump", "dur": 1.0, "flash": bool(e.get("flash", false))})
@@ -889,6 +1113,7 @@ func _rage_horn_effect(boost: float) -> void:
 	score += 300 * ch
 	player.boost_t = boost
 	_emit({"type": "rage_horn", "smashed": r.get("smashed"), "towed": r.get("towed"), "cheaters": r.get("cheaters"), "startled": r.get("startled")})
+	neck.open(self, "rage")  # r3 A2/W: rage t1 blows the plug away (exit fly; verb bonus only on the deaf valve)
 
 
 func _bomb() -> void:
@@ -942,6 +1167,8 @@ func _on_landing(ld: Dictionary) -> void:
 		_bubble_player("지금 아냐!", "warn", 1.0)
 	if bool(r2["window"]) and not bomb:
 		skills.on_window_hit(self)
+	if not bomb and skills.has_method(&"on_tack_hit"):  # r3 W: combo counter (skills_sim.gd); minis returned above
+		skills.call(&"on_tack_hit", self, v, r2)
 	if bool(r2["killed"]):
 		_villain_killed(v, false)
 
@@ -981,7 +1208,7 @@ func _wreck(reason: String) -> void:
 		return
 	wrecked = true
 	fails += 1
-	wreck_snap = {"boss": boss.snapshot(), "rage": boss_rage}
+	wreck_snap = {"boss": boss.snapshot(), "rage": boss_rage, "locked": front_locked}
 	_emit({"type": "wreck", "reason": reason, "fails": fails})
 	_enter(&"wreck")
 
@@ -1099,6 +1326,11 @@ func state() -> Dictionary:
 			"pay_mul": pay_retry_mul, "stage_time": stage_clock, "boss_time": boss_clock},
 	}
 	out["skills"] = skills.state(self)
+	out["neck"] = neck.state(self)
+	var cps: Array[Dictionary] = []
+	for c: Dictionary in _cps:
+		cps.append({"d": c["d"], "done": c["done"], "fast": c["fast"]})
+	out["checkpoints"] = cps
 	if phase == &"result":
 		out["result"] = _result
 	return out
@@ -1135,4 +1367,11 @@ func _make_result() -> Dictionary:
 		"pay_mul": pay_retry_mul, "freed": freed, "saved_hours": saved_h, "cath": cath, "bumps": bumps, "hits": hits,
 		"shots": _shots_total + weapons.shots, "hits_taken": hits_taken, "supers": supers, "minis_done": minis_done, "minis_total": minis_total,
 		"cheaters": cheaters, "rage_horns": rage_horns, "villain_name": " · ".join(names), "stage_id": int(stage.get("id", 0)),
-		"stats": st, "skills": skills.counts.duplicate()}
+		"stats": st, "skills": skills.counts.duplicate(), "neck": neck.result.duplicate(), "checkpoints": _cps_done()}
+
+
+func _cps_done() -> int:
+	var n: int = 0
+	for c: Dictionary in _cps:
+		n += 1 if bool(c["done"]) else 0
+	return n

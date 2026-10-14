@@ -30,13 +30,16 @@ func stage(id: int) -> Dictionary:
 	return find_stage(get_table(&"stages"), id)
 
 
-## The tables the C++ traffic core reads (Traffic.configure / TrafficBridge.setup).
+## The tables the C++ traffic core reads (Traffic.configure / TrafficBridge.setup) + GameSim's neck table (r3 A1-A3:
+## approach pace, plug + valve, checkpoints; {} when data/neck.json is missing -> NeckSim defaults). The C++ core only
+## digs the keys it knows, so the extra table is ignored there.
 func traffic_tables() -> Dictionary:
 	return {
 		"config": get_table(&"config"),
 		"vehicle_kinds": get_table(&"vehicle_kinds"),
 		"mini_types": get_table(&"mini_types"),
 		"approach": get_table(&"approach"),
+		"neck": get_table(&"neck") if has_table(&"neck") else {},
 	}
 
 
@@ -73,7 +76,16 @@ static func load_traffic_tables() -> Dictionary:
 		"vehicle_kinds": load_json(DATA_DIR + "/vehicle_kinds.json"),
 		"mini_types": load_json(DATA_DIR + "/mini_types.json"),
 		"approach": load_json(DATA_DIR + "/approach.json"),
+		"neck": load_neck(),
 	}
+
+
+## data/neck.json (r3 A1-A3) or {} when it is missing (NeckSim then runs its built-in defaults).
+static func load_neck() -> Dictionary:
+	if not FileAccess.file_exists(DATA_DIR + "/neck.json"):
+		return {}
+	var d: Variant = load_json(DATA_DIR + "/neck.json")
+	return d if d is Dictionary else {}
 
 
 ## Loads res://ext/traffic.gdextension on demand (a fresh .godot/ has not registered it yet).

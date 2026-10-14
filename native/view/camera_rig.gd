@@ -17,7 +17,12 @@ extends Camera3D
 ##   t5 pushes in (FOV −6 over its 0.35 s telegraph), punches on the impact and blends back 1.0 s after the cast
 ##   (0.25 s); every skill impact = recipe punch + shake (config.skills.fx.<key>.camera, SkillCues.recipe).
 ## release: high over the kill point looking back over the jam (web pos 13 + 1.2 t, 44 + 2.2 t, s + 26 + 13 t).
-## Juice: add_shake(trauma) = deterministic sum-of-sines shake with roll (trauma², decays 1.8/s), punch(deg) = FOV kick.
+## Juice: add_shake(trauma) = deterministic sum-of-sines shake with roll (trauma², decays 1.8/s), punch(deg) = FOV kick,
+##   kick(dir_world, m, dur) = a directional lunge of the whole frame (pos + look) by m metres along dir, eased out over
+##   dur s and back over 2.5 × dur (r3 F1: the t1 충격파 cast kicks 0.6 m / 0.12 s toward the villain — a push you can
+##   read, not another random wobble; recipe camera.kick / kickDur, key t1_wave falls back to the t1 path).
+## 가설(r3 F1): ❓ a signed kick toward the target on the cast + the recipe punch/shake on the impact makes t1 read as
+##   "the wave goes there and hits", where a random shake alone read as a horn blast.
 ## Smoothing is real-dt exponential (a = 1 − e^(−k·dt); FOV k = 3) in _process, physics interpolation OFF
 ## (NATIVE_PORT 3-2): game.gd sets the interpolated player target and calls step(real_dt) once per frame.
 
@@ -77,6 +82,12 @@ var _trauma: float = 0.0
 var _shake_t: float = 0.0
 var _punch: float = 0.0
 var _roll: float = 0.0
+## Current directional kick offset (world m; tests read it). Added to pos and look in _apply.
+var kick_offset := Vector3.ZERO
+var _kick_dir := Vector3.ZERO
+var _kick_m: float = 0.0
+var _kick_dur: float = 0.12
+var _kick_t0: float = -99.0
 ## true after set_pose(): step() no longer moves the camera.
 var frozen: bool = false
 
@@ -168,6 +179,9 @@ func on_event(e: Dictionary) -> void:
 		"skill_start":
 			var key: String = SkillCues.fx_key(e)
 			var cam: Dictionary = _recipe_cam(key)
+			if float(cam.get("kick", 0.0)) > 0.0 and e.has("s"):  # toward the target (the villain the wave flies to)
+				var to: Vector3 = _road_pos(float(e["s"]), float(e.get("x", target_x)))
+				kick(to - _road_pos(target_s, target_x), float(cam["kick"]), float(cam.get("kickDur", 0.12)))
 			if float(cam.get("lift", 0.0)) > 0.0:
 				lift(float(cam["lift"]), 0.3, 0.6)
 			if float(cam.get("push", 0.0)) != 0.0:
@@ -184,14 +198,44 @@ func on_event(e: Dictionary) -> void:
 			end_shot(0.25)
 
 
-## Camera part of a skill recipe (config.skills.fx.<key>.camera; spec defaults without config).
+## Camera part of a skill recipe (config.skills.fx.<key>.camera, SkillCues.RECIPE_DEFAULT; spec defaults without
+## either — t1_wave takes the t1 path plus the 0.6 m kick).
 static func _recipe_cam(key: String) -> Dictionary:
 	var r: Dictionary = SkillCues.recipe(key)
 	if r.get("camera") is Dictionary:
 		return r["camera"]
+	if key == "t1_wave":
+		var t1: Dictionary = _recipe_cam("t1").duplicate()
+		t1["kick"] = 0.6
+		return t1
 	return {"t1": {"punch": -3.0, "shake": 0.35}, "t3": {"lift": 0.25, "punch": -5.0, "shake": 0.5},
 		"t5": {"push": -6.0, "punch": -8.0, "shake": 0.9}, "mv_jump": {"punch": -4.0, "shake": 0.45},
 		"mv_drone": {"shake": 0.15}}.get(key, {})
+
+
+## Directional kick: the frame lunges m metres along dir_world (flattened to the road plane), out in dur s (sine ease),
+## back in 2.5 × dur. A new kick replaces the running one.
+func kick(dir_world: Vector3, m: float, dur: float = 0.12) -> void:
+	var d := Vector3(dir_world.x, 0.0, dir_world.z)
+	if d.length() < 1e-3 or m <= 0.0:
+		return
+	_kick_dir = d.normalized()
+	_kick_m = m
+	_kick_dur = maxf(0.02, dur)
+	_kick_t0 = _clock
+
+
+## Kick offset t s after the kick (0 before / after; peak m at t = dur).
+func kick_at(t: float) -> Vector3:
+	if t < 0.0 or _kick_m <= 0.0:
+		return Vector3.ZERO
+	var back: float = _kick_dur * 2.5
+	var a: float = 0.0
+	if t < _kick_dur:
+		a = sin(PI * 0.5 * t / _kick_dur)
+	elif t < _kick_dur + back:
+		a = 0.5 * (1.0 + cos(PI * (t - _kick_dur) / back))
+	return _kick_dir * _kick_m * a
 
 
 ## Boss framing lift: distance scale k + amount, eased in over `ramp` s, released `hold` s after the call.
@@ -420,12 +464,13 @@ func step(real_dt: float) -> void:
 		sin(st * 29.7 + 2.1)) * 0.55 * tr
 	_roll = (sin(st * 33.1 + 0.4) + 0.4 * sin(st * 57.7)) * 0.035 * tr
 	_punch *= exp(-9.0 * real_dt)
+	kick_offset = kick_at(_clock - _kick_t0)
 	_apply()
 
 
 func _apply() -> void:
 	fov = clampf(_fov_cur + _punch + _push_cur, 20.0, 100.0)
-	look_at_from_position(_pos + shake_offset, _look, Vector3.UP)
+	look_at_from_position(_pos + shake_offset + kick_offset, _look + kick_offset, Vector3.UP)
 	if _roll != 0.0:
 		rotate_object_local(Vector3.FORWARD, _roll)
 

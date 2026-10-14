@@ -54,7 +54,7 @@ async function stagegenStages(src) {
 }
 
 async function main() {
-  const names = ['config', 'shop', 'mini_types', 'lines', 'cards', 'sky', 'approach', 'jamshape', 'sig', 'villain_catalog', 'handmade_stages', 'stages', 'haptics', 'vehicle_kinds'];
+  const names = ['config', 'shop', 'mini_types', 'lines', 'cards', 'sky', 'approach', 'jamshape', 'sig', 'villain_catalog', 'handmade_stages', 'stages', 'haptics', 'vehicle_kinds', 'neck'];
   const src = Object.fromEntries(names.map((n) => [n, readSrc(`${n}.json`)]));
   const errs = [];
 
@@ -91,6 +91,20 @@ async function main() {
   for (const [id, p] of Object.entries(src.sky.stageSky)) if (!skyPresets.has(p)) errs.push(`sky.stageSky.${id}: unknown preset ${p}`);
   for (const m of SHOULDER_MODES) if (!src.approach.labels.shoulder[m]) errs.push(`approach.labels.shoulder.${m} missing`);
   if (!SHOULDER_MODES.includes(src.approach.default.shoulder)) errs.push('approach.default.shoulder invalid');
+  // neck.json (r3 A1-A3, native/sim/neck_sim.gd): valve names, descending checkpoint lists, positive timers
+  const VALVES = ['honk', 'race', 'quiet', 'push', 'deaf', 'none'];
+  const neckSecs = [['default', src.neck.default || {}], ...Object.entries(src.neck.byId || {})];
+  for (const [id, sec] of neckSecs) {
+    const pl = sec.plug || {};
+    if (pl.valve !== undefined && !VALVES.includes(pl.valve)) errs.push(`neck.${id}.plug.valve: ${pl.valve} not in ${VALVES.join('|')}`);
+    for (const k of ['safety', 'exitDur', 'range', 'len', 'w', 'n']) if (pl[k] !== undefined && !(pl[k] > 0)) errs.push(`neck.${id}.plug.${k} must be > 0`);
+    if (pl.exit !== undefined && !['cutin', 'zip', 'tow', 'fly'].includes(pl.exit)) errs.push(`neck.${id}.plug.exit: ${pl.exit} not cutin|zip|tow|fly`);
+    if (pl.chip !== undefined && [...pl.chip].length > 10) errs.push(`neck.${id}.plug.chip: '${pl.chip}' longer than 10 chars`);
+    const cp = sec.checkpoints || {};
+    for (const k of ['at', 'atLong']) if (cp[k] !== undefined && (!Array.isArray(cp[k]) || cp[k].some((d, i) => !(d > 0) || (i > 0 && d >= cp[k][i - 1])))) errs.push(`neck.${id}.checkpoints.${k} must be positive and descending`);
+    const pc = sec.pace || {};
+    if (pc.approachVMul !== undefined && !(pc.approachVMul > 0 && pc.approachVMul <= 1)) errs.push(`neck.${id}.pace.approachVMul must be in (0, 1]`);
+  }
   for (const [ev, e] of Object.entries(src.haptics.events)) if (!Array.isArray(e.ios) || !e.ios.length || !Array.isArray(e.android) || !e.android.length) errs.push(`haptics.events.${ev}: needs ios and android patterns`);
   const stages = src.stages.stages;
   errs.push(...validateStages(stages, { vehicleKinds: kinds, skyPresets }));
@@ -126,6 +140,7 @@ async function main() {
     'approach.json': gen('approach.json', { schema_version: src.approach.schema_version, default: src.approach.default, labels: src.approach.labels }),
     'haptics.json': gen('haptics.json', src.haptics),
     'vehicle_kinds.json': gen('vehicle_kinds.json', src.vehicle_kinds),
+    'neck.json': gen('neck.json', src.neck),
   };
   const texts = Object.fromEntries(Object.entries(outputs).map(([k, v]) => [k, stableStringify(v)]));
   texts['manifest.json'] = stableStringify({

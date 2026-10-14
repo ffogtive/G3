@@ -13,6 +13,30 @@ extends RefCounted
 ## 가설: ✅ the §6 contract (events skill_start / skill_hit / skill_end / skill_denied / tier_ready / item_ready / finisher,
 ##       state.skills) fits on the existing damage path once BossSim has a generic stun (= a window) and an execute;
 ##       ❓ skills.hpMul 1.25 keeps the 1-1 boss at 10–20 s with skills (tests/test_e2e_skills.gd measures it).
+##
+## r3 combat (device feedback 2026-10-14 #2 "압정 콤보 5·10개마다 큰 스킬 / 분노가 범위에 안 닿고 얌전함"):
+##   가설: ✅ (r3design/combat/combo_proto.gd) the fight is long and tame because 압정 streaks pay nothing, 1-2..1-10 have
+##         no window and the boss-phase t1 either cannot hit the villain (before the lock it was the shoulder horn) or
+##         misses it (30 m, ±1 lane). Combo milestones + the generic window + HP-fraction damage + a t1 that always
+##         connects in the boss phase bring 1-1..1-4 to 10–20 s (tests/test_e2e_skills.gd).
+##   C1 combo channel "combo" (config.skills.combo; never busy(), no invuln, no boss hold): on_tack_hit(sim, v, r) counts
+##      a 압정 hit on an alive villain in the boss phase (before and after the lock); skill / combo hits never count.
+##      tick() breaks it after combo.timeout sim s without a counted hit (combo_break {reason: "timeout", n} when
+##      n ≥ breakEventMin); on_player_hit(sim) breaks it (combo_break {reason: "hit", n}). milestones[n mod cycle]
+##      (5 / 10 / 15 / 20 = c5 따닥 / c10 따다닥 / c5 / c20 타이어 저격) → combo_milestone {n, id, target_id, skill,
+##      label, name} + skill_start / skill_hit / skill_end {chan: "combo", tier 0, id: c5_double | c10_burst |
+##      c20_snipe, n (hits), combo (count)} on the villain the milestone tack hit: frac × max HP per hit (window decided
+##      at the first hit), minKillT floor, c20 force_pop + cancel_attack + apply_stun 0.8 (stunCap / stunImmune) + hitstop.
+##   C2 _hit_wave / _hit_carpet use dmgInFrac / dmgOutFrac × the target's max HP (flat dmgIn / dmgOut without them).
+##   C3 mode(): phase boss with a villain alive = fight / rescue whether or not the front is locked (prelock: the
+##      ladder is preLockLadder [1]); items keep the jam rules before the lock (_imode). t1 hits every alive villain
+##      within t1.reach m in every lane (laneRange 99), hit delay = delay + max(0, |ds| − delayFrom) × delayPerM per
+##      target; before the lock it also fires sim._rage_horn_effect (rage_horn tagged via "t1_wave") and stuns
+##      stunPreLock s. Out of reach in the boss phase: the segment is spent, skill_chase {dur} + chase s of boost, the
+##      wave fires on the first tick a villain is in reach, else the segment is refunded: skill_denied {reason "far",
+##      refunded true} + bubble "너무 멀다!" (has_target(t1) stays true: the button never greys out for range).
+##   state(): + combo {n, left, next_n, next_id, next_name, best, timeout, cycle, marks}, face (clear | wave | carpet |
+##      finish), prelock, chase.
 
 const RAGE_IDS: Dictionary = {1: "t1_wave", 3: "t3_carpet", 5: "t5_finish"}
 
@@ -34,6 +58,15 @@ var _tiers_prev: Array[int] = []
 var _fight_gain: float = 0.0
 var _passive_t: float = 0.0
 var _loadout: Dictionary = {}
+## r3 C3: tiers castable in the boss phase before the front lock (config skills.preLockLadder).
+var pre_ladder: Array[int] = [1]
+## r3 C3: a t1 waiting for a villain to come into reach {until (sim s), tier, prelock_at_tap} ({} = none).
+var _chase: Dictionary = {}
+## r3 C1: 압정 combo count, sim time of the last counted hit, best this run, combo casts in flight.
+var combo_n: int = 0
+var combo_best: int = 0
+var _combo_last: float = -99.0
+var _combo_recs: Array[Dictionary] = []
 
 
 func setup(skills_cfg: Dictionary, tune: Dictionary, loadout: Dictionary) -> void:
@@ -44,6 +77,9 @@ func setup(skills_cfg: Dictionary, tune: Dictionary, loadout: Dictionary) -> voi
 	for t: Variant in cfg.get("ladder", [1, 3, 5]):
 		ladder.append(int(t))
 	jam_tier = int(cfg.get("jamTier", 1))
+	pre_ladder.clear()
+	for t: Variant in cfg.get("preLockLadder", [1]):
+		pre_ladder.append(int(t))
 	_loadout = loadout
 	counts = {}
 	_build_slots()
@@ -56,7 +92,14 @@ func reset_run() -> void:
 	for rec: Dictionary in active.values():
 		rec["ended"] = true
 	active.clear()
+	for rec: Dictionary in _combo_recs:
+		rec["ended"] = true
+	_combo_recs.clear()
 	queue.clear()
+	_chase = {}
+	combo_n = 0
+	combo_best = 0
+	_combo_last = -99.0
 	_last_slow = -99.0
 	_tiers_prev = []
 	_fight_gain = 0.0
@@ -131,15 +174,35 @@ func segs(sim: GameSim) -> int:
 	return floori(sim.rage * segs_n + 1e-6)
 
 
-## "jam" (jam or boss before the front lock) | "fight" | "rescue" (honkOnly fight) | "off".
+## Rage mode: "jam" (jam phase) | "fight" | "rescue" (honkOnly fight) | "off". r3 C3: the boss phase with a villain
+## alive is a fight before the front lock too (prelock(); ladder = preLockLadder).
 func mode(sim: GameSim) -> String:
+	if not enabled:
+		return "off"
+	if sim.phase == &"boss" and sim.boss.any_alive():
+		return "rescue" if sim.stage.get("honkOnly") == true else "fight"
+	if sim.phase == &"jam" or sim.phase == &"boss":
+		return "jam"
+	return "off"
+
+
+## Item / jam-side mode (the pre-r3 rule): "jam" = jam or boss before the front lock (jam hop, jam drone / tow, no
+## cast invuln), then fight / rescue / off like mode().
+func _imode(sim: GameSim) -> String:
 	if not enabled:
 		return "off"
 	if sim.phase == &"jam" or (sim.phase == &"boss" and not sim.front_locked):
 		return "jam"
-	if sim.phase == &"boss" and sim.boss.any_alive():
-		return "rescue" if sim.stage.get("honkOnly") == true else "fight"
-	return "off"
+	return mode(sim)
+
+
+## r3 C3: boss phase before the front lock (the rage ladder is preLockLadder, t1 also clears the shoulder).
+func prelock(sim: GameSim) -> bool:
+	return sim.phase == &"boss" and not sim.front_locked and mode(sim) in ["fight", "rescue"]
+
+
+func _ladder_now(sim: GameSim) -> Array[int]:
+	return pre_ladder if prelock(sim) else ladder
 
 
 func tiers_ready(sim: GameSim) -> Array[int]:
@@ -150,7 +213,7 @@ func tiers_ready(sim: GameSim) -> Array[int]:
 		if sg >= cost(jam_tier):
 			out.append(jam_tier)
 	elif m == "fight" or m == "rescue":
-		for t: int in ladder:
+		for t: int in _ladder_now(sim):
 			if sg >= cost(t):
 				out.append(t)
 	return out
@@ -161,7 +224,8 @@ func next_tier(sim: GameSim) -> int:
 	return r.max() if not r.is_empty() else 0
 
 
-## A cast of this tier would find a target now (t1: a villain within range and ±laneRange of the player's lane).
+## A cast of this tier would find a target now. r3 C3 t1: a villain within reach in the lane band, or (chase > 0) any
+## alive villain in the boss phase (the chase closes in or refunds; the button never greys out for range).
 func has_target(sim: GameSim, tier: int) -> bool:
 	var m: String = mode(sim)
 	if m == "jam":
@@ -170,15 +234,15 @@ func has_target(sim: GameSim, tier: int) -> bool:
 		return false
 	if tier != 1:
 		return not _primary(sim).is_empty()
-	var c: Dictionary = _tc(1)
-	for v: Dictionary in sim.boss.alive():
-		if absf(float(v["s"]) - sim.player.s) <= float(c.get("range", 30.0)) and _near_lane(v, sim.player.lane, int(c.get("laneRange", 1))):
-			return true
-	return false
+	if float(_tc(1).get("chase", 0.0)) > 0.0 and sim.phase == &"boss" and sim.boss.any_alive():
+		return true
+	return not _wave_targets(sim).is_empty()
 
 
 func busy(chan: String) -> bool:
 	if active.has(chan):
+		return true
+	if chan == "rage" and not _chase.is_empty():
 		return true
 	return chan == "item" and active.has("rage") and int((active["rage"] as Dictionary)["tier"]) == 5
 
@@ -197,7 +261,7 @@ func skip_ready(sim: GameSim) -> bool:
 
 func _item_reason(sim: GameSim, sl: Dictionary) -> String:
 	var id: String = str(sl["id"])
-	var m: String = mode(sim)
+	var m: String = _imode(sim)
 	if m == "off" or (id == "mv_jump" and m == "rescue"):
 		return "phase"
 	if busy("item"):
@@ -230,9 +294,60 @@ func state(sim: GameSim) -> Dictionary:
 		items.append({"id": sl["id"], "slot": sl["slot"], "charges": sl["charges"], "cool": maxf(0.0, float(sl["cool"])),
 			"cool_max": sl["cool_max"], "ready": float(sl["cool"]) <= 0.0 and int(sl["charges"]) != 0, "usable": reason == "",
 			"reason": reason})
-	return {"segs": segs(sim), "rage_tiers_ready": ready, "next_tier": ready.max() if not ready.is_empty() else 0, "mode": m,
+	var nt: int = ready.max() if not ready.is_empty() else 0
+	return {"segs": segs(sim), "rage_tiers_ready": ready, "next_tier": nt, "mode": m,
 		"execute_frac": float(_tc(5).get("execute", 0.4)) if m == "fight" and ready.has(5) else 0.0, "active": act, "items": items,
-		"time_scale": time_scale, "skip_ready": skip_ready(sim), "enabled": enabled}
+		"time_scale": time_scale, "skip_ready": skip_ready(sim), "enabled": enabled,
+		"face": _face(m, nt), "prelock": prelock(sim), "chase": not _chase.is_empty(), "combo": combo_state(sim)}
+
+
+## r3 C3 (U2): the 분노 button glyph: "clear" (jam t1_horn), "wave" (t1 / no tier yet in a fight), "carpet", "finish".
+func _face(m: String, nt: int) -> String:
+	if m == "jam":
+		return "clear"
+	if m == "fight" or m == "rescue":
+		return "finish" if nt == 5 else ("carpet" if nt == 3 else "wave")
+	return ""
+
+
+func _combo_cfg() -> Dictionary:
+	return cfg.get("combo", {}) if cfg.get("combo") is Dictionary else {}
+
+
+## Milestone key of combo count n ("" = none): milestones[str(n mod cycle)], 0 → cycle.
+func milestone_of(n: int) -> String:
+	var cc: Dictionary = _combo_cfg()
+	var ms: Dictionary = cc.get("milestones", {}) if cc.get("milestones") is Dictionary else {}
+	if n <= 0 or ms.is_empty():
+		return ""
+	var cyc: int = maxi(1, int(cc.get("cycle", 20)))
+	var m: int = n % cyc
+	return str(ms.get(str(m if m != 0 else cyc), ""))
+
+
+## r3 C1 state.skills.combo: {n, left (sim s to the timeout, 0 when n = 0), next_n / next_id / next_name (the next
+## milestone; 0 / "" without one), best, timeout, cycle, marks (milestone counts inside one cycle, sorted)}.
+func combo_state(sim: GameSim) -> Dictionary:
+	var cc: Dictionary = _combo_cfg()
+	var to: float = float(cc.get("timeout", 1.5))
+	var cyc: int = maxi(1, int(cc.get("cycle", 20)))
+	var next_n: int = 0
+	var next_id: String = ""
+	for k: int in range(combo_n + 1, combo_n + cyc + 1):
+		var id: String = milestone_of(k)
+		if id != "":
+			next_n = k
+			next_id = id
+			break
+	var marks: Array[int] = []
+	var ms: Dictionary = cc.get("milestones", {}) if cc.get("milestones") is Dictionary else {}
+	for k: Variant in ms.keys():
+		marks.append(int(str(k)))
+	marks.sort()
+	var left: float = maxf(0.0, to - (sim.time - _combo_last)) if combo_n > 0 else 0.0
+	var nc: Dictionary = cc.get(next_id, {}) if cc.get(next_id) is Dictionary else {}
+	return {"n": combo_n, "left": left, "next_n": next_n, "next_id": next_id, "next_name": str(nc.get("name", "")),
+		"best": combo_best, "timeout": to, "cycle": cyc, "marks": marks}
 
 
 # --- input edges ------------------------------------------------------------------------------------
@@ -253,7 +368,9 @@ func rage(sim: GameSim, req: int) -> void:
 		var reason: String = "rage"
 		if req > 0 and (not ladder.has(req) or (m == "jam" and req != jam_tier)):
 			reason = "phase"
-		var t2: int = tier if tier > 0 else (jam_tier if m == "jam" else ladder[0])
+		if req > 0 and m != "jam" and not _ladder_now(sim).has(req):
+			reason = "phase"  # r3 C3: t3 / t5 before the front lock
+		var t2: int = tier if tier > 0 else (jam_tier if m == "jam" else _ladder_now(sim)[0])
 		_deny(sim, "rage", t2, "t1_horn" if m == "jam" else str(RAGE_IDS.get(t2, "")), reason)
 		return
 	var id: String = "t1_horn" if m == "jam" else str(RAGE_IDS.get(tier, ""))
@@ -277,7 +394,7 @@ func item(sim: GameSim, slot: int) -> void:
 		_deny(sim, "item", 0, "", "phase")
 		return
 	var id: String = str(sl["id"])
-	var m: String = mode(sim)
+	var m: String = _imode(sim)
 	if m == "off" or (id == "mv_jump" and m == "rescue"):
 		_deny(sim, "item", 0, id, "phase")
 		return
@@ -333,6 +450,12 @@ func _spend(sim: GameSim, tier: int) -> void:
 		sim.supers += 1
 
 
+## r3 C3: gives back a spent tier (chase out of reach). Exact inverse of _spend (no add_rage low-HP doubling).
+func _refund(sim: GameSim, tier: int) -> void:
+	sim.rage = minf(1.0, sim.rage + float(cost(tier)) / float(segs_n))
+	sim.supers = maxi(0, sim.supers - 1)
+
+
 func _start(sim: GameSim, chan: String, tier: int, id: String, target: Dictionary, lanes: PackedInt32Array, dur: float,
 		cine: bool) -> Dictionary:
 	var s: float = float(target["s"]) if not target.is_empty() else sim.player.s
@@ -342,7 +465,7 @@ func _start(sim: GameSim, chan: String, tier: int, id: String, target: Dictionar
 		"popped": {}, "s": s, "x": x}
 	active[chan] = rec
 	counts[id] = int(counts.get(id, 0)) + 1
-	if mode(sim) != "jam":
+	if (mode(sim) if chan == "rage" else _imode(sim)) != "jam":
 		sim.player.invuln = maxf(sim.player.invuln, dur + float(cfg.get("invulnPad", 0.2)))
 		sim.boss.hold = maxf(sim.boss.hold, dur)
 	sim._emit({"type": "skill_start", "chan": chan, "tier": tier, "id": id, "target_id": rec["target_id"], "lanes": lanes,
@@ -350,8 +473,9 @@ func _start(sim: GameSim, chan: String, tier: int, id: String, target: Dictionar
 	return rec
 
 
-func _queue(sim: GameSim, rec: Dictionary, delay: float, idx: int, n: int) -> void:
-	queue.append({"at": sim.time + delay, "rec": rec, "idx": idx, "n": n})
+## vi >= 0: the hit belongs to that villain (t1 per-target delays, combo hits).
+func _queue(sim: GameSim, rec: Dictionary, delay: float, idx: int, n: int, vi: int = -1) -> void:
+	queue.append({"at": sim.time + delay, "rec": rec, "idx": idx, "n": n, "vi": vi})
 	rec["pending"] = int(rec["pending"]) + 1
 
 
@@ -364,18 +488,33 @@ func _end(sim: GameSim, chan: String, skipped: bool) -> void:
 	sim._emit({"type": "skill_end", "chan": chan, "tier": rec["tier"], "id": rec["id"], "skipped": skipped})
 
 
-## Kill of the last villain: every cast ends (skill_end after the finisher), queued hits are dropped.
+## Kill of the last villain: every cast ends (skill_end after the finisher), queued hits are dropped, a pending t1
+## chase is refunded and the combo resets (no break event: the fight is won).
 func end_all(sim: GameSim) -> void:
 	for chan: String in ["rage", "item"]:
 		_end(sim, chan, false)
+	for rec: Dictionary in _combo_recs:
+		_end_combo(sim, rec)
+	_combo_recs.clear()
 	queue.clear()
+	if not _chase.is_empty():
+		_refund(sim, int(_chase.get("tier", 1)))
+		_chase = {}
+		sim._emit({"type": "skill_denied", "chan": "rage", "tier": 1, "id": "t1_wave", "reason": "phase", "refunded": true})
+	combo_n = 0
+
+
+func _end_combo(sim: GameSim, rec: Dictionary) -> void:
+	if bool(rec["ended"]):
+		return
+	rec["ended"] = true
+	sim._emit({"type": "skill_end", "chan": "combo", "tier": 0, "id": rec["id"], "skipped": false})
 
 
 func _lanes_around(center: int, r: int) -> PackedInt32Array:
 	var out := PackedInt32Array()
-	for l: int in range(center - r, center + r + 1):
-		if l >= 0 and l <= Cfg.SHOULDER_LANE:
-			out.append(l)
+	for l: int in range(maxi(0, center - r), mini(Cfg.SHOULDER_LANE, center + r) + 1):
+		out.append(l)
 	return out
 
 
@@ -433,21 +572,77 @@ func _cast_horn(sim: GameSim) -> void:
 	sim._rage_horn_effect(float((c.get("jam", {}) as Dictionary).get("boost", sim.tune.get("boostTime", 2.2))))
 
 
+## r3 C3: alive villains within t1.reach (legacy range) of the player in the lane band (laneRange 99 = every lane),
+## nearest first.
+func _wave_targets(sim: GameSim) -> Array:
+	var c: Dictionary = _tc(1)
+	var reach: float = float(c.get("reach", c.get("range", 30.0)))
+	var lr: int = int(c.get("laneRange", 1))
+	var vs: Array[Dictionary] = []
+	for v: Dictionary in sim.boss.alive():
+		if absf(float(v["s"]) - sim.player.s) <= reach + 1e-6 and _near_lane(v, sim.player.lane, lr):
+			vs.append(v)
+	var ps: float = sim.player.s
+	vs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return absf(float(a["s"]) - ps) < absf(float(b["s"]) - ps))
+	var out: Array = []
+	for v: Dictionary in vs:
+		out.append(int(v["index"]))
+	return out
+
+
+## Sim delay of the wave's hit on a villain ds m away (r3 C3: 0.12 + max(0, |ds| − 15) × 0.00833, 60 m → 0.5 s).
+func wave_delay(ds: float) -> float:
+	var c: Dictionary = _tc(1)
+	return float(c.get("delay", 0.12)) + maxf(0.0, absf(ds) - float(c.get("delayFrom", 15.0))) * float(c.get("delayPerM", 0.0))
+
+
 func _cast_wave(sim: GameSim) -> void:
 	var c: Dictionary = _tc(1)
-	var targets: Array = []
-	for v: Dictionary in sim.boss.alive():
-		if absf(float(v["s"]) - sim.player.s) <= float(c.get("range", 30.0)) and _near_lane(v, sim.player.lane, int(c.get("laneRange", 1))):
-			targets.append(int(v["index"]))
+	var targets: Array = _wave_targets(sim)
 	if targets.is_empty():
+		if float(c.get("chase", 0.0)) > 0.0 and sim.phase == &"boss" and sim.boss.any_alive():
+			_spend(sim, 1)  # spent at the tap; refunded if the chase never brings a villain into reach
+			var ch: float = float(c.get("chase", 0.8))
+			_chase = {"until": sim.time + ch, "tier": 1}
+			sim.player.boost_t = maxf(sim.player.boost_t, ch)
+			sim._emit({"type": "skill_chase", "chan": "rage", "tier": 1, "id": "t1_wave", "dur": ch,
+				"reach": float(c.get("reach", 60.0))})
+			return
 		_deny(sim, "rage", 1, "t1_wave", "target")
 		return
 	_spend(sim, 1)
+	_fire_wave(sim, targets)
+
+
+## The wave itself (rage already spent): one queued hit per target at its own distance delay; before the front lock
+## the same tick also clears the shoulder (GameSim._rage_horn_effect: smash / tow / cheaters / boost / neck open).
+func _fire_wave(sim: GameSim, targets: Array) -> void:
+	var c: Dictionary = _tc(1)
+	var pre: bool = prelock(sim)
 	var first: Dictionary = sim.boss.villains[int(targets[0])]
-	var rec: Dictionary = _start(sim, "rage", 1, "t1_wave", first, _lanes_around(sim.player.lane, int(c.get("laneRange", 1))),
-		float(c.get("dur", 0.5)), false)
+	var d0: float = wave_delay(float(first["s"]) - sim.player.s)
+	var dmax: float = d0
+	for vi: Variant in targets:
+		dmax = maxf(dmax, wave_delay(float(sim.boss.villains[int(vi)]["s"]) - sim.player.s))
+	var lanes: PackedInt32Array = _lanes_around(sim.player.lane, int(c.get("laneRange", 1)))
+	var rec: Dictionary = _start(sim, "rage", 1, "t1_wave", first, lanes, maxf(float(c.get("dur", 0.5)), dmax + 0.15), false)
 	rec["targets"] = targets
-	_queue(sim, rec, float(c.get("delay", 0.12)), 0, 1)
+	rec["prelock"] = pre
+	rec["impacted"] = false
+	var e: Dictionary = sim._events[sim._events.size() - 1] if not sim._events.is_empty() else {}
+	if str(e.get("type", "")) == "skill_start" and str(e.get("id", "")) == "t1_wave":
+		e["delay"] = d0
+		e["prelock"] = pre
+		e["targets"] = targets.duplicate()
+	for i: int in targets.size():
+		var v: Dictionary = sim.boss.villains[int(targets[i])]
+		_queue(sim, rec, wave_delay(float(v["s"]) - sim.player.s), 0, 1, int(targets[i]))
+	if pre:
+		var n0: int = sim._events.size()
+		sim._rage_horn_effect(float((c.get("jam", {}) as Dictionary).get("boost", sim.tune.get("boostTime", 2.2))))
+		for k: int in range(n0, sim._events.size()):
+			if str(sim._events[k].get("type", "")) == "rage_horn":
+				sim._events[k]["via"] = "t1_wave"  # the view plays the 충격파, not the horn
 
 
 func _cast_carpet(sim: GameSim) -> void:
@@ -576,6 +771,7 @@ func _cast_tow(sim: GameSim, m: String) -> bool:
 func tick(sim: GameSim, sdt: float, dt: float) -> void:
 	if not enabled:
 		return
+	_tick_chase(sim)
 	if not queue.is_empty():
 		var due: Array[Dictionary] = []
 		var keep: Array[Dictionary] = []
@@ -589,7 +785,8 @@ func tick(sim: GameSim, sdt: float, dt: float) -> void:
 			var rec: Dictionary = q["rec"]
 			rec["pending"] = int(rec["pending"]) - 1
 			if not bool(rec["ended"]):
-				_resolve(sim, rec, int(q["idx"]), int(q["n"]))
+				_resolve(sim, rec, int(q["idx"]), int(q["n"]), int(q.get("vi", -1)))
+	_tick_combo(sim, dt)
 	for chan: String in ["rage", "item"]:
 		if not active.has(chan):
 			continue
@@ -639,7 +836,7 @@ func on_lock(sim: GameSim) -> void:
 
 
 func _gain(sim: GameSim, key: String) -> void:
-	if not enabled or mode(sim) != "fight":
+	if not enabled or mode(sim) != "fight" or not sim.front_locked:  # r3: the pre-lock boss phase earns nothing (as before)
 		return
 	var g: Dictionary = cfg.get("rageGain", {})
 	var a: float = minf(float(g.get(key, 0.0)), float(g.get("fightCap", 1.0)) - _fight_gain)
@@ -648,10 +845,13 @@ func _gain(sim: GameSim, key: String) -> void:
 		sim.add_rage(a)
 
 
-func _resolve(sim: GameSim, rec: Dictionary, idx: int, n: int) -> void:
+func _resolve(sim: GameSim, rec: Dictionary, idx: int, n: int, vi: int = -1) -> void:
+	if str(rec["chan"]) == "combo":
+		_hit_combo(sim, rec, idx, n)
+		return
 	match str(rec["id"]):
 		"t1_wave":
-			_hit_wave(sim, rec)
+			_hit_wave(sim, rec, vi)
 		"t3_carpet":
 			_hit_carpet(sim, rec, idx, n)
 		"t5_finish":
@@ -664,20 +864,33 @@ func _resolve(sim: GameSim, rec: Dictionary, idx: int, n: int) -> void:
 			_hit_tow(sim, rec)
 
 
-func _hit_wave(sim: GameSim, rec: Dictionary) -> void:
+## r3 C2: a tier's damage inside / outside the window on v: frac × max HP when the config has it, else flat.
+func _dmg(c: Dictionary, inside: bool, v: Dictionary, flat: float) -> float:
+	var fk: String = "dmgInFrac" if inside else "dmgOutFrac"
+	if c.has(fk):
+		return float(c[fk]) * float(v["max_hp"])
+	return float(c.get("dmgIn" if inside else "dmgOut", flat))
+
+
+## One target of the wave (vi; −1 = every target, the pre-r3 single queued hit). Impact (hitstop, score) once per cast.
+func _hit_wave(sim: GameSim, rec: Dictionary, vi_only: int = -1) -> void:
 	var c: Dictionary = _tc(1)
-	_impact(sim, c)
-	sim.score += int(c.get("score", 0))
-	for vi: Variant in rec["targets"]:
+	if not bool(rec.get("impacted", false)):
+		rec["impacted"] = true
+		_impact(sim, c)
+		sim.score += int(c.get("score", 0))
+	var pre: bool = bool(rec.get("prelock", false))
+	for vi: Variant in ([vi_only] if vi_only >= 0 else rec["targets"]):
 		var v: Dictionary = sim.boss.villains[int(vi)]
 		if not bool(v["alive"]):
 			continue
 		if bool(c.get("cancel", true)):
 			sim.boss.cancel_attack(v)
-		var r: Dictionary = sim.boss.skill_damage(v, float(c.get("dmgIn", 16)), float(c.get("dmgOut", 8)), float(c.get("stun", 0.6)),
-			float(v["s"]) > sim.player.s, -1, _hp_floor(sim))
+		var rear: bool = float(v["s"]) > sim.player.s
+		var stun: float = float(c.get("stunPreLock", c.get("stun", 0.6))) if pre else float(c.get("stun", 0.6))
+		var r: Dictionary = sim.boss.skill_damage(v, _dmg(c, true, v, 16.0), _dmg(c, false, v, 8.0), stun, rear, -1, _hp_floor(sim))
 		v["recoil"] = 0.3
-		_emit_hit(sim, rec, v, 0, 1, r)
+		_emit_hit(sim, rec, v, 0, 1, r, {"from_rear": rear, "prelock": pre, "ds": float(v["s"]) - sim.player.s})
 		if sim.phase != &"boss":
 			return
 
@@ -703,7 +916,7 @@ func _hit_carpet(sim: GameSim, rec: Dictionary, idx: int, n: int) -> void:
 		var v: Dictionary = sim.boss.villains[int(vi)]
 		if not bool(v["alive"]):
 			continue
-		var r: Dictionary = sim.boss.skill_damage(v, float(c.get("dmgIn", 30)) / n, float(c.get("dmgOut", 12)) / n,
+		var r: Dictionary = sim.boss.skill_damage(v, _dmg(c, true, v, 30.0) / n, _dmg(c, false, v, 12.0) / n,
 			float(c.get("stun", 1.2)) if idx == 0 else 0.0, float(v["s"]) > sim.player.s, int((rec["win"] as Dictionary).get(int(vi), -1)),
 			_hp_floor(sim))
 		var pd: Dictionary = rec["popped"]
@@ -776,3 +989,116 @@ func _hit_tow(sim: GameSim, rec: Dictionary) -> void:
 		v["target_lane_pos"] = v["lane_pos"]
 		v["return_at"] = 0.0
 	_emit_hit(sim, rec, v, 0, 1, {"dmg": 0.0, "window": bool(sim.boss.vuln(v)["window"]), "stun": granted})
+
+
+# --- r3 C3: t1 chase -------------------------------------------------------------------------------------------
+
+## A pending t1 (spent at the tap): fires on the first tick a villain is in reach, else refunds at the deadline.
+func _tick_chase(sim: GameSim) -> void:
+	if _chase.is_empty():
+		return
+	if sim.phase != &"boss" or not sim.boss.any_alive():
+		return  # end_all (kill) / reset_run (retry) settle it
+	var targets: Array = _wave_targets(sim)
+	if not targets.is_empty():
+		_chase = {}
+		_fire_wave(sim, targets)
+		return
+	if sim.time + 1e-9 >= float(_chase["until"]):
+		var tier: int = int(_chase.get("tier", 1))
+		_chase = {}
+		_refund(sim, tier)
+		sim._emit({"type": "skill_denied", "chan": "rage", "tier": tier, "id": "t1_wave", "reason": "far", "refunded": true,
+			"text": "너무 멀다!"})
+		sim._emit({"type": "bubble", "who": "player", "id": -1, "text": "너무 멀다!", "kind": "warn", "dur": 1.0})
+
+
+# --- r3 C1: 압정 combo --------------------------------------------------------------------------------------------
+
+## GameSim._on_landing (r3 W hook): a 압정 tack hit on a villain (minis and bombs never get here). r = BossSim.damage()
+## result: it carries "villain" only when the villain was alive (the hit landed).
+func on_tack_hit(sim: GameSim, v: Dictionary, r: Dictionary) -> void:
+	if not enabled or sim.phase != &"boss" or not r.has("villain") or v.is_empty():
+		return
+	combo_n += 1
+	combo_best = maxi(combo_best, combo_n)
+	_combo_last = sim.time
+	var mid: String = milestone_of(combo_n)
+	if mid != "":
+		_combo_fire(sim, mid, v)
+
+
+## GameSim._on_player_hit (r3 W hook): a hit that got through invuln and dealt damage breaks the combo.
+func on_player_hit(sim: GameSim) -> void:
+	if not enabled or combo_n <= 0:
+		return
+	sim._emit({"type": "combo_break", "reason": "hit", "n": combo_n})
+	combo_n = 0
+
+
+func _tick_combo(sim: GameSim, dt: float) -> void:
+	if combo_n > 0:
+		if sim.phase != &"boss":
+			combo_n = 0
+		elif sim.time - _combo_last > float(_combo_cfg().get("timeout", 1.5)) + 1e-9:
+			if combo_n >= int(_combo_cfg().get("breakEventMin", 5)):
+				sim._emit({"type": "combo_break", "reason": "timeout", "n": combo_n})
+			combo_n = 0
+	for i: int in range(_combo_recs.size() - 1, -1, -1):
+		var rec: Dictionary = _combo_recs[i]
+		rec["t"] = float(rec["t"]) + dt
+		if bool(rec["ended"]):
+			_combo_recs.remove_at(i)
+		elif float(rec["t"]) >= float(rec["dur"]) and int(rec["pending"]) == 0:
+			_end_combo(sim, rec)
+			_combo_recs.remove_at(i)
+
+
+func _combo_fire(sim: GameSim, mid: String, v: Dictionary) -> void:
+	var cc: Dictionary = _combo_cfg().get(mid, {}) if _combo_cfg().get(mid) is Dictionary else {}
+	var id: String = str(cc.get("id", mid))
+	var delays: Array = cc.get("delays", []) if cc.get("delays") is Array else []
+	if delays.is_empty():
+		delays = [float(cc.get("delay", 0.15))]
+	var n: int = delays.size()
+	var vi: int = int(v["index"])
+	sim._emit({"type": "combo_milestone", "n": combo_n, "id": mid, "target_id": vi, "skill": id, "label": str(cc.get("label", "")),
+		"name": str(cc.get("name", ""))})
+	var rec: Dictionary = {"chan": "combo", "tier": 0, "id": id, "key": mid, "t": 0.0, "dur": float(cc.get("dur", 0.4)), "cine": false,
+		"skippable": false, "target_id": vi, "lanes": PackedInt32Array(BossSim.lanes_of(v)), "pending": 0, "ended": false,
+		"targets": [vi], "win": {}, "popped": {}, "s": float(v["s"]), "x": float(v["x"]), "combo": combo_n, "cc": cc}
+	_combo_recs.append(rec)
+	counts[id] = int(counts.get(id, 0)) + 1
+	sim.score += int(cc.get("score", 0))
+	sim._emit({"type": "skill_start", "chan": "combo", "tier": 0, "id": id, "key": mid, "target_id": vi, "lanes": rec["lanes"],
+		"dur": rec["dur"], "cine": false, "s": rec["s"], "x": rec["x"], "n": n, "combo": combo_n})
+	for i: int in n:
+		_queue(sim, rec, float(delays[i]), i, n, vi)
+
+
+## One combo hit: frac × max HP of the target (the milestone tack's villain; another alive one if it died), window
+## decided at the first hit; c20: force_pop + cancel_attack + stun (= a window) + hitstop.
+func _hit_combo(sim: GameSim, rec: Dictionary, idx: int, n: int) -> void:
+	var cc: Dictionary = rec["cc"]
+	var v: Dictionary = sim.boss.villains[int(rec["target_id"])]
+	if not bool(v["alive"]):
+		var al: Array[Dictionary] = sim.boss.alive()
+		if al.is_empty():
+			return
+		v = al[0]
+		rec["target_id"] = int(v["index"])
+	var vi: int = int(v["index"])
+	var wd: Dictionary = rec["win"]
+	if not wd.has(vi):
+		wd[vi] = 1 if bool(sim.boss.vuln(v)["window"]) else 0
+	if idx == 0 and float(cc.get("hitstop", 0.0)) > 0.0:
+		sim.hitstop = maxf(sim.hitstop, float(cc["hitstop"]))
+	if bool(cc.get("cancel", false)):
+		sim.boss.cancel_attack(v)
+	var mx: float = float(v["max_hp"])
+	var r: Dictionary = sim.boss.skill_damage(v, float(cc.get("fracIn", 0.0)) * mx, float(cc.get("fracOut", 0.0)) * mx,
+		float(cc.get("stun", 0.0)), float(v["s"]) > sim.player.s, int(wd[vi]), _hp_floor(sim))
+	if idx == n - 1 and not bool(r["killed"]):
+		for k: int in int(cc.get("pop", 0)):
+			r["popped"] = int(r["popped"]) + sim.boss.force_pop(v)
+	_emit_hit(sim, rec, v, idx, n, r, {"key": str(rec.get("key", "")), "combo": int(rec.get("combo", 0))})

@@ -6,6 +6,9 @@ extends RefCounted
 ##   P0#2 lock-on range band: out of the villain lane ±1 tacks fall behind the car as "miss" events, lock.in_range
 ##        is false and the chip says which way; back in the band they hit.
 ##   P0#7 damage ×boss.vulnMul inside the signature window (occupy stun), small outside; bomb dmgOut outside.
+##   r3 C2 generic window (behaviors/generic_window.gd): a stage whose sig has no ported module (1-2..1-10) opens a
+##        1.2 s 빈틈 every 4.5 s of BossSim time after the lock (vulnerable → tacks ×vulnMul, no attack starts, the
+##        bubble "헉헉… (빈틈!)" + a stun event at each open); 1-1 keeps occupy; boss.genericWindow.on = false turns it off.
 ##
 ## 가설: ✅ a speed leash (villain v + dv·(far − ahead)/far) and a villain that yields to a car right in front of
 ##       it remove both soft-locks without touching the lock rule itself.
@@ -31,6 +34,12 @@ func run() -> int:
 	_park_in_front()
 	_range_band()
 	_damage_windows()
+	for fb: bool in [false, true]:
+		if not fb and not TrafficBridge.native_available():
+			print("SKIP boss_rules: C++ Traffic not loaded (generic window, native path)")
+			continue
+		_generic_window(fb)
+	_generic_window_attach()
 	return _fails
 
 
@@ -169,3 +178,104 @@ func _damage_windows() -> void:
 	var bomb: Dictionary = sim.wc["bomb"]
 	var bo: float = float(b.damage(v, float(bomb["dmgOut"]), float(bomb["dmg"]), false)["dmg"])
 	_check(is_equal_approx(bo, float(bomb["dmgOut"])) and bo < float(bomb["dmg"]), "P0#7: rage bomb outside the window only %.0f (inside %.0f)" % [bo, float(bomb["dmg"])])
+
+
+const GW_PATH: String = "res://sim/behaviors/generic_window.gd"
+
+
+func _gw_of(sim: GameSim) -> bool:
+	var beh: Object = sim.boss.beh
+	return beh != null and beh.get_script() != null and (beh.get_script() as Script).resource_path == GW_PATH
+
+
+func _generic_window_attach() -> void:
+	var stages: Variant = _DB.load_json("res://data/stages.json")
+	var s1: GameSim = _sim(_DB.find_stage(stages, 1))
+	var occupy: bool = s1.boss.beh != null and (s1.boss.beh.get_script() as Script).resource_path.ends_with("occupy.gd")
+	var gw_ids: Array[int] = []
+	for sid: int in range(2, 11):
+		if _gw_of(_sim(_DB.find_stage(stages, sid))):
+			gw_ids.append(sid)
+	_check(occupy and not _gw_of(s1) and gw_ids == [2, 3, 4, 5, 6, 7, 8, 9, 10],
+		"generic window: 1-1 keeps occupy (no GW), 1-2..1-10 (sig not ported) get it %s" % str(gw_ids))
+	var off: Dictionary = _DB.load_traffic_tables()
+	var boss: Dictionary = (off["config"] as Dictionary).get("boss", {})
+	var gw: Dictionary = (boss.get("genericWindow", {}) as Dictionary).duplicate()
+	gw["on"] = false
+	boss["genericWindow"] = gw
+	var s2 := GameSim.new()
+	s2.setup(_DB.find_stage(stages, 2), off, 7)
+	_check(s2.boss.beh == null, "boss.genericWindow.on = false → 1-2 has no behaviour module")
+
+
+## 1-2 by the autopilot to the lock, villain HP pinned high, then 16 s of fight: the GW windows open every period for
+## dur s, no "attack" event starts inside one, each open has its bubble + stun event, tacks inside hit ×vulnMul.
+func _generic_window(fb: bool) -> void:
+	var tag: String = "fallback" if fb else "native"
+	var stage: Dictionary = _DB.find_stage(_DB.load_json("res://data/stages.json"), 2)
+	var sim := GameSim.new()
+	sim.force_fallback = fb
+	sim.setup(stage, _tables, 7)
+	sim.autopilot = Autopilot.new(7)
+	var lock_t: Array[float] = [-1.0]
+	_run(sim, func() -> bool: return sim.front_locked, 120.0, func() -> void:
+		if sim.front_locked and lock_t[0] < 0.0:
+			lock_t[0] = sim.boss.time)
+	if not sim.front_locked or not _gw_of(sim):
+		_check(false, "%s GW: 1-2 reaches the lock with the generic window (locked %s, gw %s)" % [tag, sim.front_locked, _gw_of(sim)])
+		return
+	lock_t[0] = sim.boss.time
+	var beh: Object = sim.boss.beh
+	var period: float = float(beh.get("period"))
+	var dur: float = float(beh.get("dur"))
+	for v: Dictionary in sim.boss.villains:
+		v["max_hp"] = 1e6
+		v["hp"] = 1e6
+	var opens: Array[float] = []
+	var closes: Array[float] = []
+	var was: bool = false
+	var atk_in: int = 0
+	var atk_out: int = 0
+	var bubbles: int = 0
+	var stuns: int = 0
+	var win_hits: int = 0
+	var vm: float = float(sim.bc.get("vulnMul", 4.0))
+	var tack: float = float(sim.wc["tack"]["dmg"])
+	var t_end: float = sim.time + 16.0
+	while sim.time < t_end and sim.phase == &"boss":
+		sim.step(Cfg.TICK)
+		var wl: float = float(beh.call(&"window_left", sim.boss))
+		var on: bool = wl > 0.0
+		if on and not was:
+			opens.append(sim.boss.time)
+		elif was and not on:
+			closes.append(sim.boss.time)
+		was = on
+		for e: Dictionary in sim.events():
+			match str(e["type"]):
+				"attack":
+					if on:
+						atk_in += 1
+					else:
+						atk_out += 1
+				"bubble":
+					bubbles += 1 if str(e.get("text", "")) == "헉헉… (빈틈!)" else 0
+				"stun":
+					stuns += 1 if bool(e.get("generic", false)) else 0
+				"hit":
+					if on and str(e.get("kind", "")) == "tack" and is_equal_approx(float(e["dmg"]), tack * vm) and bool(e["window"]):
+						win_hits += 1
+	var gaps_ok: bool = opens.size() >= 3
+	for i: int in range(1, opens.size()):
+		gaps_ok = gaps_ok and absf(opens[i] - opens[i - 1] - period) <= Cfg.TICK + 1e-6
+	var durs_ok: bool = closes.size() >= 2
+	for i: int in mini(opens.size(), closes.size()):
+		durs_ok = durs_ok and absf(closes[i] - opens[i] - dur) <= Cfg.TICK + 1e-6
+	var first: float = opens[0] - lock_t[0] if not opens.is_empty() else -1.0
+	_check(gaps_ok and durs_ok and is_equal_approx(period, 4.5) and is_equal_approx(dur, 1.2),
+		"%s GW 1-2: %d windows every %.2f s for %.2f s (opens %s)" % [tag, opens.size(), period, dur, str(opens.map(func(x: float) -> String: return "%.2f" % (x - lock_t[0])))])
+	_check(absf(first - (period - dur)) <= 0.25, "%s GW: first window %.2f s after the lock (period − dur = %.1f)" % [tag, first, period - dur])
+	_check(atk_in == 0 and atk_out >= 1, "%s GW: 0 attacks start inside a window (%d outside)" % [tag, atk_out])
+	_check(bubbles == opens.size() and stuns >= opens.size(), "%s GW: each open → '헉헉… (빈틈!)' bubble (%d) + stun event (%d) for %d windows" % [tag, bubbles, stuns, opens.size()])
+	_check(win_hits >= 3, "%s GW: tacks inside the window hit ×vulnMul (%d window hits of %.0f)" % [tag, win_hits, tack * vm])
+	_check(str(sim.hint()) != "", "%s GW: hint chip '%s'" % [tag, sim.hint()])

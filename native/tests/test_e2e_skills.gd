@@ -5,16 +5,55 @@ extends RefCounted
 ##         and items fire, every cast keeps its real-time budget (t1 0.5, t3 1.2, t5 2.5, items 1.0 s; a cast that overlaps
 ##         the other channel is exempt: the other cast's hitstop / slow-mo stretches its sim-time hits) and the finish
 ##         releases the jam at done + releaseDelay.
+## r3 combat (C1 압정 콤보 + C2 generic window / HP-fraction damage / hpMul 1.7 + C3 t1 reach), 1-1..1-4 × 5 seeds ×
+## {native, fallback} × three players, timed from the front lock to the kill (real s):
+##   pilot  = Autopilot with skills (rage in windows, items)                        gate 10–16 s
+##   tacks  = the same driver, but no rage / items once locked (압정 + combo only)   gate 13–21 s
+##   sloppy = tacks with a lazy thumb (압정 held 1.1 s of every 1.6 s = 69 %)        gate ≤ 26 s
+## The window is the median of the 5 seeds (the prototype's numbers were medians; its own 1-1 / 1-2 pilot runs went
+## 7.7–10.3 s); every single run stays ≤ the upper bound and ≥ FLOOR_S (a fight that is over before it starts).
+## Plus per run: ×20 타이어 저격 ≥ 1, ×10 따다닥 2–8, the first ×20 ≤ FIRST_C20_MAX s after the lock, and 0
+## skill_denied{target} in the boss phase. 1-5..1-10 (generic window, global hpMul, no gate of their own yet): the pilot on
+## seed 1007 × both paths reaches the result card with a lock → kill ≤ REST_MAX_S and 0 skill_denied{target}.
+##   가설: ✅ (r3design/combat/combo_proto.gd, hpMul 1.7) the milestones + the generic window bring 압정-only fights from
+##         41–60 s (1-2..1-4) to 14–21 s on both traffic paths; ❓ the first ×20 lands 4.7–6.9 s after the lock.
 ## Runs in the e2e suite: godot47 --headless --path native -s res://tests/run_tests.gd -- --suite=e2e
 
 const SUITE := "e2e"
 const _DB := preload("res://core/db.gd")
 const SEEDS: Array[int] = [1007, 3, 11, 42, 77]
+const STAGES: Array[int] = [1, 2, 3, 4]
 const FINISHES: Array[String] = ["rocket", "balloon", "heli", "ufo"]
-const LIMIT_S: float = 150.0
-const BUDGET: Dictionary = {"t1_horn": 0.5, "t1_wave": 0.5, "t3_carpet": 1.2, "t5_finish": 2.5, "mv_jump": 1.0, "mv_drone": 1.0, "mv_tow": 1.0}
+const POLICIES: Array[String] = ["pilot", "tacks", "sloppy"]
+const STAGES_REST: Array[int] = [5, 6, 7, 8, 9, 10]
+const REST_MAX_S: float = 40.0
+const LIMIT_S: float = 240.0
+## Real-time budget per cast id. t1_wave: dur 0.5 or its farthest hit delay + 0.15 (60 m → 0.5 + 0.15 s, r3 C3).
+const BUDGET: Dictionary = {"t1_horn": 0.5, "t1_wave": 0.65, "t3_carpet": 1.2, "t5_finish": 2.5, "mv_jump": 1.0, "mv_drone": 1.0, "mv_tow": 1.0,
+	"c5_double": 0.3, "c10_burst": 0.4, "c20_snipe": 0.5}
+## Lock → kill real s gates per policy [min, max] (r3 C2 acceptance) on the 5-seed median; max also per run.
+const GATE: Dictionary = {"pilot": [10.0, 16.0], "tacks": [13.0, 21.0], "sloppy": [0.0, 26.0]}
+const FLOOR_S: float = 6.0
+## The combo counts before the lock too (C1: boss phase 잠금 전후), so the first ×20 lands earlier than the prototype's
+## 4.7–6.9 s (it counted from the lock): the gate only says the big one comes early in every fight.
+const FIRST_C20_MAX: float = 8.0
 
 var _fails: int = 0
+
+
+## GameSim with a player policy on top of the autopilot: no fight skills (tacks / sloppy) and the lazy thumb (sloppy).
+class PolicySim extends GameSim:
+	var no_fight_skills: bool = false
+	var duty: bool = false
+	var duty_held: bool = true
+
+	func input(cmd: StringName, value: Variant = null) -> void:
+		var locked: bool = phase == &"boss" and front_locked
+		if no_fight_skills and locked and cmd in [&"rage", &"item1", &"item2"]:
+			return
+		if duty and cmd == &"fire" and locked:
+			value = bool(value) and duty_held
+		super.input(cmd, value)
 
 
 func _check(ok: bool, what: String) -> void:
@@ -23,83 +62,168 @@ func _check(ok: bool, what: String) -> void:
 		_fails += 1
 
 
+func _pct(a: Array, q: float) -> float:
+	if a.is_empty():
+		return NAN
+	var b: Array = a.duplicate()
+	b.sort()
+	return float(b[clampi(int(floor(q * (b.size() - 1))), 0, b.size() - 1)])
+
+
 func run() -> int:
-	var stage: Dictionary = _DB.find_stage(_DB.load_json("res://data/stages.json"), 1)
+	var stages_db: Variant = _DB.load_json("res://data/stages.json")
 	var skc: Dictionary = (_DB.load_traffic_tables()["config"] as Dictionary).get("skills", {})
 	var fc: Dictionary = skc.get("finish", {})
-	var times: Array[float] = []
 	var tiers: Dictionary = {}
-	for fb: bool in [false, true]:
-		if not fb and not TrafficBridge.native_available():
-			print("SKIP e2e_skills: C++ Traffic not loaded (native path)")
-			continue
-		for i: int in SEEDS.size():
-			var sd: int = SEEDS[i]
-			var fin: String = FINISHES[(i + (1 if fb else 0)) % FINISHES.size()]
-			var tables: Dictionary = _DB.load_traffic_tables()
-			tables["options"] = {"loadout": {"finish": fin, "items": ["mv_jump", "mv_drone"]}}
-			var sim := GameSim.new()
-			sim.force_fallback = fb
-			sim.setup(stage, tables, sd)
-			sim.autopilot = Autopilot.new(sd * 13 + 1)
-			var boss_t0: float = -1.0
-			var kill_t: float = -1.0
-			var rel_t: float = -1.0
-			var starts: Dictionary = {}
-			var overlap: Dictionary = {}   # chan -> the other channel was casting too (its hitstop / slow-mo stretches this one)
-			var shared: int = 0
-			var over: Array[String] = []
-			var finishers: Array[String] = []
-			var used: Dictionary = {}
-			while sim.time < LIMIT_S and sim.phase != &"result":
-				sim.step(Cfg.TICK)
-				for e: Dictionary in sim.events():
-					match str(e["type"]):
-						"phase":
-							if e["phase"] == &"boss" and boss_t0 < 0.0:
-								boss_t0 = sim.real_time
-							elif e["phase"] == &"kill":
-								kill_t = sim.real_time
-							elif e["phase"] == &"release":
-								rel_t = sim.real_time
-						"skill_start":
-							var ch: String = str(e["chan"])
-							var other: String = "item" if ch == "rage" else "rage"
-							starts[ch] = sim.real_time
-							overlap[ch] = starts.has(other)
-							if starts.has(other):
-								overlap[other] = true
-							used[str(e["id"])] = int(used.get(str(e["id"]), 0)) + 1
-						"skill_end":
-							var ch2: String = str(e["chan"])
-							var took: float = sim.real_time - float(starts.get(ch2, sim.real_time))
-							if bool(overlap.get(ch2, false)):
-								shared += 1
-							elif took > float(BUDGET.get(str(e["id"]), 2.5)) + 2.0 * Cfg.TICK:
-								over.append("%s %.2f s" % [str(e["id"]), took])
-							starts.erase(ch2)
-							overlap.erase(ch2)
-						"finisher":
-							finishers.append(str(e["id"]))
-			var name: String = "%s seed %d (%s)" % ["fallback" if fb else "native", sd, fin]
-			var boss_real: float = kill_t - boss_t0
-			var budget_rel: float = float((fc.get(fin, {}) as Dictionary).get("done", 2.5)) + float(fc.get("releaseDelay", 0.3))
-			for k: Variant in used.keys():
-				tiers[k] = int(tiers.get(k, 0)) + int(used[k])
-			print("INFO e2e_skills: %s → %s at %.1f s, boss %.1f s real / %.1f s sim, kill → release %.2f s, used %s (%d overlapped), hp %d" % [name,
-				sim.phase, sim.real_time, boss_real, sim.boss_clock, rel_t - kill_t, str(used), shared, sim.hp])
-			if sim.phase == &"result":
-				times.append(boss_real)
-			_check(sim.phase == &"result", "%s: reaches the result card" % name)
-			_check(boss_real >= 10.0 and boss_real <= 20.0 and sim.boss_clock >= float(skc.get("minKillT", 6.0)),
-				"%s: boss %.1f s real in 10–20 s, %.1f s sim ≥ minKillT" % [name, boss_real, sim.boss_clock])
-			_check(int(used.get("t3_carpet", 0)) + int(used.get("t5_finish", 0)) >= 1 and finishers == [fin],
-				"%s: t3 or t5 used (t3 %d, t5 %d), finished by finisher %s" % [name, int(used.get("t3_carpet", 0)), int(used.get("t5_finish", 0)), str(finishers)])
-			_check(over.is_empty() and rel_t - kill_t <= budget_rel + 0.05,
-				"%s: casts alone within the real-time budget %s, kill → release %.2f ≤ %.2f s (done + releaseDelay)" % [name, str(over),
-				rel_t - kill_t, budget_rel])
-	if not times.is_empty():
-		times.sort()
-		print("INFO e2e_skills: boss real time min %.1f / median %.1f / max %.1f s over %d runs; skill uses %s" % [times[0],
-			times[times.size() / 2], times[-1], times.size(), str(tiers)])
+	var summary: Array[String] = []
+	var backends: Array[bool] = [true]
+	if TrafficBridge.native_available():
+		backends.push_front(false)
+	else:
+		print("SKIP e2e_skills: C++ Traffic not loaded (native path)")
+	for sid: int in STAGES:
+		var stage: Dictionary = _DB.find_stage(stages_db, sid)
+		for fb: bool in backends:
+			for pol: String in POLICIES:
+				var fights: Array = []
+				var firsts: Array = []
+				var c10s: Array = []
+				var c20s: Array = []
+				var c5s: Array = []
+				for i: int in SEEDS.size():
+					var r: Dictionary = _one(stage, fb, pol, SEEDS[i], FINISHES[(i + sid + (1 if fb else 0)) % FINISHES.size()], fc, skc, tiers)
+					fights.append(float(r["fight"]))
+					if float(r["first_c20"]) >= 0.0:
+						firsts.append(float(r["first_c20"]))
+					c5s.append(int(r["c5"]))
+					c10s.append(int(r["c10"]))
+					c20s.append(int(r["c20"]))
+				var g: Array = GATE[pol]
+				var med: float = _pct(fights, 0.5)
+				_check(med >= float(g[0]) and med <= float(g[1]), "1-%d %s %s: lock → kill median %.1f s in %.0f–%.0f s (%s)" % [sid,
+					"fallback" if fb else "native", pol, med, float(g[0]), float(g[1]), ", ".join(PackedStringArray(fights.map(func(x: float) -> String: return "%.1f" % x)))])
+				var line: String = "1-%d %s %-6s lock→kill med %5.1f [%5.1f..%5.1f]  c5 %s c10 %s c20 %s  firstC20 med %4.1f [%4.1f..%4.1f]" % [sid,
+					"FB " if fb else "CPP", pol, _pct(fights, 0.5), _pct(fights, 0.0), _pct(fights, 1.0), str(c5s), str(c10s), str(c20s),
+					_pct(firsts, 0.5), _pct(firsts, 0.0), _pct(firsts, 1.0)]
+				summary.append(line)
+				print("INFO e2e_skills: " + line)
+	for sid: int in STAGES_REST:
+		for fb: bool in backends:
+			var rr: Dictionary = _one(_DB.find_stage(stages_db, sid), fb, "pilot", SEEDS[0], FINISHES[sid % FINISHES.size()], fc, skc, tiers, REST_MAX_S)
+			summary.append("1-%d %s pilot  lock→kill %5.1f (seed %d)  c5 %d c10 %d c20 %d" % [sid, "FB " if fb else "CPP", float(rr["fight"]),
+				SEEDS[0], int(rr["c5"]), int(rr["c10"]), int(rr["c20"])])
+	print("INFO e2e_skills: skill uses %s" % str(tiers))
+	for line: String in summary:
+		print("INFO e2e_skills summary: " + line)
 	return _fails
+
+
+## One run to the result card. Returns {fight (lock → kill real s), first_c20 (real s after the lock, −1 = none), c5, c10, c20}.
+## max_s >= 0: a 1-5..1-10 completion run (only the result card, lock → kill ≤ max_s and 0 denied{target} are gated).
+func _one(stage: Dictionary, fb: bool, pol: String, sd: int, fin: String, fc: Dictionary, skc: Dictionary, tiers: Dictionary,
+		max_s: float = -1.0) -> Dictionary:
+	var sid: int = int(stage.get("id", 0))
+	var tables: Dictionary = _DB.load_traffic_tables()
+	tables["options"] = {"loadout": {"finish": fin, "items": ["mv_jump", "mv_drone"]}}
+	var sim := PolicySim.new()
+	sim.force_fallback = fb
+	sim.no_fight_skills = pol != "pilot"
+	sim.duty = pol == "sloppy"
+	sim.setup(stage, tables, sd)
+	sim.autopilot = Autopilot.new(sd * 13 + 1)
+	var boss_t0: float = -1.0
+	var lock_t: float = -1.0
+	var kill_t: float = -1.0
+	var rel_t: float = -1.0
+	var first_c20: float = -1.0
+	var duty_t: float = 0.0
+	var ms: Dictionary = {"c5": 0, "c10": 0, "c20": 0}
+	var denied_target: int = 0
+	var starts: Dictionary = {}
+	var overlap: Dictionary = {}   # chan -> another channel was casting too (its hitstop / slow-mo stretches this one)
+	var shared: int = 0
+	var over: Array[String] = []
+	var finishers: Array[String] = []
+	var used: Dictionary = {}
+	var stop: StringName = &"result" if pol == "pilot" else &"release"  # tacks / sloppy only need the kill
+	while sim.time < LIMIT_S and sim.phase != &"result" and sim.phase != stop:
+		if sim.duty and sim.phase == &"boss" and sim.front_locked:
+			duty_t += Cfg.TICK
+			var held: bool = fmod(duty_t, 1.6) < 1.1
+			if held != sim.duty_held:
+				sim.duty_held = held
+				sim.input(&"fire", sim.autopilot.fire)
+		sim.step(Cfg.TICK)
+		for e: Dictionary in sim.events():
+			match str(e["type"]):
+				"phase":
+					if e["phase"] == &"boss" and boss_t0 < 0.0:
+						boss_t0 = sim.real_time
+					elif e["phase"] == &"kill":
+						kill_t = sim.real_time
+					elif e["phase"] == &"release":
+						rel_t = sim.real_time
+				"lock":
+					lock_t = sim.real_time
+				"combo_milestone":
+					var mid: String = str(e["id"])
+					ms[mid] = int(ms.get(mid, 0)) + 1
+					if mid == "c20" and first_c20 < 0.0 and lock_t >= 0.0:
+						first_c20 = sim.real_time - lock_t
+				"skill_denied":
+					if str(e.get("reason", "")) == "target" and sim.phase == &"boss":
+						denied_target += 1
+				"skill_start":
+					var ch: String = str(e["chan"])
+					used[str(e["id"])] = int(used.get(str(e["id"]), 0)) + 1
+					if ch == "combo":
+						continue
+					var other: String = "item" if ch == "rage" else "rage"
+					starts[ch] = sim.real_time
+					overlap[ch] = starts.has(other)
+					if starts.has(other):
+						overlap[other] = true
+				"skill_end":
+					var ch2: String = str(e["chan"])
+					if ch2 == "combo":
+						continue
+					var took: float = sim.real_time - float(starts.get(ch2, sim.real_time))
+					if bool(overlap.get(ch2, false)):
+						shared += 1
+					elif took > float(BUDGET.get(str(e["id"]), 2.5)) + 2.0 * Cfg.TICK:
+						over.append("%s %.2f s" % [str(e["id"]), took])
+					starts.erase(ch2)
+					overlap.erase(ch2)
+				"finisher":
+					finishers.append(str(e["id"]))
+	var name: String = "1-%d %s %s seed %d (%s)" % [sid, "fallback" if fb else "native", pol, sd, fin]
+	var fight: float = kill_t - lock_t if kill_t > 0.0 and lock_t > 0.0 else INF
+	var budget_rel: float = float((fc.get(fin, {}) as Dictionary).get("done", 2.5)) + float(fc.get("releaseDelay", 0.3))
+	for k: Variant in used.keys():
+		tiers[k] = int(tiers.get(k, 0)) + int(used[k])
+	print("INFO e2e_skills: %s → %s at %.1f s, lock→kill %.1f s real (boss %.1f s real / %.1f s sim), kill → release %.2f s, combos c5 %d c10 %d c20 %d (first c20 %+.1f s), used %s (%d overlapped), hp %d" % [
+		name, sim.phase, sim.real_time, fight, kill_t - boss_t0, sim.boss_clock, rel_t - kill_t, int(ms["c5"]), int(ms["c10"]), int(ms["c20"]),
+		first_c20, str(used), shared, sim.hp])
+	_check(sim.phase == stop and sim.bridge.is_native() != fb, "%s: reaches the %s on the %s traffic" % [name,
+		"result card" if pol == "pilot" else "release", "fallback" if fb else "native"])
+	var ret: Dictionary = {"fight": fight, "first_c20": first_c20, "c5": int(ms["c5"]), "c10": int(ms["c10"]), "c20": int(ms["c20"])}
+	if max_s >= 0.0:
+		_check(fight <= max_s and denied_target == 0 and finishers == [fin], "%s: lock → kill %.1f s ≤ %.0f s, 0 denied{target} (%d), finisher %s" % [
+			name, fight, max_s, denied_target, str(finishers)])
+		return ret
+	var g: Array = GATE[pol]
+	_check(fight >= FLOOR_S and fight <= float(g[1]) and sim.boss_clock >= float(skc.get("minKillT", 6.0)),
+		"%s: lock → kill %.1f s real in %.0f–%.0f s, %.1f s sim ≥ minKillT" % [name, fight, FLOOR_S, float(g[1]), sim.boss_clock])
+	_check(denied_target == 0, "%s: 0 skill_denied{target} in the boss phase (%d)" % [name, denied_target])
+	_check(int(ms["c20"]) >= 1 and int(ms["c10"]) >= 2 and int(ms["c10"]) <= 8 and first_c20 >= 0.0 and first_c20 <= FIRST_C20_MAX,
+		"%s: ×20 타이어 저격 %d ≥ 1 (first %.1f s after the lock ≤ %.0f), ×10 따다닥 %d in 2–8" % [name, int(ms["c20"]), first_c20,
+		FIRST_C20_MAX, int(ms["c10"])])
+	if pol == "pilot":
+		_check(int(used.get("t3_carpet", 0)) + int(used.get("t5_finish", 0)) >= 1 and finishers == [fin],
+			"%s: t3 or t5 used (t3 %d, t5 %d), finished by finisher %s" % [name, int(used.get("t3_carpet", 0)), int(used.get("t5_finish", 0)), str(finishers)])
+		_check(over.is_empty() and rel_t - kill_t <= budget_rel + 0.05,
+			"%s: casts alone within the real-time budget %s, kill → release %.2f ≤ %.2f s (done + releaseDelay)" % [name, str(over),
+			rel_t - kill_t, budget_rel])
+	else:
+		_check(finishers == [fin], "%s: finished by finisher %s" % [name, str(finishers)])
+	return ret

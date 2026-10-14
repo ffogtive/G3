@@ -48,6 +48,118 @@
       "minIntervalMs": null,
       "web": ["main.js:261 fx.shake(0.6, 0.4)"]
     },
+    "combo10": {
+      "android": [
+        {
+          "amp": 0.5,
+          "ms": 15,
+          "t": 0
+        },
+        {
+          "amp": 0.5,
+          "ms": 15,
+          "t": 0.06
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.5,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.5,
+          "sharpness": 0.9,
+          "t": 0.06,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 150,
+      "note": "r3 F1 c10 '따다닥!' (skill_hit idx 0, chan combo): 0.5/0.9 ×2, 60 ms apart"
+    },
+    "combo20": {
+      "android": [
+        {
+          "amp": 0.9,
+          "ms": 40,
+          "t": 0
+        },
+        {
+          "amp": 0.4,
+          "ms": 80,
+          "t": 0.04
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.9,
+          "sharpness": 0.6,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.08,
+          "intensity": 0.4,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 150,
+      "note": "r3 F1 c20 '타이어 저격!' (skill_hit idx 0, chan combo; replaces tirePop for that burst): 0.9/0.6 + 80 ms 0.4"
+    },
+    "combo5": {
+      "android": [
+        {
+          "amp": 0.35,
+          "ms": 12,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.6,
+          "type": "impactLight"
+        }
+      ],
+      "iosAlt": [
+        {
+          "intensity": 0.4,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 150,
+      "note": "r3 main_overrides c5 '따닥!' (skill_hit idx 0, chan combo): one light tap"
+    },
+    "comboBreak": {
+      "android": [
+        {
+          "amp": 0.3,
+          "ms": 10,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.45,
+          "type": "impactLight"
+        }
+      ],
+      "iosAlt": [
+        {
+          "intensity": 0.3,
+          "sharpness": 0.4,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 300,
+      "note": "r3 F1 combo_break (n ≥ 5, or state.skills.combo.n dropping from ≥ 5 in the boss phase): one light tap"
+    },
     "crit": {
       "android": [
         {
@@ -864,7 +976,7 @@
       "android": [
         {
           "amp": 0.8,
-          "ms": 60,
+          "ms": 120,
           "t": 0
         }
       ],
@@ -878,14 +990,14 @@
         {
           "decayTo": 0,
           "dur": 0.12,
-          "intensity": 0.5,
+          "intensity": 0.8,
           "sharpness": 0.3,
           "t": 0,
           "type": "continuous"
         }
       ],
       "minIntervalMs": 120,
-      "note": "SKILLS.md 2-3 t1 경적 충격파 impact (skill_hit t1)"
+      "note": "SKILLS.md 2-3 t1 충격파 impact (skill_hit t1 / t1_wave). r3 F1: peak 0.8 + 120 ms tail (was a 0.5 tail, 60 ms android)"
     },
     "skillT3Hit": {
       "android": [

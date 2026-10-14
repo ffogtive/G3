@@ -19,6 +19,11 @@ extends Node3D
 ## 6 balloons popping out of the roof on strings, heli = police helicopter descending, hook + cable, lift-off,
 ## ufo = saucer + flickering tractor beam, blink-out. The ★ twinkles in frame where the car left (gone).
 ## Tone (DESIGN_REVIEW #14): cartoon enforcement parody — no ramming, no injury; the villain is lifted away.
+## r3 F1 combo chan (fx keys from SkillCues.fx_key, so t1_wave takes the t1 path): c5 '따닥' = 2 gold caltrops, c10
+## '따다닥' = 3 gold caltrops (carpet pool) that fly from the player's roof and stick on the villain's roof, one per sim hit,
+## c20 '타이어 저격' = one 2.2× caltrop that spins into the villain's front wheel (player side) and bursts it (rubber
+## debris, smoke, skid decal, ★ burst). Combo shapes never shake the camera themselves (the recipe camera does, c20 only).
+## 가설(r3 F1): ❓ gold + "it sticks where it hit" separates a combo reward from the steady tack stream at a glance.
 
 const DECALS: int = 8
 const GOLD := Color8(0xff, 0xd2, 0x3f)
@@ -27,6 +32,10 @@ const WAVE_COL := Color8(0xff, 0xd2, 0x3a)
 const DUST := Color(0.62, 0.6, 0.56, 0.7)
 const ASPHALT := Color8(0x3a, 0x3e, 0x46)
 const RUBBER := Color8(0x1a, 0x1c, 0x20)
+const COMBO_GOLD := Color(1.0, 0.8, 0.22)
+## Ground-size scale of a caltrop (t3) and the c20 snipe multiplier.
+const TACK_SC: float = 1.7
+const SNIPE_MUL: float = 2.2
 const BALLOON_COLS: Array[Color] = [Color8(0xff, 0x3b, 0x30), Color8(0xff, 0xd2, 0x3f), Color8(0x3c, 0xe0, 0x8e),
 	Color8(0x2f, 0x6f, 0xd6), Color8(0xb1, 0x5c, 0xff), Color8(0xff, 0x8a, 0x1f)]
 
@@ -37,7 +46,7 @@ var road: RoadGraph:
 
 var _arcs: Array[Dictionary] = []        # {mi, mat, born, dur, p0, p1, w0, w1, col, yaw}
 var _tk_mm: MultiMeshInstance3D
-var _tacks: Array[Dictionary] = []       # {p0, p1, t0, t1, h, spin, landed, group}
+var _tacks: Array[Dictionary] = []       # {p0, p1, t0, t1, h, spin, landed, group, kind, col, sc, hold, follow?}
 var _strip: MeshInstance3D
 var _strip_mat: ShaderMaterial
 var _strip_until: float = -99.0
@@ -94,7 +103,8 @@ func _ready() -> void:
 	tkm.emission_enabled = true
 	tkm.emission = Color8(0xff, 0xc0, 0x40)
 	tkm.emission_energy_multiplier = 0.5
-	_tk_mm = _mm(fx._caltrop_mesh() if fx != null else BoxMesh.new(), tkm, 24)
+	tkm.vertex_color_use_as_albedo = true  # instance colour: white (t3) / gold (combo)
+	_tk_mm = _mm(fx._caltrop_mesh() if fx != null else BoxMesh.new(), tkm, 32)
 	var bm := CapsuleMesh.new()
 	bm.radius = 0.16
 	bm.height = 0.62
@@ -656,7 +666,7 @@ func carpet(lanes: PackedInt32Array, s0: float, s1: float, n: int = 12, groups: 
 	var x0: float = RoadGraph.lane_x(float(lo)) - RoadGraph.LANE_W * 0.45
 	var x1: float = RoadGraph.lane_x(float(hi)) + RoadGraph.LANE_W * 0.45
 	var t: float = _now()
-	_tacks.clear()
+	_tacks = _tacks.filter(func(tk: Dictionary) -> bool: return str(tk.get("kind", "t3")) != "t3")  # a combo volley keeps flying
 	for i: int in n:
 		var g: int = i % groups
 		var volley: int = i / groups
@@ -665,7 +675,8 @@ func carpet(lanes: PackedInt32Array, s0: float, s1: float, n: int = 12, groups: 
 		var t0: float = t + 0.07 * float(volley)
 		var t1: float = t + t_land0 + gap * float(g)
 		_tacks.append({"p0": roof, "p1": _w(fx_s, fx_x, 0.12), "t0": t0, "t1": maxf(t0 + 0.12, t1), "h": 5.5 + fx.rng.randf() * 2.5,
-			"spin": fx.rng.randf_range(8.0, 14.0), "landed": false, "group": g})
+			"spin": fx.rng.randf_range(8.0, 14.0), "landed": false, "group": g, "kind": "t3", "col": Color.WHITE, "sc": TACK_SC,
+			"hold": 1.8})
 	for v: int in 3:
 		fx._after(0.07 * float(v), func() -> void:
 			fx.sparks(roof + Vector3(0, 0.3, 0), 8, 7.0, Color8(0xff, 0xe6, 0x80), 0.16)
@@ -680,10 +691,36 @@ func carpet(lanes: PackedInt32Array, s0: float, s1: float, n: int = 12, groups: 
 
 
 ## Lands every tack of group g now (the sim's skill_hit idx g may come a tick before the planned time).
-func land_group(g: int) -> void:
+func land_group(g: int, kind: String = "t3") -> void:
 	for tk: Dictionary in _tacks:
-		if int(tk["group"]) == g and float(tk["t1"]) > _now():
+		if int(tk["group"]) == g and str(tk.get("kind", "t3")) == kind and float(tk["t1"]) > _now():
 			tk["t1"] = maxf(_now(), float(tk["t0"]) + 0.05)
+
+
+## Combo volley: one caltrop per entry of `lands` (FX s from now), thrown from the player's roof onto target_id at the
+## villain-local offsets `offs` [ds, dx, dy] (followed every frame, so they stick where they hit), colour col, scale
+## TACK_SC × mul; group = index (land_group(i, "combo") on the sim hit). Stays `hold` s after landing.
+func tack_volley(target_id: int, offs: Array, lands: Array, col: Color = COMBO_GOLD, mul: float = 1.0, hold: float = 1.0,
+		h: float = 3.2) -> void:
+	var p: Dictionary = (_state.get("player", {}) as Dictionary)
+	var roof: Vector3 = _w(float(p.get("s", 0.0)), float(p.get("x", 0.0)), 1.9)
+	var t: float = _now()
+	_tacks = _tacks.filter(func(tk: Dictionary) -> bool: return str(tk.get("kind", "t3")) != "combo" or t <= float(tk["t1"]) + float(tk["hold"]))
+	for i: int in mini(offs.size(), lands.size()):
+		var o: Array = offs[i]
+		var tk: Dictionary = {"p0": roof, "p1": _follow_pos({"target": target_id, "o": o}, roof), "t0": t, "t1": t + maxf(0.06, float(lands[i])),
+			"h": h + 0.6 * float(i), "spin": 16.0 + 3.0 * float(i), "landed": false, "group": i, "kind": "combo", "col": col,
+			"sc": TACK_SC * mul, "hold": hold, "follow": {"target": target_id, "o": o}}
+		_tacks.append(tk)
+
+
+## World point of a follow {target, o: [ds, dx, dy]} on the target's current state (fallback when it is gone).
+func _follow_pos(f: Dictionary, fallback: Vector3) -> Vector3:
+	var v: Dictionary = _villain(int(f["target"]))
+	if v.is_empty():
+		return fallback
+	var o: Array = f["o"]
+	return _w(float(v.get("s", 0.0)) + float(o[0]), float(v.get("x", 0.0)) + float(o[1]), float(v.get("y", 0.0)) + float(o[2]))
 
 
 ## Police drone: flies from → above `target_id` in `t` s, hovers over it, drops `n` bomblets from t − 0.12 s every gap.
@@ -819,13 +856,19 @@ func _on_start(e: Dictionary) -> void:
 	var px: float = float(p.get("x", 0.0))
 	var tid: int = int(e.get("target_id", -1))
 	var v: Dictionary = _villain(tid)
+	var key: String = SkillCues.fx_key(e)
+	if SkillCues.is_combo(key):
+		_combo_start(key, tid, v, ps, px)
+		return
 	match id:
 		"t1_wave":
+			var d0: float = float(e.get("delay", SkillCues.impact_delay(key)))
 			var vs: float = float(v.get("s", ps - 12.0)) + float(v.get("len", 4.6)) * 0.5
 			var from: Vector3 = _w(ps - 2.4, px, 0.55)
-			var to: Vector3 = _w(vs + _vspeed(tid) * 0.12, float(v.get("x", px)), 0.55)
-			arc_wave(from, to, 3, WAVE_COL, 3.4, 8.5, 0.24, 0.05)
-			fx.ring(from, 4.0, Color(1.0, 0.85, 0.3, 0.9), 0.25, 0.6)
+			var to: Vector3 = _w(vs + _vspeed(tid) * d0, float(v.get("x", px)), 0.55)
+			arc_wave(from, to, 4, WAVE_COL, 3.8, 9.5, maxf(0.24, d0 * 1.6), 0.05)
+			fx.ring(from, 5.0, Color(1.0, 0.85, 0.3, 0.9), 0.25, 0.6)
+			fx.ring(_w(ps, px, 0.1), 8.0, Color(1.0, 0.62, 0.2, 0.8), 0.35, 1.2)  # ground shock under the player
 			for i: int in 12:
 				var d: Vector3 = (to - from).normalized().rotated(Vector3.UP, fx.rng.randf_range(-0.5, 0.5))
 				fx._spawn(1, {"p": from + Vector3(0, fx.rng.randf_range(0.0, 0.6), 0), "v": d * fx.rng.randf_range(18.0, 30.0),
@@ -885,15 +928,24 @@ func _on_hit(e: Dictionary) -> void:
 	var vcol: Color = fx._vcol(v)
 	var popped: bool = int(e.get("popped", 0)) > 0
 	var killed: bool = bool(e.get("killed", false))
+	var key: String = SkillCues.fx_key(e)
+	if SkillCues.is_combo(key):
+		_combo_hit(key, idx, n, tid, v, hs, hx, popped)
+		return
 	match id:
 		"t1_wave":
-			var bump: Vector3 = _w(float(v.get("s", hs)) + vlen * 0.5, float(v.get("x", hx)), 0.8)
-			fx.sparks(bump, 16, 11.0, WAVE_COL, 0.18)
-			fx.smoke(_w(float(v.get("s", hs)) - vlen * 0.5, float(v.get("x", hx)), 0.4), 6, Color(0.3, 0.3, 0.33, 0.7), 0.9)
+			var vs2: float = float(v.get("s", hs))
+			var vx2: float = float(v.get("x", hx))
+			var face: float = 1.0 if float((_state.get("player", {}) as Dictionary).get("s", vs2 - 10.0)) >= vs2 else -1.0
+			var bump: Vector3 = _w(vs2 + vlen * 0.5 * face, vx2, 0.8)  # the bumper facing the player (r3 C3 hits from behind)
+			fx.sparks(bump, 22, 12.0, WAVE_COL, 0.2)
+			fx.smoke(_w(vs2 - vlen * 0.5 * face, vx2, 0.4), 6, Color(0.3, 0.3, 0.33, 0.7), 0.9)
+			fx.debris(bump, 6, ASPHALT, 7.0, 0.22)
 			fx.ring(bump, 5.0, Color(1.0, 0.85, 0.3, 0.9), 0.3)
-			burst(bump + Vector3(0, 1.2, 1.2), 2.6, Color(1, 1, 0.85))
-			fx.ring(_w(float(v.get("s", hs)), float(v.get("x", hx)), 0.2), 7.5, Color(1.0, 0.82, 0.25, 0.85), 0.4, 1.5)
-			fx.light(bump, 3.5, 0.18, Color8(0xff, 0xd0, 0x50))
+			burst(bump + Vector3(0, 1.2, 0), 3.0, Color(1, 0.93, 0.7))
+			fx.ring(_w(vs2, vx2, 0.2), 9.0, Color(1.0, 0.82, 0.25, 0.85), 0.4, 1.5)
+			dust_ring(_w(vs2, vx2, 0.1), 7.0)  # the shockwave lifts the road dust around the car
+			fx.light(bump, 4.5, 0.2, Color8(0xff, 0xd0, 0x50))
 		"t3_carpet":
 			land_group(idx)
 			var hp: Vector3 = _w(hs, hx, 0.4)
@@ -969,6 +1021,82 @@ func _on_hit(e: Dictionary) -> void:
 			if idx >= n - 1:
 				fx.ring(_w(hs, hx, 0.2), 6.0, Color(1.0, 0.6, 0.2, 0.9), 0.4)
 				burst(bp + Vector3(0, 1.2, 0), 2.8, Color(1, 0.95, 0.85))
+
+
+static var _kind_h: Dictionary = {}
+
+
+## Body height (m) of a vehicle kind (data/vehicle_kinds.json dims.detailed[0].H), 1.8 when unknown.
+static func kind_height(kind: String) -> float:
+	if _kind_h.is_empty():
+		_kind_h["_"] = 1.8
+		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/vehicle_kinds.json")) \
+			if FileAccess.file_exists("res://data/vehicle_kinds.json") else null
+		var ks: Variant = (d as Dictionary).get("kinds", {}) if d is Dictionary else {}
+		if ks is Dictionary:
+			for k: String in ks:
+				var dims: Variant = ((ks as Dictionary)[k] as Dictionary).get("dims", {}) if (ks as Dictionary)[k] is Dictionary else {}
+				var det: Variant = (dims as Dictionary).get("detailed", []) if dims is Dictionary else []
+				if det is Array and not (det as Array).is_empty() and (det as Array)[0] is Dictionary:
+					_kind_h[k] = float(((det as Array)[0] as Dictionary).get("H", 1.8))
+	return float(_kind_h.get(kind, _kind_h["_"]))
+
+
+## Combo cast (r3 F1): c5 / c10 gold caltrops onto the villain's roof (the end facing the player first), c20 one 2.2×
+## caltrop into the front wheel on the player's side. Landing times = SkillCues.combo_delays(key) (sim s; FX time is sim-scaled).
+func _combo_start(key: String, tid: int, v: Dictionary, ps: float, px: float) -> void:
+	var lands: Array = SkillCues.combo_delays(key)
+	var vs: float = float(v.get("s", ps + 12.0))
+	var vx: float = float(v.get("x", px))
+	var vlen: float = float(v.get("len", 4.6))
+	var vw: float = float(v.get("w", 1.9))
+	var face: float = 1.0 if ps >= vs else -1.0  # the end of the car that faces the player
+	var roof: Vector3 = _w(ps, px, 1.9)
+	if key == "c20":
+		var side: float = 1.0 if px >= vx else -1.0
+		tack_volley(tid, [[vlen * 0.3, side * (vw * 0.5 + 0.25), 0.55]], lands, COMBO_GOLD, SNIPE_MUL, 1.2, 2.2)
+		fx.sparks(roof + Vector3(0, 0.3, 0), 10, 8.0, Color8(0xff, 0xd2, 0x3a), 0.18)
+		fx.light(roof, 3.0, 0.15, Color8(0xff, 0xc8, 0x40))
+		return
+	var n: int = lands.size()
+	var offs: Array = []
+	var top: float = kind_height(str(v.get("kind", ""))) + 0.08  # on the roof: the high boss camera sees it (shot r3)
+	for i: int in n:
+		var k: float = float(i) / float(maxi(1, n - 1)) if n > 1 else 0.5
+		offs.append([face * vlen * lerpf(0.2, -0.02, k), (k - 0.5) * vw * 0.55, top])
+	tack_volley(tid, offs, lands, COMBO_GOLD, 1.0 if key == "c10" else 0.85, 1.0)
+	fx.sparks(roof + Vector3(0, 0.3, 0), 4 + 2 * n, 6.0, Color8(0xff, 0xe6, 0x80), 0.14)
+
+
+## Combo hit idx (the sim's skill_hit): land that caltrop now, then the shape of the hit — c5 / c10 gold sparks per
+## tack + a burst on the last, c20 the tyre burst (rubber, smoke, skid, ★). No camera shake here.
+func _combo_hit(key: String, idx: int, n: int, tid: int, v: Dictionary, hs: float, hx: float, popped: bool) -> void:
+	land_group(idx, "combo")
+	var at: Vector3 = _w(hs, hx, 1.0)
+	var off: Array = [0.0, 0.0, 1.0]
+	for tk: Dictionary in _tacks:
+		if str(tk.get("kind", "")) == "combo" and int(tk["group"]) == idx:
+			at = tk["p1"]
+			if tk.get("follow") is Dictionary:
+				off = (tk["follow"] as Dictionary)["o"]
+	if key == "c20":
+		var ground := Vector3(at.x, 0.15, at.z)
+		fx.debris(at, 16, RUBBER, 9.5, 0.3)
+		fx.debris(at, 4, Color8(0xff, 0xd2, 0x3a), 7.0, 0.16)
+		fx.smoke(ground, 7, Color(0.24, 0.24, 0.26, 0.75), 1.1)
+		fx.sparks(at, 18, 10.0, YELLOW_HOT, 0.18)
+		fx.ring(ground, 5.5, Color(1.0, 0.8, 0.3, 0.9), 0.32)
+		burst(at + Vector3(0, 1.4, 0), 3.2, Color(1, 0.93, 0.7), 0.26)
+		fx.light(at, 4.0, 0.2, Color8(0xff, 0xb0, 0x40))
+		if not v.is_empty():  # the burst tyre drags a skid behind the wheel
+			decal(_w(float(v.get("s", hs)) + float(off[0]) - 1.8, float(v.get("x", hx)) + float(off[1]) * 0.85, 0.0), "skid",
+				Vector3(0.7, 0.8, 4.0), 2.2)
+		return
+	fx.sparks(at, 8 if key == "c10" else 5, 8.0, Color8(0xff, 0xd2, 0x3a), 0.15)
+	if idx >= n - 1:
+		burst(at + Vector3(0, 1.1, 0), 2.2 if key == "c10" else 1.6, Color(1, 0.9, 0.55), 0.2)
+		if key == "c10":
+			fx.ring(Vector3(at.x, 0.15, at.z), 4.0, Color(1.0, 0.82, 0.25, 0.85), 0.28)
 
 
 const YELLOW_HOT := Color8(0xff, 0xb4, 0x00)
@@ -1196,34 +1324,45 @@ func advance(dt: float) -> void:
 	for tk: Dictionary in _tacks:
 		var t0: float = float(tk["t0"])
 		var t1: float = float(tk["t1"])
-		if t > t1 + 1.8:
+		var hold: float = float(tk.get("hold", 1.8))
+		if t > t1 + hold:
 			continue
 		keep.append(tk)
+		if tk.get("follow") is Dictionary:  # combo: the caltrop sticks to the moving villain
+			tk["p1"] = _follow_pos(tk["follow"], tk["p1"])
 		if t < t0 or nt >= mm.instance_count:
 			continue
 		var p: Vector3
-		var sc: float = 1.7  # cartoon scale: a caltrop must read from the high boss camera
+		var sc0: float = float(tk.get("sc", TACK_SC))  # cartoon scale: a caltrop must read from the high boss camera
+		var sc: float = sc0
 		var rot: Vector3
+		var combo: bool = str(tk.get("kind", "t3")) == "combo"
 		if t < t1:
 			var k2: float = (t - t0) / maxf(0.01, t1 - t0)
 			p = (tk["p0"] as Vector3).lerp(tk["p1"] as Vector3, k2) + Vector3(0, float(tk["h"]) * 4.0 * k2 * (1.0 - k2), 0)
 			rot = Vector3(t * float(tk["spin"]), t * float(tk["spin"]) * 0.7, 0)
-			sc = lerpf(2.4, 1.7, k2 * k2)  # bigger in the air, settling to the ground size on landing
-			if dt > 0.0 and nt % 2 == 0:  # glint trail: the rain reads as streaks
-				fx._spawn(1, {"p": p, "v": Vector3.ZERO, "r": Vector3.ZERO, "w": Vector3.ZERO, "s0": 0.2, "s1": 0.0, "life": 0.12,
-					"c": Color8(0xff, 0xe6, 0x80), "g": 0.0, "drag": 0.0, "bounce": 0.0, "shape": 3})
+			sc = lerpf(sc0 * 1.41, sc0, k2 * k2)  # bigger in the air, settling to the ground size on landing
+			if dt > 0.0 and (combo or nt % 2 == 0):  # glint trail: the rain reads as streaks (every combo tack)
+				fx._spawn(1, {"p": p, "v": Vector3.ZERO, "r": Vector3.ZERO, "w": Vector3.ZERO, "s0": 0.2 * sc0 / TACK_SC, "s1": 0.0,
+					"life": 0.12, "c": Color8(0xff, 0xd2, 0x3a) if combo else Color8(0xff, 0xe6, 0x80), "g": 0.0, "drag": 0.0,
+					"bounce": 0.0, "shape": 3})
 		else:
 			if not bool(tk["landed"]):
 				tk["landed"] = true
 				var lp: Vector3 = tk["p1"]
 				fx.sparks(lp + Vector3(0, 0.2, 0), 6, 7.0, Color8(0xff, 0xe6, 0x80), 0.13)
-				fx.debris(lp + Vector3(0, 0.2, 0), 2, RUBBER, 4.0, 0.16)
+				if not combo:
+					fx.debris(lp + Vector3(0, 0.2, 0), 2, RUBBER, 4.0, 0.16)
 			var k3: float = t - t1
-			p = (tk["p1"] as Vector3) + Vector3(0, absf(sin(k3 * 18.0)) * 0.25 * maxf(0.0, 1.0 - k3 * 4.0), 0)
-			rot = Vector3(0.6, float(tk["spin"]), 0.3)
-			sc *= clampf((t1 + 1.8 - t) / 0.4, 0.0, 1.0)
+			if combo:  # stuck in the car: a short wobble, then still
+				p = tk["p1"] as Vector3
+				rot = Vector3(0.9 + 0.25 * sin(k3 * 40.0) * maxf(0.0, 1.0 - k3 * 5.0), float(tk["spin"]), 0.4)
+			else:
+				p = (tk["p1"] as Vector3) + Vector3(0, absf(sin(k3 * 18.0)) * 0.25 * maxf(0.0, 1.0 - k3 * 4.0), 0)
+				rot = Vector3(0.6, float(tk["spin"]), 0.3)
+			sc *= clampf((t1 + hold - t) / 0.4, 0.0, 1.0)
 		mm.set_instance_transform(nt, Transform3D(Basis.from_euler(rot).scaled(Vector3.ONE * maxf(0.01, sc)), p))
-		mm.set_instance_color(nt, Color.WHITE)
+		mm.set_instance_color(nt, tk.get("col", Color.WHITE))
 		nt += 1
 	_tacks = keep
 	mm.visible_instance_count = nt
@@ -1351,5 +1490,20 @@ func counts() -> Dictionary:
 	for d: Dictionary in _decals:
 		if (d["node"] as Decal).visible:
 			dec += 1
-	return {"decals": dec, "tacks": _tacks.size(), "drone": _drone.visible, "props": [_balloons.visible, _heli.visible, _ufo.visible],
-		"finish": str(_fin.get("id", ""))}
+	var combo: int = 0
+	var big: int = 0
+	for tk: Dictionary in _tacks:
+		if str(tk.get("kind", "t3")) == "combo":
+			combo += 1
+			big += 1 if float(tk.get("sc", TACK_SC)) > TACK_SC * 1.5 else 0
+	return {"decals": dec, "tacks": _tacks.size(), "combo_tacks": combo, "big_tacks": big, "drone": _drone.visible,
+		"props": [_balloons.visible, _heli.visible, _ufo.visible], "finish": str(_fin.get("id", ""))}
+
+
+## Combo tack rows (tests): [{kind, col, sc, landed, follow}] of the live combo caltrops.
+func combo_tacks() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for tk: Dictionary in _tacks:
+		if str(tk.get("kind", "t3")) == "combo":
+			out.append(tk)
+	return out

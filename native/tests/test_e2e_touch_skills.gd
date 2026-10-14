@@ -5,6 +5,9 @@ extends RefCounted
 ##       SkillCues), CameraRig) lets a touch player cast t1 (jam + fight), mv_jump, t3, mv_drone and an executing t5,
 ##       see the equipped finisher, skip it, and reach the result card — with 압정 held the whole fight and 0 honks.
 ##   godot47 --headless --path native -s res://tests/run_tests.gd -- --suite=e2e --filter=touch_skills
+## r3 C3: a second run per backend taps the 분노 rect in the boss phase BEFORE the front lock (the iPhone complaint
+## "분노 채워서 버튼 누르는데 범위에 안 닿아"): the tap must be a t1_wave that takes villain HP (+ the rage_horn shoulder
+## clear, tagged via t1_wave), with the HUD on the fight face.
 
 const SUITE := "e2e"
 const GameScene: PackedScene = preload("res://view/game.tscn")
@@ -30,6 +33,7 @@ func run() -> int:
 		modes.push_front(false)
 	for fb: bool in modes:
 		await _one(tree, fb, 1007)
+		await _prelock(tree, fb, 1007)
 	if au != null:
 		au.set(&"manual_clock", false)
 	return _fails
@@ -102,13 +106,53 @@ func _one(tree: SceneTree, fb: bool, sd: int) -> void:
 	var casts: PackedStringArray = []
 	for e: Dictionary in r.events:
 		if str(e.get("type", "")) == "skill_start":
-			starts[str(e.get("id", ""))] = int(starts.get(str(e.get("id", "")), 0)) + 1
+			if not str(e.get("_ph", "")).ends_with("/pilot"):  # r3 C3: the autopilot's own pre-lock taps are t1_wave now
+				starts[str(e.get("id", ""))] = int(starts.get(str(e.get("id", "")), 0)) + 1
 			casts.append("%s@%s" % [str(e.get("id", "")), str(e.get("_ph", ""))])
 	_check(int(starts.get("t1_wave", 0)) == 1 and int(starts.get("t3_carpet", 0)) == 1 and int(starts.get("t5_finish", 0)) == 1,
-		"%s: each fight tier exactly once (t3 was a 0.2 s hold) %s" % [tag, starts])
+		"%s: each fight tier exactly once by touch (t3 was a 0.2 s hold) %s" % [tag, starts])
 	print("INFO e2e_touch_skills: %s casts %s" % [tag, " ".join(casts)])
 	print("INFO e2e_touch_skills: %s topped up [%s] boss %.1f s phases %s (%d ms wall)" % [tag, "; ".join(r.topped),
 		float((g.st.get("result", {}) as Dictionary).get("boss_time_s", 0.0)), ",".join(g.phase_log), Time.get_ticks_msec() - t0])
+	g.event_tap = Callable()
+	g.queue_free()
+	await tree.process_frame
+
+
+## r3 C3: the autopilot drives to the boss phase; before the lock a human finger taps 분노 at 1 segment.
+func _prelock(tree: SceneTree, fb: bool, sd: int) -> void:
+	var tag: String = "%s seed %d pre-lock" % ["fallback" if fb else "native", sd]
+	var g: Game = make(tree, tree.root, fb, sd)
+	await tree.process_frame
+	await tree.process_frame
+	var r = Run.new(g, tree.root)
+	var sim: GameSim = g.sim
+	var reached: bool = r.until(func() -> bool: return g.phase == &"boss" and not sim.front_locked and sim.boss.any_alive(), 100.0)
+	_check(reached, "%s: autopilot reaches the boss phase before the lock" % tag)
+	if not reached:
+		g.queue_free()
+		await tree.process_frame
+		return
+	r.hand_over()
+	r.want_tier(1)
+	var hp0: float = 0.0
+	for v: Dictionary in sim.boss.alive():
+		hp0 += float(v["hp"])
+	var face: String = str(((g.st.get("skills", {}) as Dictionary)).get("face", ""))
+	var locked_at_tap: bool = sim.front_locked
+	var e: Dictionary = r.cast_rage(1, "pre_t1")
+	var i0: int = int((r.notes["pre_t1"] as Dictionary)["i0"])
+	var hit: Dictionary = r.wait_hit(i0, "t1_wave", 1.0)
+	var hp1: float = 0.0
+	for v: Dictionary in sim.boss.villains:
+		hp1 += maxf(0.0, float(v["hp"]))
+	var rh: Dictionary = r.ev_since(i0, "rage_horn")
+	_check(not locked_at_tap and str(e.get("id", "")) == "t1_wave" and not hit.is_empty() and hp1 < hp0 - 0.5,
+		"%s: 분노 rect tap → %s, villain HP %.1f → %.1f (skill_hit %s)" % [tag, str(e.get("id", "?")), hp0, hp1, str(not hit.is_empty())])
+	_check(not rh.is_empty() and str(rh.get("via", "")) == "t1_wave" and r.ev_since(i0, "skill_denied").is_empty(),
+		"%s: same tap clears the shoulder (rage_horn via %s), no denial" % [tag, str(rh.get("via", "?"))])
+	_check(face == "wave" and int((r.notes["pre_t1"] as Dictionary).get("face", 0)) == 1,
+		"%s: HUD before the tap: state face '%s', next tier t%d" % [tag, face, int((r.notes["pre_t1"] as Dictionary).get("face", 0))])
 	g.event_tap = Callable()
 	g.queue_free()
 	await tree.process_frame

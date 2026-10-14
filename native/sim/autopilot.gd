@@ -12,6 +12,11 @@ extends RefCounted
 ## 가설: ✅ the web route (shoulder → honk when blocked → slip into lane 4 → shoulder again; in the fight: stay
 ##       beside the villain, dodge telegraphed lanes) completes 1-1; ❓ its boss time is a fair proxy for a
 ##       careful human (naive-bot gate is DESIGN_REVIEW P1 #10, not this file).
+## r3 A2 bottleneck (sim/neck_sim.gd, while GameSim.neck.is_active): neck_mode "verb" (default) plays the stage's verb
+## like a player who read the chip — get on the shoulder, pull up behind the plug (≤ 3 m, < 1 m/s faster than it) and
+## react after `react` s, then: honk n (2nd honk 1.05 s later), race (honk and keep going), quiet (follow, never honk),
+## push (shoulder honk), deaf (rage t1), 1-6 pass (brake to ≤ passV - 0.6 alongside), 1-8 blink (one honk, wait). "naive" = no input at all while it is on;
+## "spam" = shoulder + honk at every chance, no rage (tests/test_neck.gd gates the three against each other).
 
 var rng := RandomNumberGenerator.new()
 var next_t: float = 0.0
@@ -20,6 +25,15 @@ var _hold_max: int = -1   # -1 = not rolled for this rage level, 0 = spend, 1 = 
 ## "default" (above) | "max_exec": a patient human who saves the whole bar for MAX and casts t5 once the villain is
 ## under the execute line (tests/test_e2e_economy.gd: the rage ladder must reach 참교육 + execute without top-ups).
 var policy: String = "default"
+## r3 A2: "verb" | "naive" | "spam" (see above).
+var neck_mode: String = "verb"
+var _brake: bool = false
+var _neck_seen: float = -1.0
+var _neck_honk_t: float = -99.0
+var _neck_honks: int = 0
+var _neck_stuck: float = -1.0
+## Seconds behind the plug before the verb bot acts (a player reading the situation).
+var react: float = 0.4
 
 
 func _init(seed: int = 1) -> void:
@@ -33,16 +47,27 @@ func drive(sim: GameSim) -> void:
 		return
 	var p: PlayerSim = sim.player
 	var locked: bool = ph == &"boss" and sim.front_locked
+	var in_neck: bool = sim.neck.is_active(sim)
 	var want_fire: bool = locked
 	if sim.is_jam_like():
 		want_fire = sim.bridge.mini_target() != 0 or (ph == &"boss" and not sim._target().is_empty())
+	if in_neck and neck_mode == "naive":
+		want_fire = false
 	if want_fire != fire:
 		fire = want_fire
 		sim.input(&"fire", fire)
+	if not in_neck:
+		_neck_seen = -1.0
+		_neck_stuck = -1.0
+		_neck_honks = 0
+		if _brake and not (sim.neck.blocking() and str(sim.neck.plug.get("phase", "")) == "yield"):
+			_set_brake(sim, false)
 	if sim.real_time < next_t:
 		return
 	if locked:
 		_fight(sim, p)
+	elif in_neck or (sim.is_jam_like() and _brake):
+		_neck(sim, p, in_neck)
 	elif sim.is_jam_like():
 		_approach(sim, p)
 	elif ph == &"cruise" or ph == &"release":
@@ -64,7 +89,7 @@ func _approach(sim: GameSim, p: PlayerSim) -> void:
 	var cost: float = float(sim.tune.get("superCost", 0.2))
 	var SL: int = Cfg.SHOULDER_LANE
 	var front: float = p.s + p.len / 2.0
-	if sim.rage >= cost * 2.0 and float(b.gap_ahead(SL, p.s).get("gap", INF)) < 20.0 and rng.randf() < 0.05:
+	if sim.rage >= cost * 2.0 and float(b.gap_ahead(SL, p.s).get("gap", INF)) < 20.0 and not _near_plug(sim) and rng.randf() < 0.05:
 		sim.input(&"rage")
 	if sim.skills.enabled and p.lane == SL and sim.skills.item_ready(sim, 2) \
 			and str(b.gap_ahead(SL, p.s + p.len / 2.0).get("type", "")) == "obstacle" and float(b.gap_ahead(SL, p.s + p.len / 2.0)["gap"]) < 14.0:
@@ -110,6 +135,83 @@ func _approach(sim: GameSim, p: PlayerSim) -> void:
 			next_t = sim.real_time + 0.25
 	if dir != 0:
 		sim.input(&"lane", dir)
+
+
+## r3 A2: the plug is within 40 m ahead (the neck policy decides about rage there; no plug = no RNG change).
+func _near_plug(sim: GameSim) -> bool:
+	var nk: NeckSim = sim.neck
+	return nk.blocking() and nk.gap(sim) < 40.0 and nk.gap(sim) > -float(nk.plug.get("len", 4.5))
+
+
+func _set_brake(sim: GameSim, on: bool) -> void:
+	if on != _brake:
+		_brake = on
+		sim.input(&"brake", on)
+
+
+## r3 A2: one decision while the bottleneck is on (or a 1-6 slow pass is still running).
+func _neck(sim: GameSim, p: PlayerSim, in_neck: bool) -> void:
+	var nk: NeckSim = sim.neck
+	var SL: int = Cfg.SHOULDER_LANE
+	if neck_mode == "naive":
+		_set_brake(sim, false)
+		return
+	var ph: String = str(nk.plug.get("phase", "gone"))
+	# 1-6: pass the victim at <= passV while it is aside
+	if ph == "yield" and str(nk.state(sim).get("yield", "")) == "pass":
+		var lim: float = float(nk.pc.get("passV", 6.0)) - 0.6
+		_set_brake(sim, p.v > lim)
+		next_t = sim.real_time + 0.02
+		return
+	_set_brake(sim, false)
+	if not in_neck:
+		return
+	if p.lane < SL:
+		if _free(sim, p.lane + 1):
+			_go(sim, 1, 0.25)
+		elif neck_mode == "spam":
+			sim.input(&"honk")
+		return
+	if neck_mode == "spam":
+		sim.input(&"honk")
+		next_t = sim.real_time + 0.05
+		return
+	var g: float = nk.gap(sim)
+	if _neck_seen < 0.0:
+		_neck_seen = sim.real_time
+	if ph != "block":
+		return
+	var behind: bool = g <= 3.0 and g >= -0.5 and p.v - float(nk.plug.get("v", 0.0)) < 1.0
+	if not behind:
+		_neck_stuck = -1.0
+		return
+	if _neck_stuck < 0.0:
+		_neck_stuck = sim.real_time
+	if sim.real_time - _neck_stuck < react:
+		return
+	match nk.valve:
+		"quiet":
+			return
+		"deaf":
+			if (sim.skills.enabled and sim.skills.segs(sim) >= sim.skills.cost(sim.skills.jam_tier)) \
+					or (not sim.skills.enabled and sim.rage >= float(sim.tune.get("superCost", 0.2)) - 1e-6):
+				sim.input(&"rage")
+				next_t = sim.real_time + 0.6
+			return
+		"race":
+			sim.input(&"honk")
+			next_t = sim.real_time + 1.1
+			return
+		_:
+			var need: int = maxi(1, int(nk.pc.get("n", 1)))
+			if _neck_honks > 0 and sim.real_time - _neck_honk_t > float(nk.pc.get("window", 1.5)) + 1.5:
+				_neck_honks = 0  # the last round did not open it: start over
+			if _neck_honks >= need:
+				return
+			sim.input(&"honk")
+			_neck_honks += 1
+			_neck_honk_t = sim.real_time
+			next_t = sim.real_time + (1.05 if _neck_honks < need else 0.5)
 
 
 func _smash(b: TrafficBridge, g: Dictionary) -> bool:
