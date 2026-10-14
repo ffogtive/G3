@@ -18,7 +18,13 @@ extends Node3D
 ## --safe-pt=TOP,BOTTOM (fake notch / home-indicator insets in points). Live runs write the boot line to user://boot.txt
 ## (Documents/ on iOS) so tools/mac/ios_run.sh can report native=true|false after launch.
 ## Hosting (screens/app.gd, NATIVE_PARITY 8): hosted → stage_finished(result) at the result phase (fail-card menu =
-## {aborted: true}); intro_hold + begin(); loadout is stored for the meta layer.
+## {aborted: true}); intro_hold + begin(); loadout (Progress.loadout(); standalone live runs read Progress itself) goes
+## to GameSim as tables.options.loadout (finish, items / jump / drone → item1 / item2, rage_start_segs) and the HUD
+## t5 face (hud.finish_id).
+## Skills (docs/SKILLS.md §6 뷰 훅): LaneInput 분노 tap → &"rage", item1 / item2 taps → &"item1" / &"item2", an open-screen
+## tap while state.skills.skip_ready (or the HUD skip hint) → &"skip". Skill events reach Hud / FightFx (SkillFx 3D +
+## SkillCues audio / haptics) / CameraRig through the fan-out below; this file plays no audio or haptics for skill_*,
+## tier_ready, item_ready or finisher (SkillCues owns them), only the shared kill / rage{full} / rage_horn cues.
 
 signal stage_finished(result: Dictionary)
 signal paused_changed(on: bool)
@@ -83,6 +89,8 @@ var phase_log: Array[StringName] = []
 var sfx_played: int = 0
 var haptic_calls: int = 0
 var event_counts: Dictionary = {}       # event type → count over the whole run (log_events keeps only the last 256)
+## Tests / shots: called with every drained GameSim event after the fan-out (touch-driven runs wait on skill events).
+var event_tap: Callable = Callable()
 var result_shown: bool = false
 var _prev := PackedFloat32Array()
 var _cur := PackedFloat32Array()
@@ -128,8 +136,14 @@ func build() -> void:
 		stage_id = 1
 		stage = ViewData.stage(1)
 	tables = _DB.load_traffic_tables()
+	if loadout.is_empty() and not manual and not hosted:  # standalone live run: the saved garage
+		var prog: Node = get_tree().root.get_node_or_null(^"Progress") if is_inside_tree() else null
+		if prog != null and prog.has_method(&"loadout"):
+			loadout = prog.call(&"loadout")
+	var opts: Dictionary = {"loadout": loadout}
 	if intro_hold:
-		tables["options"] = {"intro_hold": true}
+		opts["intro_hold"] = true
+	tables["options"] = opts
 	cfg = tables.get("config", {}) if tables.get("config") is Dictionary else {}
 	tune = cfg.get("tune", {}) if cfg.get("tune") is Dictionary else {}
 	var lt: Variant = ViewData.table("lines")
@@ -213,6 +227,7 @@ func build() -> void:
 	hud.bind_world(camera, road)
 	hud.stage = stage
 	hud.rage_cost = float(tune.get("superCost", 0.2))
+	hud.finish_id = str(loadout.get("finish", "")) if str(loadout.get("finish", "")) != "" else str(sim.bc.get("finish", "rocket"))
 	hud.card_choice.connect(_on_card)
 	if _safe_pt != Vector2.ZERO:
 		hud.debug_safe_pt = _safe_pt
@@ -373,6 +388,9 @@ func _route_input() -> void:
 		input.consume_horn()
 		input.consume_rage()
 		input.consume_fire()
+		input.consume_item(1)
+		input.consume_item(2)
+		input.consume_skip()
 		return
 	var d: int = input.consume_lane()
 	if d != 0:
@@ -381,6 +399,12 @@ func _route_input() -> void:
 		sim.input(&"honk")
 	if input.consume_rage():
 		sim.input(&"rage")
+	if input.consume_item(1):
+		sim.input(&"item1")
+	if input.consume_item(2):
+		sim.input(&"item2")
+	if input.consume_skip():
+		sim.input(&"skip")
 	var edge: bool = input.consume_fire()
 	sim.input(&"fire", input.is_fire_down() or edge)  # the edge catches taps shorter than one tick
 	sim.input(&"brake", input.is_brake_down())
@@ -455,8 +479,11 @@ func _on_event(e: Dictionary) -> void:
 			last_honk_reply = {"kind": str(e.get("data", "")), "id": int(e.get("id", 0))}
 			_reply_bubble(last_honk_reply)
 		"fire":
-			haptic("fire")
-			sfx(&"tack", {"volume": 0.6, "pitch": 0.9 + _pick.randf() * 0.25})
+			if bool(e.get("drone", false)):  # the passive drone's shots: a light tick, no thumb buzz (that is the player's 압정)
+				sfx(&"tack", {"volume": 0.3, "pitch": 1.25 + _pick.randf() * 0.15})
+			else:
+				haptic("fire")
+				sfx(&"tack", {"volume": 0.6, "pitch": 0.9 + _pick.randf() * 0.25})
 		"bomb":
 			haptic("rageFire")
 			sfx(&"super")
@@ -520,6 +547,8 @@ func _on_event(e: Dictionary) -> void:
 			_on_retry()
 		"bubble":
 			_bubble(e, p)
+	if event_tap.is_valid():
+		event_tap.call(e)
 
 
 func _on_hit(e: Dictionary) -> void:
@@ -725,15 +754,19 @@ func _log(ev: Dictionary) -> void:
 
 
 ## Tests / shots: run n sim ticks synchronously, the camera / FX / HUD on the same fixed dt, then refresh the view once.
+## FightFx runs on sim time (hit-stop freezes it, slow-mo slows it: Σ TICK × the tick's time scale), like its _process.
 func advance_ticks(n: int) -> void:
+	var fx_dt: float = 0.0
 	for i: int in n:
 		sim_tick(TICK)
 		real_time += TICK
+		fx_dt += TICK * (sim.time_scale() if fx.use_sim_time else 1.0)
 		honk_fx.advance(TICK)
 		for hv: HeroVehicleView in _heroes():
 			hv.advance_wheels(TICK)
 	if manual:
-		fx.advance(TICK * n)
+		fx.advance(fx_dt)
+		fx.cues.advance(TICK * n)  # haptic beats are real time (process is off when manual)
 		hud.advance(TICK * n)
 	_update_view(1.0)
 	camera.step(TICK * n)
@@ -805,6 +838,8 @@ func _update_view(frac: float) -> void:
 	fx.sync(st, _cur)
 	hazards.sync(st)
 	hud.apply_state(st)
+	var sk: Dictionary = st.get("skills", {}) if st.get("skills") is Dictionary else {}
+	input.skip_armed = bool(sk.get("skip_ready", false)) or hud.skip_hint_visible()
 	hud.villain_s = sim.boss.ref_s()
 	hud.start_s = start_s
 	hud.horn_down = input.is_horn_down()

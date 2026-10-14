@@ -177,6 +177,7 @@ var items: Array[Dictionary] = []
 var skill_active: Dictionary = {}
 ## Equipped finish (loadout.finish) for the t5 face; view/game.gd sets it, default rocket.
 var finish_id: String = "rocket"
+var _sim_skip: int = -1   # state.skills.skip_ready: 1 / 0, -1 = not published (derive from the kill clock)
 var skip_after: float = 0.6
 var _btn_items: Array[Control] = []
 var _item_pop_t: Array[float] = [-99.0, -99.0]
@@ -609,6 +610,7 @@ func _apply_skills(st: Dictionary) -> void:
 		next_tier = tiers_ready.max() if not tiers_ready.is_empty() else 0
 		execute_frac = 0.4 if skill_mode == "fight" and tiers_ready.has(5) else 0.0
 		skill_active = {}
+		_sim_skip = -1
 		items = []
 	else:
 		skill_segs = int(sk.get("segs", rage_level()))
@@ -619,6 +621,7 @@ func _apply_skills(st: Dictionary) -> void:
 		next_tier = int(sk.get("next_tier", 0))
 		execute_frac = float(sk.get("execute_frac", 0.0))
 		skill_active = sk.get("active", {}) if sk.get("active") is Dictionary else {}
+		_sim_skip = int(sk.get("skip_ready", false)) if sk.has("skip_ready") else -1
 		items.clear()
 		for it: Variant in sk.get("items", []):
 			if it is Dictionary:
@@ -658,7 +661,8 @@ func on_event(e: Dictionary) -> void:
 		"skill_start", "skill_hit", "skill_end", "skill_denied", "tier_ready", "item_ready", "finisher":
 			_on_skill_event(e)
 		"fire":
-			_fire_kick = now
+			if not bool(e.get("drone", false)):  # the passive drone's shots are not the player's 압정 (no button recoil)
+				_fire_kick = now
 		"hit":
 			var big: bool = bool(e.get("window", false)) or str(e.get("kind", "")) == "bomb"
 			var dmg: float = float(e.get("dmg", 0.0))
@@ -813,8 +817,12 @@ func _on_skill_event(e: Dictionary) -> void:
 			_kill_real = now
 
 
-## Skippable cinematic right now: the sim's active.skippable, or the kill phase past finish.skipAfter.
+## Skippable cinematic right now: the sim's state.skills.skip_ready when it publishes one (the hint and the tap
+## must agree: the HUD's own kill clock ran ~30 ms ahead of the sim's and a tap in that gap was lost), else
+## active.skippable or the kill phase past finish.skipAfter.
 func skip_hint_visible() -> bool:
+	if _sim_skip >= 0:
+		return _sim_skip == 1
 	if bool(skill_active.get("skippable", false)):
 		return true
 	var after: float = skip_after

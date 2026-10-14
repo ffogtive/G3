@@ -19,6 +19,9 @@
 #            result card on 5 seeds (autopilot), the 압정 button path through LaneInput, wreck → fail card → retry →
 #            honest result. Then (with Xvfb, unless --no-shot) tests/shot_game.gd renders each phase of the integrated
 #            game into <out>/e2e (exit 1 when a moment is never reached or the reticle is off screen). --no-e2e skips.
+#            Then tests/shot_game_skills.gd --fallback (the iPhone traffic path) plays the touch-driven skills run
+#            (jam t1, t1, 점프, t3, 드론, t5 execute → finisher → skip → result; device feedback 2026-10-14 #4) into
+#            <out>/skills (exit 1 when a cast / the skip / the result is missing).
 # Env: GODOT (default godot47, falls back to godot with a warning), NATIVE_PROJ (default native/), NATIVE_CHECK_OUT
 #      (default native/build/native-check; gitignored and hidden from the Godot importer).
 set -uo pipefail
@@ -168,6 +171,16 @@ if [ "$E2E" = 1 ]; then
       grep -E '^SCRIPT ERROR' "$OUT/e2e_shots.log" | head -n 5; [ "$src" = 0 ] && src=1
     fi
     [ -s "$OUT/e2e/final_result.png" ] || { [ "$src" = 0 ] && src=1; }
+    [ "$rc" = 0 ] && rc=$src
+    rm -rf "$OUT/skills"
+    xvfb-run -a -s "-screen 0 1280x1024x24" "$GODOT" --path "$PROJ" --rendering-method mobile \
+      --audio-driver Dummy -s res://tests/shot_game_skills.gd -- --out="$OUT/skills" --fallback > "$OUT/skills_shots.log" 2>&1
+    src=$?
+    grep -E '^(RESULT traffic|RESULT ok|FAIL)' "$OUT/skills_shots.log"
+    if grep -E '^SCRIPT ERROR' "$OUT/skills_shots.log" | head -n 5 | grep -q .; then
+      grep -E '^SCRIPT ERROR' "$OUT/skills_shots.log" | head -n 5; [ "$src" = 0 ] && src=1
+    fi
+    [ -s "$OUT/skills/skills_sheet.png" ] || { [ "$src" = 0 ] && src=1; }
     [ "$rc" = 0 ] && rc=$src
   fi
   step e2e $rc

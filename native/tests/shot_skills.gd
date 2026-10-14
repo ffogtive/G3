@@ -437,6 +437,8 @@ func _run_skill(run: String) -> void:
 		var v2: Dictionary = _stub.target()
 		v2["hp"] = float(v2["max_hp"]) * 0.32
 	await _grab(run, "pre")
+	_impact_seen = false  # only this cast's first skill_hit
+	_impact_pos = Vector3.INF
 	_cast({"t1jam": "1", "t1": "1", "t3": "3", "t5": "5", "t5x": "5", "jump": "item1", "drone": "item2"}[run])
 	_advance_ticks(FRAME_TICKS)
 	await _grab(run, "cast")

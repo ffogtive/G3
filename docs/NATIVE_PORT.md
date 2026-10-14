@@ -700,3 +700,68 @@ M1은 게임의 대부분이므로 다섯 단계로 나누고, **사용자의 �
 - 예고 연출은 단순하다: 원뿔, 아치, 구, 링. 웹의 컵·폰 모델은 아니다. 부순 콘은 정적 배칭이라 남아 보인다. 고장차만 숨긴다.
 - 원흉전 화면이 붐빈다. '치명! −N' 팝이 도발 말풍선과 겹친다(M1d 정리 후보).
 - 기기에서 아직 확인하지 않은 것 ❓: 무음 스위치를 켠 BGM, 햅틱 체감(fire 5/s), 120 Hz에서 FX·예고를 켠 프레임 시간.
+
+### 2026-10-14 (2) — 기기 2차 피드백 반영: 통과 버그 · 링 게이지 · 압정≠경적 · 분노 사다리/아이템 통합
+가설: ✅ 스킬 sim(`sim/skills_sim.gd`)과 연출(`fx/skill_fx.gd`·`fx/skill_cues.gd`·카메라·HUD)은 이미 있었다. 빠진 것은 뷰 배선(LaneInput 분노·item1·item2·skip → GameSim, loadout → GameSim·HUD)뿐이었다. 배선 뒤에는 터치만으로 1-1에서 모든 단계와 아이템을 쓸 수 있다(네이티브 + 폴백). ❓ 기기에서 '쾌감' 판정.
+
+**피드백 → 원인 → 반영** (상세는 FEEDBACK_LOG 2026-10-14 행)
+- ① 빌런 뒤에서 앞으로 통과: iPhone 경로(GDScript 폴백 `_Creep`)가 빌런을 리더·차로 점유로 보지 않았다 → `traffic_bridge.gd` 폴백만 수정(C++ 무변경). `test_collide` 폴백 포함.
+- ② 링·막대 중복: 막대 삭제, 분노 버튼 링(5칸, 1·3·MAX)이 유일한 게이지. `test_hud_rage`.
+- ③ 압정이 경적: GameSim이 정체에서 대상 없는 압정을 경적으로 바꿨다(웹 이식) → 압정은 경적·스킬을 절대 만들지 않는다, 대상이 없으면 `fire_dry`. `test_input_zones`.
+- ④ 쾌감 + 분노 단계 스킬 + 아이템: `docs/SKILLS.md` 사다리 t1/t3/t5 + item1 점프 / item2 드론 + 피니시 킬캠 + 건너뛰기(sim·연출은 각 담당, 이번 단계는 통합).
+
+**통합 (이번 단계)**
+- `input/lane_input.gd`:
+  - 존 `item1`/`item2`에서 손가락이 닿는 순간 엣지가 1개 생긴다(`consume_item(slot)`, `item_requested`). 빈 슬롯은 `Rect2()`라 존이 아니다.
+  - skip: `skip_armed`일 때 빈 화면을 탭하면(스와이프·버튼 아님) `consume_skip()`.
+  - 분노는 길게 눌러도 탭 1회다(닿는 순간).
+  - 키보드: Q/1 item1, E/2 item2, Enter/K skip.
+- `view/game.gd`:
+  - `tables.options.loadout`: 호스트(app)가 준 loadout을 쓰고, 단독 실행이면 `Progress.loadout()`을 쓴다. manual(테스트·샷)은 호출자가 준 값만 쓴다.
+  - `hud.finish_id` = 장착 피니시.
+  - `_route_input`: `&"item1"`/`&"item2"`/`&"skip"`을 보낸다.
+  - `input.skip_armed` = `state.skills.skip_ready`(또는 HUD 힌트).
+  - 드론의 `fire`(drone: true)는 햅틱 없이 작은 tack 소리만 낸다.
+  - manual `advance_ticks`: FightFx는 Σ TICK × 그 틱의 sim 배율(히트스톱이면 멈추고 슬로모면 느려진다), SkillCues는 실시간으로 진행한다.
+  - 테스트용 `event_tap`.
+  - skill_*·tier_ready·item_ready·finisher의 소리·햅틱은 SkillCues만 낸다(중복 없음).
+- `ui/hud.gd`:
+  - '탭: 건너뛰기' 힌트는 sim의 `skip_ready`를 따른다. HUD 자체 kill 시계가 sim보다 약 30 ms 빨라서, 그 틈의 탭이 무시되던 것을 고쳤다(터치 e2e가 잡았다).
+  - 드론의 fire로는 압정 버튼이 반동하지 않는다.
+- `tools/native-check.sh` e2e 단계: `shot_game_skills.gd --fallback`(iPhone 경로) 터치 스킬 런을 추가했다. 캐스트·skip·결과가 하나라도 빠지면 exit 1.
+
+**테스트 · 샷**
+- `tests/skills_touch_run.gd`(공용 드라이버):
+  - 접근은 autopilot이 한다. 정체 t1과 원흉전은 '사람'이 HUD rect에 `InputEventScreenTouch`를 보낸다(Viewport.push_input, 캔버스 좌표).
+  - 원흉전 동안 손가락 0으로 압정을 누르고 있다. ◀ ▶ 탭으로 예고를 피한다.
+  - 순서: 분노 t1 → item1 → 분노 t3(0.2 s 홀드) → item2 → 분노 t5 처형 → 피니시 → 빈 화면 탭 skip → 결과.
+  - 분노가 모자라면 그 단계 칸 수로 채운다. 경제는 `test_e2e_skills` 몫이다. t5 때 HP가 처형선 위면 처형선 아래로 낮춘다. 채운 내역은 INFO 줄에 찍는다.
+- `tests/test_e2e_touch_skills.gd`(`--suite=e2e`), 네이티브 + 폴백, seed 1007, 각 20+ 체크 fails=0:
+  - 정체 t1_horn + rage_horn. 압정을 누르고 있어도 경적 0.
+  - t1_wave / t3_carpet / t5_finish가 각 1회 나오고 맞는다. 탭 직전 HUD 얼굴 = 그 단계.
+  - mv_jump / mv_drone가 맞고, 그동안 압정이 계속 눌려 있다.
+  - item 존이 등록되고, 모든 존이 서로 겹치지 않는다.
+  - t3에서 SkillFx 압정 12개 + 데칼이 나온다. t5가 처형하고 처형선 0.40이다.
+  - finisher rocket → 카메라 rocket, HUD rocket.
+  - SkillCues가 haptic skillT5Charge·skillT3Hit 등을 내고(72–81 cue), Audio SFX 144–162개가 나온다.
+  - skip{finish}. HUD 힌트 = sim skip_ready(모든 프레임 불일치 0). 경적 누출 0. 결과 카드.
+- `tests/shot_game_skills.gd`(Xvfb, 통합 game.tscn): 20장 + `skills_sheet.png`.
+  - 장면: jam_t1_cast/wave, fight_lock, t1_cast/hit, jump_air/land, t3_cast/hit/after, drone_cast/hit, t5_cast/charge/impact, finish_a/b, skip, release, result.
+  - 네이티브·폴백 모두 RESULT ok=true.
+  - 위치: `…/scratchpad/skills/final/{native,fallback}/`.
+
+**검증**
+- unit 27파일 fails=0. e2e 3파일 fails=0(e2e_1_1 · e2e_skills · e2e_touch_skills). integration fails=0.
+- `native-check.sh` GREEN(ext·import·t0·shot·jam·e2e, 스킬 샷 포함).
+- iOS export dry-run exit 0(12 s, 441 MB 폴더, `lane1.pck` 11.5 MB).
+  - pck에 skills_sim·skill_cues·sk_*/fin_* wav가 들어가고 tests/는 빠진다.
+  - 경고는 기존 것뿐이다(boot_splash 속성, .ipa는 macOS 전용).
+- Mac 빌드·설치·실행·기능 확인은 각각 ❓다. 이 컨테이너는 Mac에 닿지 않는다.
+
+**알려진 차이 · 결정 필요 ❓**
+- t5 임팩트의 흰 플래시(config.skills.fx.t5.flash α 0.85)가 2–3프레임 화면을 덮는다(샷 15). α 0.6–0.65 후보, 기기에서 판정.
+- 점프·드론을 쓰면 스킬 피해가 원흉 HP의 36–58 %라 '50 % 이하' 지침을 넘는 판이 있다. 기기 체감으로 dmgIn이나 hpMul을 정한다.
+- 폴백에는 잔챙이(mini)가 없다. iPhone 정체에서 드론은 장애물만 치우고, 압정은 `fire_dry`만 낸다.
+- 1-5 폴백 autopilot이 정체에 갇힌다. 이번 변경 전부터 있던 문제다(sim 담당 보고). iPhone 1-5에서 확인이 필요하다.
+- 원흉전 화면이 붐빈다. 차 위 말풍선이 HUD 범퍼 줄 밑에 깔린다(Bubbles는 옆으로만 피한다).
+- shop.json의 점프·드론 설명('쿨 4초', '원흉에 자동 사격')이 원흉전 동작(쿨 6 s, 패시브 사격은 정체 잔챙이만)과 다르다. 문구 수정은 상점 담당.
