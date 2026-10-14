@@ -166,7 +166,9 @@ build_haptics_ios() {
 pick_ios_archive() {
   local base=$1 t=$2 f best="" best_m=0 m
   shift 2
-  for pat in "$base.ios.$t*.a" "$base*ios*$t*.a" "$base*ios*.a"; do
+  # Device run 2026-10-14: the real archives are "<base>.ios.<target>..a" (godot-cpp leaves the arch suffix empty
+  # under the Xcode generator). Never pick the stub copies inside *.xcframework/ (they would win on mtime).
+  for pat in "$base.ios.$t.arm64.a" "$base.ios.$t..a" "$base.ios.$t*.a" "$base*ios*$t*.a"; do
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
@@ -174,7 +176,7 @@ pick_ios_archive() {
         best=$f
         best_m=$m
       fi
-    done < <(find "$@" -name "$pat" -type f 2>/dev/null || true)
+    done < <(find "$@" -name "$pat" -type f -not -path '*.xcframework/*' 2>/dev/null || true)
     [ -z "$best" ] || break
   done
   printf '%s' "$best"
@@ -222,9 +224,28 @@ build_traffic_ios() {
     return 1
   fi
   log "traffic archives: $(rel "$lib"), $(rel "$cpp")"
+  # The empty arch suffix must not mean a wrong slice: both archives have to contain arm64 for the device.
+  local f2 archs
+  for f2 in "$lib" "$cpp"; do
+    archs=$(xcrun lipo -archs "$f2" 2>/dev/null || lipo -archs "$f2" 2>/dev/null || echo "?")
+    case " $archs " in
+      *" arm64 "*) ;;
+      *)
+        warn "$(rel "$f2") has archs '$archs' (need arm64)"
+        return 1
+        ;;
+    esac
+  done
+  # Clean inner names ("..a" → ".a") so the xcframework slice matches what Godot's export links.
+  local clean="$bdir/xcf-input"
+  rm -rf "$clean" && mkdir -p "$clean"
+  cp "$lib" "$clean/libtraffic.ios.$t.a"
+  cp "$cpp" "$clean/libgodot-cpp.ios.$t.a"
   rm -rf "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework"
-  xcodebuild -create-xcframework -library "$lib" -output "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" >/dev/null
-  xcodebuild -create-xcframework -library "$cpp" -output "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework" >/dev/null
+  xcodebuild -create-xcframework -library "$clean/libtraffic.ios.$t.a" \
+    -output "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" >/dev/null
+  xcodebuild -create-xcframework -library "$clean/libgodot-cpp.ios.$t.a" \
+    -output "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework" >/dev/null
   log "traffic: $(rel "$EXT_DIR/bin/libtraffic.ios.$t.xcframework") + libgodot-cpp"
 }
 
