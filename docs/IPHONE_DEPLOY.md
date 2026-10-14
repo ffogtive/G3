@@ -16,7 +16,9 @@
 1. **Mac 앞에서**(SSH 말고, 로그인된 화면의 Terminal) Xcode 27.x가 열리고 `Xcode > Settings… > Apple Accounts`에
    로그인돼 있는지 확인. 처음이면 `tools/mac/SIGNING.md` 1~2단계.
 2. iPhone을 케이블로 연결 → 잠금 해제 → "이 컴퓨터 신뢰" → 개발자 모드 켜짐 확인(SIGNING.md 3~4단계).
-3. `cd <G3 클론> && git pull`
+3. 받기·갱신(처음이면 홈 폴더에 `G3`를 만들고, 이미 있으면 갱신만): 아래 한 줄이 4번까지 이어서 실행한다.
+   `cd ~ && { [ -d G3/.git ] || git clone https://github.com/ffogtive/G3.git; } && cd G3 && git fetch origin claude/lane1-mockup && git checkout claude/lane1-mockup && git pull --ff-only && bash tools/mac/ios_run.sh`
+   (iPhone은 케이블 또는 같은 Wi‑Fi에서 이전에 페어링된 상태면 된다. `brew install cmake ninja`가 있으면 C++ traffic, 없으면 GDScript 폴백)
 4. `tools/mac/ios_run.sh` — 끝에 **build / install / launch가 따로** 찍힌다. "신뢰하지 않는 개발자"면 iPhone에서
    `설정 > 일반 > VPN 및 기기 관리 > 개발자 앱 > 신뢰` 후 `tools/mac/ios_run.sh --launch-only`.
 5. 앱이 뜨면 기능 확인(화면·터치·햅틱). 결과는 `.local/deploy-runs/<최신>/receipt.txt`(식별자 없음)와 함께 알려 준다.
