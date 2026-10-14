@@ -639,6 +639,7 @@ func _step_sys(sys: int, dt: float) -> void:
 		return
 	var alive: Array = []
 	var buf: PackedFloat32Array = _bufs[sys]
+	_bufs[sys] = PackedFloat32Array()  # drop the second reference so the writes below stay in place (no COW copy)
 	if buf.size() != mm.instance_count * 16:
 		buf.resize(mm.instance_count * 16)
 	var n: int = 0
