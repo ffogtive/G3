@@ -35,7 +35,7 @@
     }
   },
   "default": {
-    "checkpoints": {"at": [150, 100, 60], "atLong": [180, 130, 90, 50], "fastMul": 1.5, "fastWindow": 8, "longJam": 200, "minLead": 15, "on": true, "rage": 0.04, "rageLong": 0.03, "score": 100},
+    "checkpoints": {"at": [150, 100, 60], "atLong": [180, 130, 90, 50], "fastMul": 1.5, "fastV": 12, "longJam": 200, "minLead": 15, "on": true, "rage": 0.04, "rageLong": 0.03, "score": 100},
     "enabled": true,
     "pace": {"_doc": "A1: before the front lock the villain runs at approachVMul x jamSpeed; frontGlue also eases it down to floor x that while the widest first bumper behind the front row (lanes 0-3; spaced/pass lanes and zig stages excluded) is wider than gapIn, fully at gapOut (packed lanes breathe +-2.7 m at 0.42 rad/s, so a constant multiplier alone leaves 2.9-8.3 m)", "approachVMul": 0.78, "frontGlue": true, "glue": {"every": 4, "floor": 0.35, "gapIn": 3.0, "gapOut": 5.0, "tau": 0.4}},
     "plug": {
@@ -60,7 +60,7 @@
       "passFor": 3,
       "passV": 6,
       "penalty": 2,
-      "rage": 0.1,
+      "rage": 0.2,
       "rageReach": 26,
       "range": 6,
       "rudeV": 3,

@@ -130,10 +130,13 @@ func _button_run(tree: SceneTree) -> void:
 	g.advance_ticks(FRAME * 4)
 	var fired: int = int(g.event_counts.get("fire", 0)) - f0
 	var landed: int = int(g.event_counts.get("hit", 0)) + int(g.event_counts.get("miss", 0)) - h0
+	# r3 final: the volley keeps going weapons.tack.holdGrace s after the button is let go (a short thumb lift), then stops
+	var grace: float = float(((g.sim.wc.get("tack", {}) as Dictionary).get("holdGrace", 0.0)))
+	g.advance_ticks(ceili(grace * 120.0) + 2)
 	var f1: int = int(g.event_counts.get("fire", 0))
 	g.advance_ticks(120)
 	_check(held and fired >= 3 and landed >= 2, "압정 held 1.2 s via LaneInput → %d fire events, %d hits / misses, HUD shows it held" % [fired, landed])
-	_check(int(g.event_counts.get("fire", 0)) == f1, "released → no more tacks")
+	_check(int(g.event_counts.get("fire", 0)) == f1, "released → no more tacks after holdGrace %.2f s" % grace)
 	g.queue_free()
 	await tree.process_frame
 

@@ -961,10 +961,12 @@
       "dur": 0.62
     },
     "tack": {
+      "_doc_holdGrace": "r3 final (feel review, fight length): the volley keeps going holdGrace real s after the 압정 button is let go. A sloppy thumb (on 0.7-1.5 s, off 0.25-0.7 s) lost ~30 % of the hits: human-bot boss entry -> kill median 21.5-23.5 s -> 16-18 s (rage users) with the pilot (a held button) unchanged. hpMul 1.7 -> 1.45 moved the same human only 0.5-1.5 s (combo / skill damage is a fraction of max HP).",
       "behindRange": 42,
       "dmg": 1,
       "dur": 0.32,
       "hitPad": 0.9,
+      "holdGrace": 0.5,
       "laneRange": 1,
       "lobDur": 0.46,
       "missBack": 9,

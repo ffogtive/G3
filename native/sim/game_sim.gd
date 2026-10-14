@@ -129,6 +129,9 @@ var _in_skip: bool = false
 var _ts: float = 1.0
 var _kill_finish: String = ""
 var _fire_held: bool = false
+## r3 final (feel review, fight length): real time the 압정 button was let go; config weapons.tack.holdGrace s after it
+## the volley keeps going (a thumb lifting for 0.25–0.7 s cost a sloppy player ~30 % of the hits; a held button = no change).
+var _fire_release_t: float = -99.0
 var _fire_prev: bool = false
 var _brake_held: bool = false
 var _miss_t: float = -99.0
@@ -154,6 +157,9 @@ var _glue_on: bool = true
 var _glue: float = 1.0
 var _glue_target: float = 1.0
 var _glue_n: int = 0
+## r3 final (feel review, hints): the last TrafficBridge.honk reply kind and when (hint() says what is really happening).
+var _honk_reply: String = ""
+var _honk_reply_t: float = -99.0
 
 
 ## stage: stages.json record. tables: DB.traffic_tables() ({config, vehicle_kinds, mini_types, approach});
@@ -393,7 +399,8 @@ func _setup_checkpoints(on: bool) -> void:
 			_cps.append({"d": float(d), "done": false, "fast": false, "t": -1.0})
 
 
-## r3 A3: once per 판 each (kept across retries), in order, only in jam-like ticks.
+## r3 A3: once per 판 each (kept across retries), in order, only in jam-like ticks. ×fastMul when the segment since the
+## previous checkpoint averaged ≥ fastV m/s (r3 final).
 func _tick_checkpoints() -> void:
 	if _cps.is_empty():
 		return
@@ -403,7 +410,13 @@ func _tick_checkpoints() -> void:
 		var c: Dictionary = _cps[i]
 		if bool(c["done"]) or d >= float(c["d"]):
 			continue
-		var fast: bool = stage_clock - _cp_last <= float(cc.get("fastWindow", 8.0))
+		# r3 final (review minor): fast = this segment was driven at ≥ fastV m/s on average (distance from the previous
+		# checkpoint / time since it). The first one has no previous checkpoint: never fast. The old "≤ 8 s since the last
+		# one" (the first timed from the jam start) marked 36/38 first and 70/80 later checkpoints fast.
+		var fast: bool = false
+		if i > 0 and bool((_cps[i - 1] as Dictionary)["done"]):
+			var seg: float = float((_cps[i - 1] as Dictionary)["d"]) - float(c["d"])
+			fast = seg / maxf(0.01, stage_clock - _cp_last) >= float(cc.get("fastV", 12.0))
 		_cp_last = stage_clock
 		c["done"] = true
 		c["fast"] = fast
@@ -433,7 +446,10 @@ func input(cmd: StringName, value: Variant = null) -> void:
 		&"honk":
 			_in_honk = true
 		&"fire":
-			_fire_held = true if value == null else bool(value)
+			var held: bool = true if value == null else bool(value)
+			if _fire_held and not held:
+				_fire_release_t = real_time
+			_fire_held = held
 		&"rage":
 			_in_rage = true
 			_in_rage_tier = int(value) if value != null else 0
@@ -565,6 +581,7 @@ func step(dt: float) -> void:
 	var want_skip: bool = _in_skip
 	var fire_edge: bool = _fire_held and not _fire_prev
 	_fire_prev = _fire_held
+	var firing: bool = _fire_held or real_time - _fire_release_t < float((wc.get("tack", {}) as Dictionary).get("holdGrace", 0.0))
 	_in_lane = 0
 	_in_honk = false
 	_in_rage = false
@@ -631,6 +648,8 @@ func step(dt: float) -> void:
 		elif jam_like:
 			sync_traffic_player()
 			var hr: Dictionary = bridge.honk(player.lane, player.s)
+			_honk_reply = str(hr.get("kind", ""))
+			_honk_reply_t = real_time
 			match str(hr.get("kind", "")):
 				"cheater":
 					score += 300
@@ -654,7 +673,7 @@ func step(dt: float) -> void:
 			_bomb()
 	if want_item != 0 and skills.enabled:
 		skills.item(self, want_item)
-	if jam_like and _fire_held and mini_id != 0 and boss_behind.is_empty() and weapons.cool <= 0.0:
+	if jam_like and firing and mini_id != 0 and boss_behind.is_empty() and weapons.cool <= 0.0:
 		var ci: Dictionary = bridge.car_info(mini_id)
 		if not ci.is_empty():
 			weapons.cool = 1.0 / weapons.rate
@@ -705,7 +724,7 @@ func step(dt: float) -> void:
 	# boss
 	var bev: Array[Dictionary] = boss.update(sdt, {"time": time, "phase": ph, "player": player,
 		"player_behind": ph == &"boss" and not front_locked, "lane_free": _lane_free, "traffic": bridge,
-		"night": _night, "real_dt": dt})
+		"night": _night, "real_dt": dt, "calm": ph == &"boss" and not front_locked and neck.holding(self)})
 	for e: Dictionary in bev:
 		match str(e["type"]):
 			"player_hit":
@@ -738,7 +757,7 @@ func step(dt: float) -> void:
 
 	# weapons
 	_lock_target = _target() if ph == &"boss" else {}
-	if ph == &"boss" and boss.any_alive() and stage.get("honkOnly") != true and _fire_held and weapons.cool <= 0.0:
+	if ph == &"boss" and boss.any_alive() and stage.get("honkOnly") != true and firing and weapons.cool <= 0.0:
 		weapons.cool = 1.0 / weapons.rate
 		_emit(weapons.fire_at(player, _lock_target))
 	for ld: Dictionary in weapons.update(sdt, boss.villains):
@@ -1288,7 +1307,7 @@ func _wreck(reason: String) -> void:
 		return
 	wrecked = true
 	fails += 1
-	wreck_snap = {"boss": boss.snapshot(), "rage": boss_rage, "locked": front_locked}
+	wreck_snap = {"boss": boss.snapshot(), "rage": boss_rage}  # r3 final: the unread "locked" key dropped (code review)
 	_emit({"type": "wreck", "reason": reason, "fails": fails})
 	_enter(&"wreck")
 
@@ -1327,7 +1346,7 @@ func hint() -> String:
 	match phase:
 		&"jam":
 			if real_time < stuck_hint_until:
-				return "경적 → 4차로가 양보" if player.lane == Cfg.SHOULDER_LANE else "갓길로 빠져라 ▶"
+				return _stuck_hint()
 			if phase_real < float(bc.get("hintJam", 3.4)):
 				return "갓길로 ▶ 원인 찾기"
 		&"boss":
@@ -1338,6 +1357,9 @@ func hint() -> String:
 					return ("지나쳤다! ◀ %d차로" % (int(boss.alive()[0]["home_lane"]) + 1)) if same and boss.any_alive() else "지나쳤다! ↓ 브레이크"
 				if ahead > float(fight.get("lockAt", bc.get("lockAt", 2.5))):
 					return "원흉 차로로 ◀" if same else "옆 차로로 비켜 ▶"
+				var nh: String = _neck_hint()
+				if nh != "":
+					return nh
 				return "갓길로 앞질러 ▶" if not player.shoulder_closed else "원흉 앞으로 ▶"
 			if _lock_target.is_empty() and boss.any_alive():
 				var vl: int = roundi(float(boss.alive()[0]["lane_pos"]))
@@ -1347,10 +1369,40 @@ func hint() -> String:
 			if window_left() > 0.0:
 				if skills.enabled:
 					var nt: int = skills.next_tier(self)
-					return "지금! 몰아쳐라" if nt == 0 else ("지금! 참교육" if nt == 5 else "지금! 압정 폭격" if nt == 3 else "지금! 경적 충격파")
+					return "지금! 몰아쳐라" if nt == 0 else ("지금! 참교육" if nt == 5 else "지금! 압정 폭격" if nt == 3 else "지금! 충격파")
 				return "지금! 분노 폭탄" if rage >= float(tune.get("superCost", 0.2)) - 1e-6 else "지금! 몰아쳐라"
 			var bh: String = str(boss.beh.get("hint")) if boss.beh != null and "hint" in boss.beh else ""
 			return bh if bh.length() <= 16 and bh != "" else "발사 꾹 · 공격 피하기"
+	return ""
+
+
+## r3 final (feel review): the jam's stuck hint says what is really happening. On the shoulder behind a breakdown the
+## bridge answered noway / tired (it will tow it: auto_tow) → "잠깐! 견인 중…"; a cheater ahead → "경적 → 얌체 쫓기";
+## else the let-in. Off the shoulder: "갓길로 빠져라 ▶" only when ▶ would work now (cones do: lane_blocker).
+func _stuck_hint() -> String:
+	if player.lane == Cfg.SHOULDER_LANE:
+		var L: Dictionary = bridge.gap_ahead(Cfg.SHOULDER_LANE, player.s + player.len / 2.0)
+		if str(L.get("type", "")) == "car" and float(L.get("gap", INF)) < 12.0:
+			return "경적 → 얌체 쫓기"
+		if real_time - _honk_reply_t < 3.0 and _honk_reply in ["noway", "tired"]:
+			return "잠깐! 견인 중…" if str(L.get("type", "")) == "obstacle" else "자리 날 때까지 버텨!"
+		return "경적 → 4차로가 양보"
+	if player.lane == Cfg.SHOULDER_LANE - 1 and not player.shoulder_closed:
+		return "갓길로 빠져라 ▶" if lane_blocker(Cfg.SHOULDER_LANE) == 0 else "경적 → 자리 만들기"
+	return "갓길로 빠져라 ▶"
+
+
+## r3 final (feel review): before the lock the 병목 plug comes first — the chip once it shows (마개: + chip), "붙어라"
+## before it, "경적 → 얌체 쫓기" when a shoulder cheater sits between, "갓길로 ▶ 마개" when the player is off the shoulder.
+func _neck_hint() -> String:
+	if not neck.blocking() or not (str(neck.plug.get("phase", "")) in ["block", "yield"]):
+		return ""
+	if neck.is_active(self):
+		return ("마개: " + neck.chip()) if neck.chip() != "" else "마개 차! 바로 뒤에 붙어"
+	if neck.holding(self) and player.lane == Cfg.SHOULDER_LANE:
+		return "경적 → 얌체 쫓기"
+	if player.lane < Cfg.SHOULDER_LANE and not player.shoulder_closed:
+		return "갓길로 ▶ 마개 뚫기"
 	return ""
 
 

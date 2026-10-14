@@ -2,7 +2,8 @@ extends RefCounted
 ## r3 A3: three distance checkpoints to the villain (150 / 100 / 60 m; jamLength ≥ 200 → 180 / 130 / 90 / 50) cut the
 ## straight approach into beats. Both traffic backends (force_fallback false/true), stages 1-1~1-10, autopilot.
 ##
-## 가설: ✅ a reward every few seconds (rage +0.04 (long jams 0.03), score +100×ord, ×1.5 inside 8 s of the previous one)
+## 가설: ✅ a reward every few seconds (rage +0.04 (long jams 0.03), score +100×ord, ×1.5 when the segment since the
+##       previous one averaged ≥ 12 m/s — r3 final; was "inside 8 s", which marked nearly every checkpoint)
 ##       gives the approach a rhythm without changing the rage economy at the lock (≤ +0.15 vs. no checkpoints);
 ##       ❓ the beat on device (prototype C++ 1-1 ≈ 5 / 10 / 16 s, fallback + T1 ≈ 5 / 12 / 15 s).
 ##
@@ -29,15 +30,33 @@ func run() -> int:
 	_tables = _DB.load_traffic_tables()
 	for fb: bool in [false, true]:
 		var tag: String = "fallback" if fb else "native"
+		var first_fast: int = 0
+		var later: int = 0
+		var later_fast: int = 0
+		var runs: Dictionary = {}
 		for id: int in range(1, 11):
 			var r: Dictionary = _play(id, 1, fb, {})
+			runs[id] = r
 			_verify(tag, id, r)
-			if id in [1, 4, 9]:
-				var b: Dictionary = _play(id, 1, fb, {"checkpoints": false})
-				if bool(r["locked"]) and bool(b["locked"]):
-					var d: float = float(r["rage_lock"]) - float(b["rage_lock"])
-					_check(d <= 0.15 + 1e-6, "%s 1-%d: rage at the lock %.3f vs. %.3f without checkpoints (Δ %+.3f ≤ +0.15)" % [tag, id,
-						float(r["rage_lock"]), float(b["rage_lock"]), d])
+			for c: Dictionary in (r["cps"] as Array):
+				if int(c["i"]) == 0:
+					first_fast += 1 if bool(c["fast"]) else 0
+				else:
+					later += 1
+					later_fast += 1 if bool(c["fast"]) else 0
+		# r3 final (device + code review, minor): "빠름!" fired on 36/38 first and 70/80 later checkpoints (the first one was
+		# timed from the jam start, the 8 s window was longer than the ~5 s beat), so it said nothing. The first has no
+		# previous checkpoint → never fast; a later one is fast when its segment averaged ≥ fastV (12 m/s).
+		_check(first_fast == 0 and later > 0 and float(later_fast) / float(later) < 0.8,
+			"%s: '빠름!' carries information — first checkpoint never fast (%d), later %d/%d fast (< 80 %%)" % [tag, first_fast,
+			later_fast, later])
+		for id: int in [1, 4, 9]:
+			var r: Dictionary = runs[id]
+			var b: Dictionary = _play(id, 1, fb, {"checkpoints": false})
+			if bool(r["locked"]) and bool(b["locked"]):
+				var d: float = float(r["rage_lock"]) - float(b["rage_lock"])
+				_check(d <= 0.15 + 1e-6, "%s 1-%d: rage at the lock %.3f vs. %.3f without checkpoints (Δ %+.3f ≤ +0.15)" % [tag, id,
+					float(r["rage_lock"]), float(b["rage_lock"]), d])
 		_retry(fb)
 	_shape()
 	return _fails

@@ -78,6 +78,9 @@ var safe_rect := Rect2()
 ## frame by Hud.guard_bubbles(self).
 var top_guard: float = 0.0
 var top_rects: Array[Rect2] = []
+## r3 final (device review minor): the bottom HUD (buttons, HP row; Hud.bottom_rects()): a body below the safe bottom is
+## lifted inside it, a body that still covers a bottom control is not drawn (cars behind the player).
+var bottom_rects: Array[Rect2] = []
 var _items: Dictionary = {}        # key → {text, kind, until, born, pos}
 var _order: Array[String] = []     # insertion order (oldest first) for the cap
 var _pops: Array[Dictionary] = []  # {text, kind, born, upd, pos: Vector3 | sp: Vector2, key, value, target, prio, win, fade_at, punch_t}
@@ -345,6 +348,8 @@ func layout() -> Array[Dictionary]:
 		if not anchor.is_finite() or anchor.y > vh + 40.0:
 			continue
 		var e: Dictionary = layout_bubble(anchor, str(b["text"]), str(b["kind"]))
+		if not _bottom_ok(e):
+			continue
 		e["key"] = k
 		e["born"] = float(b["born"])
 		e["villain"] = k.begins_with("v")
@@ -401,6 +406,20 @@ func layout_bubble(anchor: Vector2, text: String, kind: String, legacy: bool = f
 	var tip := Vector2(clampf(anchor.x, dock.position.x + 16.0, dock.end.x - 16.0), dock.position.y - DOCK_TAIL)
 	e.merge({"mode": "dock", "body": dock, "tip": tip}, true)
 	return e
+
+
+## r3 final: lifts a body that reaches under the safe bottom (home indicator) back inside it; false when the body then
+## still covers a bottom HUD control (the bubble is skipped this frame).
+func _bottom_ok(e: Dictionary) -> bool:
+	var keep: Rect2 = _keep()
+	var body: Rect2 = e["body"]
+	if keep.has_area() and body.end.y > keep.end.y - EDGE:
+		body.position.y = keep.end.y - EDGE - body.size.y
+		e["body"] = body
+	for r: Rect2 in bottom_rects:
+		if body.intersects(r):
+			return false
+	return true
 
 
 ## Side slide off the N5 icons (smaller move wins; the tail tip stays on the anchor), then x kept inside the safe rect.

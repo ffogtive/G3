@@ -6,7 +6,7 @@ extends SceneTree
 ##       [--ambient=sky|hemi|flat] [--tonemap=linear|agx|filmic] [--no-shadows] [--no-glow] [--ao=0..1] [--tag=name]
 ##       [--stub] [--honk-at=seconds] [--demo-signals] [--player-s=m] [--debug-panel] [--shadow-q=0..5 --shadow-blur= --bias= --nbias= --glow-int= --glow-levels=a,b,..]
 ##       [--wave-strip=/abs.png [--wave-lane=2 --wave-ahead=50 --wave-strength=2.5 --wave-frames=5 --wave-dt=1.0]]
-##       [--neck-shots [--fallback]]
+##       [--neck-shots [--fallback] [--neck-extra=2,9]]
 ## r3 U3 --neck-shots: the bottleneck plug forced on (GameSim options.neck), autopilot "naive" (it never plays the verb):
 ##   neck_1-1 / neck_1-3 / neck_1-10.png = the bottleneck frame (plug + verb chip + a plug bubble), then one frame mid-exit
 ##   each: exit_cutin (1-1 verb), exit_zip (1-3 verb), exit_tow (1-10 verb), exit_fly (1-1 rage). RESULT lines carry the
@@ -278,6 +278,19 @@ func _neck_shots() -> int:
 		if not await _neck_frame(g, "exit_%s.png" % exits[stage], false):
 			bad += 1
 		g.queue_free()
+		await process_frame
+	# r3 final: --neck-extra=2,9 adds the bottleneck frame of more stages (1-2 / 1-9 straddle plugs since the final round)
+	for xs: String in str(_opts.get("neck-extra", "")).split(",", false):
+		var gx: Game = _neck_game(xs.to_int())
+		if await _to_neck(gx):
+			gx.sim.neck.say(gx.sim, "block", "taunt", 2.0)
+			gx.advance_ticks(12)
+			if not await _neck_frame(gx, "neck_1-%d.png" % xs.to_int(), true):
+				bad += 1
+		else:
+			print("FAIL shot_jam: 1-%s bottleneck never active" % xs)
+			bad += 1
+		gx.queue_free()
 		await process_frame
 	var gf: Game = _neck_game(1)
 	if await _to_neck(gf):

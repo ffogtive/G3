@@ -478,6 +478,19 @@ func guard_bubbles(b: Bubbles) -> void:
 	b.safe_rect = safe_rect()
 	b.top_guard = top_guard_y()
 	b.top_rects = top_rects()
+	b.bottom_rects = bottom_rects()
+
+
+## r3 final (device review minor): the bottom controls shown now (HP row, gauge, ◀ ▶ 경적 발사 분노, item slots) — a bubble
+## body must not cover them (Bubbles.bottom_rects).
+func bottom_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	if not visible:
+		return out
+	for c: Control in [_hp_row, _gauge, _btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage, _btn_items[0], _btn_items[1]]:
+		if c != null and c.visible and float(_vis.get(c, 1.0)) > 0.05:
+			out.append(c.get_global_rect())
+	return out
 
 
 ## Touch-target sizes in points (tests: every control ≥ 64 pt).
@@ -921,6 +934,11 @@ func on_event(e: Dictionary) -> void:
 				_cb_n = maxi(_cb_n, int(e.get("n", _cb_n)))
 				_cb_state = "broken" if str(e.get("reason", "")) == "hit" else "fading"
 				_cb_t = now
+		"neck_open":  # r3 final (feel review): the verb's reward is visible (it used to be a silent +300 / +0.1 rage)
+			if bool(e.get("bonus", false)) and road != null:
+				var pn: Dictionary = _state.get("player", {})
+				pops.pop(road.position(float(pn.get("s", player_s)), float(pn.get("x", 0.0))) + Vector3(0, 3.2, 0), "돌파! 분노 +1칸", "score")
+				_rage_ready_t = now
 		"checkpoint":  # r3 U2 (A3): the tick pulses and the toast says how far is left
 			var ci: int = int(e.get("i", -1))
 			_cp_pulse[ci] = now
@@ -1136,7 +1154,9 @@ func _on_phase(ph: StringName, old: StringName) -> void:
 	match ph:
 		&"boss":
 			if old == &"jam":
-				banner.show_banner("원흉 발견!", "boss", 1.4, boss_name if not boss_name.is_empty() else "")
+				# r3 final (feel review minor): the 1.4 s centre banner covered the villain, the plug and its bubble at the very moment
+				# the bottleneck starts — higher (the skill-banner band) and shorter
+				banner.show_banner("원흉 발견!", "boss", 0.9, boss_name if not boss_name.is_empty() else "", SKILL_BANNER_Y, 0.85)
 			boss_lag = boss_hp
 		&"kill":
 			var line: String = str(stage.get("defeatLine", "")) if stage.get("defeatLine") != null else ""

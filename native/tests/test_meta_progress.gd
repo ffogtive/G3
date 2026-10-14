@@ -182,7 +182,11 @@ func _plays() -> void:
 	pr2.set(&"seed_skip", {1: [3, 4, 6], 2: [0]})
 	_check(pr2.call(&"next_play", 1) == 5 and pr2.call(&"begin_play", 1) == 5 and pr2.call(&"begin_play", 1) == 7 and pr2.call(&"plays", 1) == 8,
 		"seed_skip {1: [3, 4, 6]}: next_play 5, begin_play 5 then 7")
-	_check(pr2.call(&"next_play", 3) == 0, "run 0 is never skipped")
+	# r3 final (code review): the old check asked next_play(3) with no skip list for 1-3 — it could not fail. Now 1-3 has
+	# plays 0 and lists run 0 itself: run 0 (the golden seed) is still the first run, then the list is honoured.
+	pr2.set(&"seed_skip", {3: [0, 1]})
+	_check(pr2.call(&"plays", 3) == 0 and pr2.call(&"next_play", 3) == 0 and pr2.call(&"begin_play", 3) == 0 and pr2.call(&"next_play", 3) == 2,
+		"run 0 is never skipped: seed_skip {3: [0, 1]} with plays 0 → next_play 0, begin_play 0, then next_play 2")
 	pr2.set(&"seed_skip", {2: [1]})
 	_check(pr2.call(&"begin_play", 2) == 2, "seed_skip {2: [1]}: run 1 of 1-2 → 2")
 	sg.call(&"save_progress", {"schema": 1, "unlocked": 1, "plays": {"1": -4, "2": "x", "3": 2.0, "4": 5}})

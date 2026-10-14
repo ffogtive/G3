@@ -46,7 +46,8 @@
 - `mode()`는 보스 단계에서 원흉이 살아 있으면 잠금 전에도 `fight`다. 잠금 전 사다리는 `preLockLadder [1]`(t1만, t3·t5는 잠금 뒤).
 - t1 대상 = `|ds| ≤ reach 60 m`인 살아 있는 원흉 전원, `laneRange 99`(차로 무관). 지연 = 0.12 + max(0, |ds| − 15) × 0.00833 s(20 m 0.162, 55 m 0.453, 60 m 0.495).
 - 잠금 전 시전이면 같은 틱에 `_rage_horn_effect(2.2)`(갓길 24 m 청소 + 부스트, `via:"t1_wave"`)도 나가고 경직은 `stunPreLock` 0.4 s다. 잠금 전 시전은 `boss.hold`만 걸고 플레이어 무적은 주지 않는다(정체 범퍼 규칙 유지).
-- 60 m 밖이면 `chase` 0.8 s 동안 부스트로 다가간 뒤 다시 본다. 그래도 밖이면 분노를 돌려주고 `skill_denied{reason:"far", refunded:true}` + `너무 멀다!`. 비활성 표시는 하지 않는다.
+- 60 m 밖이면 `chase` 0.8 s 동안 부스트로 다가간 뒤 다시 본다. 그래도 밖이면 분노를 돌려주고 `skill_denied{reason:"far", refunded:true, text:"너무 멀다!"}`. 비활성 표시는 하지 않는다. r3 최종: HUD가 그 text를 내 차 위에 띄운다(전엔 DENY_TEXT에 far가 없어 '분노 부족!'이 떴다). 추격 동안 '추격!' 팝 + 분노 링 금색 대시. sim의 같은 말 player 말풍선은 없앴다.
+- r3 최종(체감 리뷰): 압정 버튼을 뗀 뒤 `weapons.tack.holdGrace` 0.5 s 더 쏜다. 엄지를 잠깐 떼는 사람(누름 70 %)의 원흉전이 pilot보다 7~10 s 길었던 주원인이다. 누르고 있는 pilot은 그대로다.
 - 분노 t1은 병목 마개를 즉시 날린다(`neck.open("rage")`, exit fly, 보너스는 1-9 정답 동사일 때만).
 - 연출(C4·F1): 전투 t1은 키 `t1_wave` `충격파!!`(sk_wave → superHit → explosion, hornTruck 없음, 원흉 쪽 카메라 킥 0.6 m / 0.12 s). 잠금 전 충격파의 `rage_horn`은 경적음(hornTruck·superHit)과 무작위 흔들림 없이 링만 낸다(`game.gd`, `fight_fx.gd`). 정체 t1_horn은 `갓길 청소!!` + 경적음 그대로. 분노 버튼 색 #e0245e(경적 #f08a1a와 hue 48° 차), 얼굴은 `state.skills.face`(청소 / 충격파 / 폭격 / 참교육).
 

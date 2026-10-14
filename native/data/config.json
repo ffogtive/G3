@@ -861,6 +861,7 @@
       "dmg": 1,
       "dur": 0.32,
       "hitPad": 0.9,
+      "holdGrace": 0.5,
       "laneRange": 1,
       "lobDur": 0.46,
       "missBack": 9,

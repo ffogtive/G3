@@ -687,7 +687,7 @@ func throw_from(src_s: float, src_x: float, lane: int, p: PlayerSim, kind: Strin
 
 
 ## ctx: {time, phase: StringName, player: PlayerSim, player_behind: bool, lane_free: Callable(int)->bool,
-## traffic: TrafficBridge, night: bool, real_dt: float}. Returns events: player_hit {cause, tier, text, push, flash, mini},
+## traffic: TrafficBridge, night: bool, real_dt: float, calm: bool (r3 final: no behind throws)}. Returns events: player_hit {cause, tier, text, push, flash, mini},
 ## boss_phase (HP phase), bubble, attack, stun, gone {id, is_last}, dodge {kind, id} (an attack aimed at the player's lane
 ## when it started — beam / wave / thrown cup / lunge — ended without a hit and with the player out of it; SKILLS
 ## rageGain.dodge), finish_beat {id, finish, beat}.
@@ -816,7 +816,9 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 					behind = str(beh.get("behind_attack"))
 				var kind: String = ""
 				if bool(ctx.get("player_behind", false)):
-					kind = "" if peaceful else behind
+					# r3 final (feel review): no throws while the player is held behind the 병목 plug (ctx calm) — it cannot
+					# dodge there (1-3's "wait quietly" took ~33 HP); the draws above still run, so the stream is unchanged
+					kind = "" if peaceful or bool(ctx.get("calm", false)) else behind
 				elif beh != null and beh.has_method(&"choose"):
 					kind = str(beh.call(&"choose", self, v))
 					if kind == "":

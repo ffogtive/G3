@@ -39,13 +39,13 @@ const DEFAULTS: Dictionary = {
 	"enabled": false,
 	"pace": {"approachVMul": 0.78, "frontGlue": true, "glue": {"every": 4, "floor": 0.35, "gapIn": 3.0, "gapOut": 5.0, "tau": 0.4}},
 	"checkpoints": {"on": true, "at": [150, 100, 60], "atLong": [180, 130, 90, 50], "longJam": 200, "minLead": 15,
-		"rage": 0.04, "rageLong": 0.03, "score": 100, "fastWindow": 8, "fastMul": 1.5},
+		"rage": 0.04, "rageLong": 0.03, "score": 100, "fastV": 12.0, "fastMul": 1.5},
 	"plug": {"valve": "honk", "n": 1, "window": 1.5, "wait": 3.0, "safety": 8.0, "chip": "붙어서 빵 1번", "chipAt": 3.0,
 		"back": 9.0, "len": 4.5, "w": 1.9, "car": "sedan", "kind": "cutter", "activeDist": 35.0, "range": 6.0, "rudeV": 3.0,
 		"clearAt": 0.55,
 		"exit": "cutin", "exitDur": 1.2, "stubborn": 3.0, "stubbornMax": 6.0, "spamN": 0, "spamWin": 4.0, "deafFor": 5.0, "advance": 0.3,
 		"near": 4.0, "duoRange": 40.0, "penalty": 2.0, "blockFor": 4.0, "blink": 0.0, "passV": 6.0, "passFor": 3.0,
-		"straddle": false, "rage": 0.1, "score": 300, "rageReach": 26.0, "safetyPenalty": 1.0, "safetyMax": 4.0, "lines": {}},
+		"straddle": false, "rage": 0.2, "score": 300, "rageReach": 26.0, "safetyPenalty": 1.0, "safetyMax": 4.0, "lines": {}},
 }
 const PLUG_VALVES: Array[String] = ["honk", "race", "quiet", "push", "deaf"]
 
@@ -218,6 +218,16 @@ func _is_active(sim: GameSim) -> bool:
 	return true
 
 
+## The player is held at the bottleneck: plug in block|yield, boss phase before the lock, player past F - activeDist
+## (is_active without the "nothing but the plug ahead" condition). Drives the chip / safety clock and keeps the villain's
+## pre-lock throws off (GameSim boss ctx "calm": the player cannot dodge behind the plug).
+func holding(sim: GameSim) -> bool:
+	if plug.is_empty() or not (str(plug["phase"]) in ["block", "yield"]) or sim.phase != &"boss" or sim.front_locked:
+		return false
+	var f: Array = _front(sim)
+	return not f.is_empty() and sim.player.s > float(f[0]) - float(pc.get("activeDist", 35.0))
+
+
 ## Drops the per-tick is_active cache (state changed inside the tick: open / phase).
 func _dirty() -> void:
 	_act_tick_ok = false
@@ -330,7 +340,11 @@ func tick(sim: GameSim, sdt: float) -> void:
 		sim._emit({"type": "neck_active", "valve": valve, "safety": safety(), "chip": str(pc.get("chip", ""))})
 		_say(sim, "block", "taunt", 1.6)
 	_active = act
-	if act:
+	# r3 final (feel review): the chip / safety clock runs while the player is at the bottleneck even when a shoulder
+	# cheater sits between them (not "active": its honk is the bridge's) — before, a player who did not honk it away
+	# waited forever (1-4 n1 seeker 50 s).
+	var clock: bool = act or holding(sim)
+	if clock:
 		_t_active += sdt
 		if _chip == "" and _t_active >= float(pc.get("chipAt", 3.0)):
 			_chip = str(pc.get("chip", ""))
@@ -349,7 +363,7 @@ func tick(sim: GameSim, sdt: float) -> void:
 	elif valve == "push" and _push_block > 0.0:
 		tx = Cfg.lane_x(Cfg.SHOULDER_LANE)
 	_ease_x(tx, rate, sdt)
-	if act and _t_active >= safety():
+	if clock and _t_active >= safety():
 		_say(sim, "safety", "warn", 1.4)
 		_open(sim, "safety")
 

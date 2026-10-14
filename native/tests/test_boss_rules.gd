@@ -168,6 +168,8 @@ func _damage_windows() -> void:
 	var v: Dictionary = b.villains[0]
 	var vm: float = float(sim.bc.get("vulnMul", 4.0))
 	var tack: float = float(sim.wc["tack"]["dmg"])
+	print("INFO boss_rules: P0#7 precondition stun_skill %.2f (a c20 snipe stun is a window too; cleared here)" % float(v.get("stun_skill", 0.0)))
+	v["stun_skill"] = 0.0  # r3 final: the fight may have reached ×20 (stun 0.8 = a window) before this probe
 	b.sig["stun"] = 0.0
 	var out_d: float = float(b.damage(v, tack, tack * vm, false)["dmg"])
 	b.sig["stun"] = 1.0
@@ -175,6 +177,7 @@ func _damage_windows() -> void:
 	_check(is_equal_approx(out_d, tack) and is_equal_approx(float(r_in["dmg"]), tack * vm) and bool(r_in["window"]),
 		"P0#7: tack %.1f outside the stun, %.1f inside (×%.0f)" % [out_d, float(r_in["dmg"]), vm])
 	b.sig["stun"] = 0.0
+	v["stun_skill"] = 0.0
 	var bomb: Dictionary = sim.wc["bomb"]
 	var bo: float = float(b.damage(v, float(bomb["dmgOut"]), float(bomb["dmg"]), false)["dmg"])
 	_check(is_equal_approx(bo, float(bomb["dmgOut"])) and bo < float(bomb["dmg"]), "P0#7: rage bomb outside the window only %.0f (inside %.0f)" % [bo, float(bomb["dmg"])])

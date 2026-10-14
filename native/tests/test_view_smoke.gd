@@ -7,7 +7,9 @@ extends RefCounted
 const GameScene: PackedScene = preload("res://view/game.tscn")
 const DB := preload("res://core/db.gd")
 ## Villain s − front_s over the boss phase (autopilot 1-1..1-10, seed id*1000+7, r3 integration probe): [min, max].
-const BOSS_BAND: Dictionary = {0: [15.0, 69.0], 5: [110.0, 141.0]}
+## r3 final: measured every e2e run by test_neck._boss_band (1-9 now reaches +70.4 m: the plug clock / no throws behind
+## the plug) → upper edge 72; the signs stay outside [min − 45, max + 10] (VMS +205, gantry +160).
+const BOSS_BAND: Dictionary = {0: [15.0, 72.0], 5: [110.0, 141.0]}
 
 var _fails: int = 0
 

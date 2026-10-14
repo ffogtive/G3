@@ -50,6 +50,7 @@ func run() -> int:
 	await _tree.process_frame
 	await _bubble_guard()
 	await _bubble_dock()
+	await _bubble_bottom()
 	await _pops_merge()
 	await _combo_badge()
 	await _neck_view()
@@ -148,6 +149,47 @@ func _bubble_guard() -> void:
 				n - bad, n, ",".join(names), guard, JSON.stringify(modes), legacy_bad, "" if first.is_empty() else " first bad " + first])
 		hud.queue_free()
 		(hi[1] as Node).queue_free()
+	await _tree.process_frame
+
+
+## r3 final (device review minor): U1 guarded the top only — a car behind the player put its body under the safe bottom
+## (home indicator) and over the bottom buttons ('들어오세요~' y 1188–1237 > 1226.6, '추월 좀 하자!!' on ◀). Now a body
+## below the safe bottom is lifted inside it and one that still covers a bottom control is not drawn.
+func _bubble_bottom() -> void:
+	var hi: Array = _hud_with(Vector2(59, 34))
+	var hud: Hud = hi[0]
+	var b := Bubbles.new()
+	hud.root.add_child(b)
+	hud.apply_state(UiStubState.jam(0.4))
+	hud.advance(0.5)
+	await _tree.process_frame
+	hud.advance(0.05)
+	hud.guard_bubbles(b)
+	var sr: Rect2 = hud.safe_rect()
+	var btn: Rect2 = hud._btn_left.get_global_rect()
+	var rects: Array[Rect2] = hud.bottom_rects()
+	b.step(1.0)
+	b.show_bubble("h7", "들어오세요~", "thanks", 3.0, func() -> Vector2: return Vector2(sr.get_center().x, sr.end.y + 30.0))
+	b.show_bubble("h8", "추월 좀 하자!!", "angry", 3.0, func() -> Vector2: return btn.get_center() + Vector2(0, 30))
+	b.show_bubble("h9", "먼저 가요", "thanks", 3.0, func() -> Vector2: return Vector2(sr.get_center().x, sr.position.y + sr.size.y * 0.45))
+	var lay: Array[Dictionary] = b.layout()
+	var keys: Array[String] = []
+	var on_btn: int = 0
+	for e: Dictionary in lay:
+		keys.append(str(e["key"]))
+		for r: Rect2 in rects:
+			on_btn += 1 if (e["body"] as Rect2).intersects(r) else 0
+	_check(not rects.is_empty() and on_btn == 0 and not keys.has("h8") and keys.has("h9"),
+		"bottom guard: no body on a bottom control (%d), the one over ◀ skipped, a mid-screen one kept %s" % [on_btn, str(keys)])
+	b.bottom_rects = []  # no controls in the way: a body under the safe bottom is lifted inside it
+	var low: Array[Dictionary] = b.layout()
+	var lifted: bool = false
+	for e: Dictionary in low:
+		if str(e["key"]) == "h7":
+			lifted = (e["body"] as Rect2).end.y <= sr.end.y - 5.99
+	_check(lifted, "bottom guard: a body under the safe bottom (home indicator) is lifted inside it")
+	hud.queue_free()
+	(hi[1] as Node).queue_free()
 	await _tree.process_frame
 
 
