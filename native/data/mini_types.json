@@ -1,0 +1,34 @@
+{
+  "generated": "tools/content/build.mjs from native/data/src/mini_types.json — do not edit",
+  "schema_version": 1,
+  "source": "config.js MINI_TYPES @ 753549a",
+  "types": [
+    {
+      "fine": 50000,
+      "id": "butt",
+      "item": "butt",
+      "lines": ["퉤~", "재떨이가 꽉 차서~"],
+      "name": "꽁초 투척러",
+      "sorry": ["죄송합니다ㅠ", "다신 안 버릴게요"],
+      "violation": "차량 밖 담배꽁초 투척"
+    },
+    {
+      "fine": 50000,
+      "id": "trash",
+      "item": "cup",
+      "lines": ["옛다 커피~", "버릴 데가 없어서~"],
+      "name": "창밖 쓰레기 투척",
+      "sorry": ["주워갈게요ㅠ", "블박 찍혔다…"],
+      "violation": "차량 밖 쓰레기 투척"
+    },
+    {
+      "fine": 60000,
+      "id": "cutin",
+      "item": null,
+      "lines": ["나 먼저~", "급해 급해!"],
+      "name": "갓길 칼치기",
+      "sorry": ["제자리로 갈게요", "죄송합니다~"],
+      "violation": "갓길 통행 + 끼어들기"
+    }
+  ]
+}

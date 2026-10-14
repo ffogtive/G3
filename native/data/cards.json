@@ -1,0 +1,59 @@
+{
+  "caseChip": {
+    "crime": "형사",
+    "rescue": "구조",
+    "warn": "계도"
+  },
+  "caseOf": {
+    "계도": "warn",
+    "고지서": "fine",
+    "표창": "rescue",
+    "형사": "crime"
+  },
+  "cases": {
+    "crime": {
+      "amt": "벌금",
+      "done": "형사 입건",
+      "seal": ["입", "건"],
+      "stamp": "형사 입건",
+      "tag": "형사 사건"
+    },
+    "fine": {
+      "amt": "범칙금",
+      "done": "참교육 완료",
+      "seal": ["참교", "육청"],
+      "stamp": "과태료 고지서",
+      "tag": "오늘의 빌런"
+    },
+    "rescue": {
+      "amt": "",
+      "done": "구조 완료",
+      "seal": ["표", "창"],
+      "stamp": "구조 표창",
+      "tag": "구조 요청"
+    },
+    "warn": {
+      "amt": "",
+      "done": "계도 완료",
+      "seal": ["계", "도"],
+      "stamp": "계도장",
+      "tag": "계도 대상"
+    }
+  },
+  "generated": "tools/content/build.mjs from native/data/src/cards.json — do not edit",
+  "kindLabel": {
+    "bonus": "보너스",
+    "boss": "보스",
+    "elite": "엘리트",
+    "final": "최종보스"
+  },
+  "kindOf": {
+    "보너스": "bonus",
+    "보스": "boss",
+    "엘리트": "elite",
+    "최종보스": "final"
+  },
+  "kindTitleRegex": "/^\\s*\\[(최종보스|보스|엘리트|보너스)\\]\\s*/",
+  "schema_version": 1,
+  "source": "game/js/ui.js (module-private tables, evaluated from source) @ 753549a"
+}

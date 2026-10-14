@@ -1,0 +1,32 @@
+; GDExtension manifest for the C++ traffic core (docs/NATIVE_PORT.md 1-4, 3-2).
+; Built by tools/godot/build_ext.sh (Linux) and, on the Mac, by tools/mac/ios_run.sh (iOS xcframework).
+; Library names follow godot-cpp's suffix: lib<name>.<platform>.<template_debug|template_release>.<arch>.
+; The editor and debug exports use the template_debug build; release exports use template_release.
+
+[configuration]
+
+entry_symbol = "traffic_library_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+
+linux.debug.x86_64 = "res://ext/bin/libtraffic.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://ext/bin/libtraffic.linux.template_release.x86_64.so"
+macos.debug = "res://ext/bin/libtraffic.macos.template_debug.framework"
+macos.release = "res://ext/bin/libtraffic.macos.template_release.framework"
+ios.debug = "res://ext/bin/libtraffic.ios.template_debug.xcframework"
+ios.release = "res://ext/bin/libtraffic.ios.template_release.xcframework"
+android.debug.arm64 = "res://ext/bin/libtraffic.android.template_debug.arm64.so"
+android.release.arm64 = "res://ext/bin/libtraffic.android.template_release.arm64.so"
+android.debug.x86_64 = "res://ext/bin/libtraffic.android.template_debug.x86_64.so"
+android.release.x86_64 = "res://ext/bin/libtraffic.android.template_release.x86_64.so"
+
+[dependencies]
+
+ios.debug = {
+"res://ext/bin/libgodot-cpp.ios.template_debug.xcframework": ""
+}
+ios.release = {
+"res://ext/bin/libgodot-cpp.ios.template_release.xcframework": ""
+}

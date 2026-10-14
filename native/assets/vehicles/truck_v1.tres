@@ -1,0 +1,284 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/vehicles/truck_v1.res" id="1_re6kn"]
+[ext_resource type="Script" path="res://assets/vehicles/vehicle_template.gd" id="2_6fo41"]
+
+[resource]
+script = ExtResource("2_6fo41")
+kind = &"truck"
+variant = 1
+npc = true
+npc_weight = 6.0
+length = 9.5
+width = 2.5
+height = 3.5
+wheel_radius = 0.52
+mesh = ExtResource("1_re6kn")
+surface_names = PackedStringArray("body", "lamps")
+parts = {
+"blink_FL": {
+"aabb": AABB(-1.342, 0.72, -4.882, 0.24199998, 0.29999995, 0.37199974),
+"first_index": 1080,
+"first_vertex": 720,
+"id": 13,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"blink_FR": {
+"aabb": AABB(1.1, 0.72, -4.882, 0.24199998, 0.29999995, 0.37199974),
+"first_index": 1188,
+"first_vertex": 792,
+"id": 14,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"blink_RL": {
+"aabb": AABB(-1.282, 0.57, 4.67, 0.32199997, 0.42000002, 0.19199991),
+"first_index": 1296,
+"first_vertex": 864,
+"id": 15,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"blink_RR": {
+"aabb": AABB(0.96, 0.57, 4.67, 0.32199997, 0.42000002, 0.19199991),
+"first_index": 1404,
+"first_vertex": 936,
+"id": 16,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"body": {
+"aabb": AABB(-1.51, 0.12, -4.846, 3.02, 3.38, 9.626),
+"first_index": 0,
+"first_vertex": 0,
+"id": 0,
+"index_count": 2868,
+"surface": 0,
+"vertex_count": 1898
+},
+"brake_L": {
+"aabb": AABB(-1.275, 0.61, 4.64, 0.97499996, 1.25, 0.15600014),
+"first_index": 0,
+"first_vertex": 0,
+"id": 1,
+"index_count": 144,
+"surface": 1,
+"vertex_count": 96
+},
+"brake_R": {
+"aabb": AABB(0.3, 0.61, 4.64, 0.97499996, 1.25, 0.15600014),
+"first_index": 144,
+"first_vertex": 96,
+"id": 2,
+"index_count": 144,
+"surface": 1,
+"vertex_count": 96
+},
+"hazard_FC": {
+"aabb": AABB(-0.05, 2.91, -4.676, 0.1, 0.059999943, 0.065999985),
+"first_index": 1008,
+"first_vertex": 672,
+"id": 11,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"hazard_FL": {
+"aabb": AABB(-1.27, 0.76, -4.816, 1.02, 2.21, 0.28599977),
+"first_index": 432,
+"first_vertex": 288,
+"id": 7,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"hazard_FR": {
+"aabb": AABB(0.25, 0.76, -4.816, 1.02, 2.21, 0.28599977),
+"first_index": 648,
+"first_vertex": 432,
+"id": 8,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"hazard_RL": {
+"aabb": AABB(-1.21, 0.61, 4.69, 0.23000002, 0.33999997, 0.10599995),
+"first_index": 864,
+"first_vertex": 576,
+"id": 9,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"hazard_RR": {
+"aabb": AABB(0.98, 0.61, 4.69, 0.23000002, 0.33999997, 0.10599995),
+"first_index": 936,
+"first_vertex": 624,
+"id": 10,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_L": {
+"aabb": AABB(-1.12, 0.76, -4.816, 0.5, 0.22000003, 0.10599995),
+"first_index": 288,
+"first_vertex": 192,
+"id": 4,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_R": {
+"aabb": AABB(0.62, 0.76, -4.816, 0.5, 0.22000003, 0.10599995),
+"first_index": 360,
+"first_vertex": 240,
+"id": 5,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"wheel_0": {
+"aabb": AABB(-1.284, 0, -4.35, 0.47400004, 1.04, 1.04),
+"first_index": 2868,
+"first_vertex": 1898,
+"id": 32,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_1": {
+"aabb": AABB(0.81, 0, -4.35, 0.47400004, 1.04, 1.04),
+"first_index": 3072,
+"first_vertex": 2013,
+"id": 33,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_2": {
+"aabb": AABB(-1.284, 0, 1.93, 0.674, 1.04, 1.0400001),
+"first_index": 3276,
+"first_vertex": 2128,
+"id": 34,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_3": {
+"aabb": AABB(0.61, 0, 1.93, 0.674, 1.04, 1.0400001),
+"first_index": 3480,
+"first_vertex": 2243,
+"id": 35,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_4": {
+"aabb": AABB(-1.284, 0, 3.18, 0.674, 1.04, 1.0399997),
+"first_index": 3684,
+"first_vertex": 2358,
+"id": 36,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+},
+"wheel_5": {
+"aabb": AABB(0.61, 0, 3.18, 0.674, 1.04, 1.0399997),
+"first_index": 3888,
+"first_vertex": 2473,
+"id": 37,
+"index_count": 204,
+"surface": 0,
+"vertex_count": 115
+}
+}
+lamp_groups = {
+"blink_L": PackedStringArray("blink_FL", "blink_RL"),
+"blink_R": PackedStringArray("blink_FR", "blink_RR"),
+"brake": PackedStringArray("brake_L", "brake_R"),
+"hazard": PackedStringArray("hazard_FL", "hazard_FR", "hazard_RL", "hazard_RR", "hazard_FC"),
+"head": PackedStringArray("head_L", "head_R")
+}
+lamp_off_multiplier = {
+"brake": Color(0.65882355, 0.20392157, 0.20392157, 1),
+"hazard": Color(0.3529412, 0.2901961, 0.1882353, 1),
+"head": Color(0.6039216, 0.6039216, 0.5647059, 1)
+}
+merged_wheels = [{
+"center": Vector3(-1.02, 0.52, -3.83),
+"id": 32,
+"part": "wheel_0",
+"radius": 0.52,
+"width": 0.42
+}, {
+"center": Vector3(1.02, 0.52, -3.83),
+"id": 33,
+"part": "wheel_1",
+"radius": 0.52,
+"width": 0.42
+}, {
+"center": Vector3(-0.92, 0.52, 2.45),
+"id": 34,
+"part": "wheel_2",
+"radius": 0.52,
+"width": 0.62
+}, {
+"center": Vector3(0.92, 0.52, 2.45),
+"id": 35,
+"part": "wheel_3",
+"radius": 0.52,
+"width": 0.62
+}, {
+"center": Vector3(-0.92, 0.52, 3.7),
+"id": 36,
+"part": "wheel_4",
+"radius": 0.52,
+"width": 0.62
+}, {
+"center": Vector3(0.92, 0.52, 3.7),
+"id": 37,
+"part": "wheel_5",
+"radius": 0.52,
+"width": 0.62
+}]
+points = {
+"blink_halo_L": PackedVector3Array(-1.37, 0.89, -5.01, -1.31, 0.8, 4.99),
+"blink_halo_R": PackedVector3Array(1.37, 0.89, -5.01, 1.31, 0.8, 4.99),
+"exhaust": Vector3(-1.04, 2.6, -2.75)
+}
+paint_default = Color(0.95686275, 0.95686275, 0.9490196, 1)
+tintable = true
+js_ref = {
+"ao": {
+"dist": 0.5,
+"ground": false,
+"occluder_tris": 1364.0,
+"rays": 345216.0
+},
+"bbox": AABB(-1.51, 0, -4.882, 3.02, 3.5, 9.7439995),
+"paint_fit": {
+"checked_colors": 14.0,
+"default": "#f4f4f2",
+"geometry_varies": false,
+"livery": false,
+"nonfit_vertices": 0.0,
+"paint_vertices": 276.0,
+"tintable": true
+},
+"source": {
+"args": ["truck", {
+"variant": 1.0
+}],
+"fn": "buildVehicle",
+"module": "vehicles"
+},
+"three": "170",
+"tris": 1868,
+"web_frozen_sha": "753549a",
+"welded_vertices": 3596
+}

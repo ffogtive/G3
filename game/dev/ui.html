@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>UI 하네스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .dev-bar { position: fixed; z-index: 100; left: 50%; bottom: 4px; translate: -50% 0; display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; font: 12px/1 monospace; opacity: .25; }
+  .dev-bar:hover { opacity: 1; }
+  .dev-bar a { color: #fff; background: #000a; padding: 4px 6px; border-radius: 4px; text-decoration: none; }
+  body.dev-shot .dev-bar { display: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<div class="dev-bar" id="devbar"></div>
+<script type="module">
+// UI 하네스: ?screen=title|card|hud|boss|release|result|album|shop|pause|boot|none  &stage=1..5  &touch=0|1  &shot=1(개발바 숨김)  &noinit=1
+//   title  : &n=100 → 가짜 100 스테이지(10 챕터) + 챕터 메타 / 기본은 실제 STAGES 5개
+//   result : 보상 포함(블박 사진=캔버스 생성). &reward=0(구 결과) &photo=0(대체 그림) &milestone=silver|gold|bronze|none &bonus=0 &stars=1..3
+//   album  : &n=100(기본) | &n=5 (실제 STAGES)
+//   v0.3   : card/result 에 별 미션 (&mis=101 → 미션별 달성, &mis=none → 미션 없이 구 화면)
+//            shop : &wallet=350000 &owned=wpn_caltrop,pas_4k &tab=car|weapon|move|finish|passive &buy=<id>(자동 구매 연출) &equip=<id>
+//            hud  : &minis=1/3 (0/0 = 숨김) &boost=0..1 &jump=0|1 (터치 점프 버튼) &jumpcd=0..1 &ragemode=horn|bomb|siren
+//   catalog: &cat=1 &stage=81(형사) 74(표창·경적만) 31(계도) 50(보스) 91(엘리트) 73(보너스) 100(최종보스) · title/album: &cat=1 &unlocked=100
+//   v0.4   : hp   &hp=37 &max=100 &phase=boss|jam &inv=1 &lowfx=0|1 &hit=20(0.8초 뒤 피격 연출) &demo=1(100→0 반복 피격) &toast=1
+//            fail &reason=돌진에%20들이받힘 &who=정속주행%20김사장 &lost=40 &retry=라벨 &title=제목  (Enter=retry, Esc=menu → 콘솔)
+//            card &road=<갓길>,<경적>[,<특수>] (예: none,echo · bait=merge,bait,합류 테이퍼) &hint=문구 &mis=none
+//            roads (갓길 10 · 경적 11 · 특수 아이콘 갤러리) · toast (warn/info/good 샘플 + 같은 문구 합치기)
+import { initUI, ui } from '../js/ui.js';
+import { STAGES as HANDMADE, THANKS_LINES, SHOP } from '../js/config.js';
+import CATALOG from '../js/data/villain_catalog.js';
+import { buildStages } from '../js/stagegen.js';
+
+const P = new URLSearchParams(location.search);
+// &cat=1 : 실제 100스테이지 카탈로그 (main.js 와 같은 buildStages) — 보스/엘리트/형사/표창/계도 확인용 (&stage=1..100)
+const CAT = P.get('cat') === '1';
+const STAGES = CAT ? buildStages(CATALOG, HANDMADE) : HANDMADE;
+const screen = P.get('screen') || 'title';
+const si = Math.max(0, Math.min(STAGES.length - 1, (+P.get('stage') || 1) - 1));
+const stage = STAGES[si];
+const coarse = matchMedia('(pointer: coarse)').matches;
+const touch = P.has('touch') ? P.get('touch') === '1' : coarse;
+if (P.get('shot') === '1' || navigator.webdriver) document.body.classList.add('dev-shot');
+// ?still=1 : 레이아웃 확인용 — 진입 애니메이션을 즉시 끝 상태로 (헤드리스 소프트웨어 렌더는 컴포지터 애니 시작이 늦음)
+if (P.get('css')) { const st = document.createElement('style'); st.textContent = P.get('css'); document.head.appendChild(st); }  // 디버그: 임의 CSS 주입
+if (P.get('still') === '1') { const st = document.createElement('style'); st.textContent = '.ui-root *,.ui-root *::before,.ui-root *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important}'; document.head.appendChild(st); }
+window.ui = ui; window.STAGES = STAGES;
+
+// 개발 바
+const bar = document.getElementById('devbar');
+for (const s of ['title', 'card', 'hud', 'boss', 'release', 'result', 'album', 'shop', 'pause', 'boot', 'hp', 'fail', 'roads', 'toast']) {
+  const a = document.createElement('a');
+  const q = new URLSearchParams(P); q.set('screen', s); a.href = '?' + q; a.textContent = s; bar.appendChild(a);
+}
+
+// ───────── 가짜 게임 화면 (원근 고속도로 + 차량)
+const cv = document.getElementById('game');
+const g = cv.getContext('2d');
+const SKIES = { day: ['#5fb8ff', '#d8f0ff', '#7fbf5a'], sunset: ['#5a6bd6', '#ffb27a', '#7a8a4a'], morning: ['#8fc9e8', '#f2f6ee', '#8fb878'], night: ['#0b1030', '#2a2f5c', '#1d2a22'] };
+const sky = SKIES[stage.sky] || SKIES.day;
+const night = stage.sky === 'night';
+let cars = [];
+function seedCars(mode) {
+  cars = [];
+  let r = 7;
+  const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  const pal = ['#f4f4f2', '#e9ecef', '#2b2d31', '#9aa1a9', '#c3c8ce', '#2f6fd6', '#d8342c', '#f4f4f2'];
+  for (let lane = 0; lane < 4; lane++) {
+    for (let d = 14 + rnd() * 6; d < 260; d += 8 + rnd() * 5) {
+      if (lane === 2 && d < 22) continue;
+      cars.push({ lane, d, c: pal[Math.floor(rnd() * pal.length)], h: 1.5 + rnd() * 0.3, w: 1.9, truck: rnd() < 0.08 });
+    }
+  }
+  if (mode !== 'release') cars.push({ lane: 0, d: 30, c: '#d9c9a3', h: 1.6, w: 1.9, villain: true });
+  cars.push({ lane: 2, d: 11, c: '#ffd23f', h: 1.6, w: 1.9, player: true });
+}
+const LW = 3.6;
+let W = 0, H = 0, HZ = 0, F = 0, CX = 0;
+function proj(x, d, y = 0) { return { x: CX + F * (x - 1.8) / (d + 2), y: HZ + F * (6 - y) / (d + 2) - F * 6 / 260 * 0 }; }
+function laneX(l) { return (l - 1.5) * LW; }
+let phaseMode = 'jam';
+function paint(t) {
+  W = cv.width = innerWidth; H = cv.height = innerHeight;
+  HZ = H * 0.36; F = Math.min(W, H * 1.2) * 0.95; CX = W / 2;
+  const gs = g.createLinearGradient(0, 0, 0, HZ); gs.addColorStop(0, sky[0]); gs.addColorStop(1, sky[1]);
+  g.fillStyle = gs; g.fillRect(0, 0, W, HZ + 1);
+  // 먼 산
+  g.fillStyle = night ? '#141a33' : '#6f9d8a';
+  g.beginPath(); g.moveTo(0, HZ); for (let x = 0; x <= W; x += 40) g.lineTo(x, HZ - 18 - 22 * Math.abs(Math.sin(x * 0.006 + 1.3))); g.lineTo(W, HZ); g.fill();
+  g.fillStyle = sky[2]; g.fillRect(0, HZ, W, H - HZ);
+  // 도로
+  const quad = (x0, x1, col) => { const a = proj(x0, 400), b = proj(x1, 400), c = proj(x1, -1.2), d = proj(x0, -1.2); g.fillStyle = col; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c.x, c.y); g.lineTo(d.x, d.y); g.fill(); };
+  quad(-26, -9, night ? '#23262e' : '#5b5f66');
+  quad(-9, -8, '#c9c9c4');
+  quad(-8, 10.2, night ? '#2a2d34' : '#62666d');
+  quad(7.2, 10.2, night ? '#30333a' : '#6d7178');
+  // 차선
+  g.strokeStyle = '#f2f2ee'; g.lineWidth = 2;
+  for (let l = 1; l < 4; l++) {
+    const x = -7.2 + l * LW;
+    for (let d = -1 + ((t / 60) % 9); d < 300; d += 9) { const a = proj(x, d), b = proj(x, d + 4); g.lineWidth = Math.max(1, F * 0.15 / (d + 2)); g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); }
+  }
+  g.strokeStyle = '#ffcf33';
+  { const a = proj(-7.2, 400), b = proj(-7.2, -1.2); g.lineWidth = 3; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); }
+  // 차량 (먼 것부터)
+  const list = cars.slice().sort((a, b) => b.d - a.d);
+  for (const c of list) {
+    const x = laneX(c.lane) + (c.villain ? 0 : 0);
+    const w = c.truck ? 2.5 : c.w, h = c.truck ? 3.2 : c.h;
+    const p0 = proj(x - w / 2, c.d), p1 = proj(x + w / 2, c.d), top = proj(x, c.d, h);
+    const pw = p1.x - p0.x, ph = p0.y - top.y;
+    if (pw < 1.5) continue;
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(p0.x - pw * 0.05, p0.y - ph * 0.1, pw * 1.1, ph * 0.16);
+    g.fillStyle = c.c; g.strokeStyle = '#17202b'; g.lineWidth = Math.max(1, pw * 0.04);
+    g.beginPath(); g.roundRect(p0.x, top.y + ph * 0.35, pw, ph * 0.65, pw * 0.1); g.fill(); g.stroke();
+    g.beginPath(); g.roundRect(p0.x + pw * 0.12, top.y, pw * 0.76, ph * 0.45, pw * 0.12); g.fill(); g.stroke();
+    g.fillStyle = '#24366b'; g.fillRect(p0.x + pw * 0.2, top.y + ph * 0.08, pw * 0.6, ph * 0.26);
+    const lights = phaseMode === 'release' ? (Math.floor(t / 350) % 2 ? '#ffb400' : '#6b4a00') : '#ff2a1a';
+    if (!c.player) { g.fillStyle = lights; g.fillRect(p0.x + pw * 0.05, top.y + ph * 0.52, pw * 0.18, ph * 0.12); g.fillRect(p1.x - pw * 0.23, top.y + ph * 0.52, pw * 0.18, ph * 0.12); }
+    if (c.villain) { g.fillStyle = '#17202b'; g.fillRect(p0.x + pw * 0.3, top.y + ph * 0.12, pw * 0.4, ph * 0.1); }
+    c.sx = (p0.x + p1.x) / 2; c.sy = top.y - 4;
+  }
+  if (night) { g.fillStyle = 'rgba(10,14,40,.25)'; g.fillRect(0, 0, W, H); }
+}
+function loop(t) { paint(t); requestAnimationFrame(loop); }
+const STATIC_BG = P.get('bg') === 'static' || navigator.webdriver;  // 헤드리스 캡처는 정지 배경 (소프트웨어 렌더라 느림)
+seedCars(screen === 'release' ? 'release' : 'jam');
+phaseMode = screen === 'release' ? 'release' : 'jam';
+paint(0);
+if (!STATIC_BG) requestAnimationFrame(loop);
+const car = (pred) => cars.find(pred) || cars[0];
+
+// ───────── UI
+const log = (...a) => console.log('[handler]', ...a);
+if (P.get('noinit') !== '1') {
+  initUI({
+    onStartStage: (i) => { log('start', i); },
+    onNext: () => log('next'), onRetry: () => log('retry'), onMenu: () => log('menu'),
+    onToggleMute: () => { window.__muted = !window.__muted; ui.setMuted(window.__muted); log('mute', window.__muted); },
+    onPause: () => { window.__paused = !window.__paused; ui.setPausedVisible(window.__paused); log('pause', window.__paused); },
+    onControl: (n, p) => log('control', n, p),
+    // core 흉내: 지갑 차감 → owned 추가 → 차/무기/피니시는 바로 장착 → refreshShop
+    onBuy: (id) => {
+      const it = SHOP.find((x) => x.id === id); const p = window.progress; log('buy', id);
+      if (!it || (p.owned || []).includes(id) || p.wallet < it.price) return;
+      p.wallet -= it.price; (p.owned ||= []).push(id);
+      if (['car', 'weapon', 'finish'].includes(it.cat)) (p.equip ||= {})[it.cat] = id;
+      setTimeout(() => ui.refreshShop(p), 60);
+    },
+    onEquip: (id) => {
+      const it = SHOP.find((x) => x.id === id); const p = window.progress; log('equip', id);
+      if (!it) return; (p.equip ||= {})[it.cat] = id; ui.refreshShop(p);
+    },
+    onShop: (open) => log('shop', open),
+  });
+}
+if (screen === 'boot') {
+  const b = document.createElement('div'); b.id = 'boot'; b.textContent = '로딩 중…'; document.body.appendChild(b);
+}
+
+function onLoad(fn) { if (document.readyState === 'complete') fn(); else addEventListener('load', fn, { once: true }); }
+
+// ───────── 샘플 블박 사진 (256×144 JPEG, main.js captureDashcam 과 같은 크기) — 폭발 순간 원흉 뒷모습
+function makePhoto(seed = 1, skyKey = 'day', villain = '#d9c9a3') {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 144;
+  const x = c.getContext('2d');
+  let r = seed * 7919 % 233280 || 1; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  const sk = SKIES[skyKey] || SKIES.day, nt = skyKey === 'night';
+  const hz = 58;
+  let gr = x.createLinearGradient(0, 0, 0, hz); gr.addColorStop(0, sk[0]); gr.addColorStop(1, sk[1]); x.fillStyle = gr; x.fillRect(0, 0, 256, hz + 1);
+  x.fillStyle = nt ? '#141a33' : '#6f9d8a'; x.beginPath(); x.moveTo(0, hz); for (let i = 0; i <= 256; i += 16) x.lineTo(i, hz - 6 - 10 * Math.abs(Math.sin(i * 0.02 + seed))); x.lineTo(256, hz); x.fill();
+  x.fillStyle = sk[2]; x.fillRect(0, hz, 256, 144 - hz);
+  x.fillStyle = nt ? '#2a2d34' : '#62666d'; x.beginPath(); x.moveTo(104, hz); x.lineTo(152, hz); x.lineTo(300, 144); x.lineTo(-44, 144); x.fill();
+  x.strokeStyle = '#ffcf33'; x.lineWidth = 2; x.beginPath(); x.moveTo(105, hz); x.lineTo(-30, 144); x.stroke();
+  x.strokeStyle = '#eee'; x.lineWidth = 1.6; x.setLineDash([7, 9]);
+  for (const t of [0.33, 0.66]) { x.beginPath(); x.moveTo(104 + 48 * t, hz); x.lineTo(-44 + 344 * t, 144); x.stroke(); }
+  x.setLineDash([]);
+  const car = (cx, cy, w, col, lights = '#ff2a1a') => {
+    const h = w * 0.62; x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(cx - w * 0.55, cy + h * 0.42, w * 1.1, h * 0.14);
+    x.fillStyle = col; x.strokeStyle = '#17202b'; x.lineWidth = Math.max(1, w * 0.05);
+    x.beginPath(); x.roundRect(cx - w / 2, cy - h * 0.1, w, h * 0.55, w * 0.1); x.fill(); x.stroke();
+    x.beginPath(); x.roundRect(cx - w * 0.38, cy - h * 0.5, w * 0.76, h * 0.45, w * 0.1); x.fill(); x.stroke();
+    x.fillStyle = '#24366b'; x.fillRect(cx - w * 0.3, cy - h * 0.42, w * 0.6, h * 0.26);
+    x.fillStyle = lights; x.fillRect(cx - w * 0.46, cy + h * 0.02, w * 0.18, h * 0.1); x.fillRect(cx + w * 0.28, cy + h * 0.02, w * 0.18, h * 0.1);
+  };
+  for (let i = 0; i < 7; i++) { const l = Math.floor(rnd() * 4), d = 0.15 + rnd() * 0.4; car(128 + (l - 1.5) * 60 * d * 1.8, hz + 70 * d, 64 * d, ['#f4f4f2', '#2b2d31', '#9aa1a9', '#c3c8ce'][i % 4]); }
+  // 원흉 + 폭발
+  const vx = 78 + rnd() * 30, vy = 92;
+  x.save(); x.translate(vx, vy); x.rotate(-0.35); car(0, 0, 58, villain); x.restore();
+  const g2 = x.createRadialGradient(vx + 6, vy - 4, 2, vx + 6, vy - 4, 46); g2.addColorStop(0, 'rgba(255,255,220,.95)'); g2.addColorStop(0.3, 'rgba(255,200,60,.85)'); g2.addColorStop(0.65, 'rgba(255,90,20,.55)'); g2.addColorStop(1, 'rgba(255,60,0,0)');
+  x.fillStyle = g2; x.beginPath(); x.arc(vx + 6, vy - 4, 46, 0, Math.PI * 2); x.fill();
+  for (let i = 0; i < 18; i++) { x.fillStyle = ['#ffd23f', '#ff8a1f', '#17202b', '#ffffff'][i % 4]; const a = rnd() * 6.28, d = 14 + rnd() * 40, s = 2 + rnd() * 5; x.fillRect(vx + Math.cos(a) * d, vy - 6 + Math.sin(a) * d * 0.7, s, s); }
+  // 날아가는 바퀴
+  x.fillStyle = '#17202b'; x.beginPath(); x.arc(vx + 44, vy - 34, 6, 0, 6.28); x.fill(); x.fillStyle = '#9aa1a9'; x.beginPath(); x.arc(vx + 44, vy - 34, 2.5, 0, 6.28); x.fill();
+  if (nt) { x.fillStyle = 'rgba(10,14,40,.25)'; x.fillRect(0, 0, 256, 144); }
+  return c.toDataURL('image/jpeg', 0.62);
+}
+
+// ───────── 가짜 100 스테이지 / 10 챕터
+const CHAPTERS = [
+  { no: 1, name: '출근길 정체', setting: '경부고속도로 · 서울→대전', theme: 'day' },
+  { no: 2, name: '노을 화물 벽', setting: '영동고속도로 · 강릉 방향', theme: 'sunset' },
+  { no: 3, name: '안개 주의보', setting: '서해안고속도로 · 목포 방향', theme: 'fog' },
+  { no: 4, name: '야간 폰좀비', setting: '중부고속도로 · 밤', theme: 'night' },
+  { no: 5, name: '시골길 경운기', setting: '남해고속도로 · 순천 방향', theme: 'mountain' },
+  { no: 6, name: '대관령 눈길', setting: '영동고속도로 · 대관령', theme: 'snow' },
+  { no: 7, name: '장마철 외곽순환', setting: '수도권제1순환 · 빗길', theme: 'rain' },
+  { no: 8, name: '휴가철 동해안', setting: '동해고속도로 · 양양 방향', theme: 'coast' },
+  { no: 9, name: '명절 귀성길', setting: '호남고속도로 · 광주 방향', theme: 'dusk' },
+  { no: 10, name: '빌런 연합 총궐기', setting: '전국 고속도로 · 최종장', theme: 'boss' },
+];
+const HW = [['경부고속도로', 1, '부산 방향'], ['영동고속도로', 50, '강릉 방향'], ['서해안고속도로', 15, '목포 방향'], ['중부고속도로', 35, '통영 방향'], ['남해고속도로', 10, '순천 방향'], ['영동고속도로', 50, '강릉 방향'], ['수도권제1순환', 100, '일산 방향'], ['동해고속도로', 65, '속초 방향'], ['호남고속도로', 25, '광주 방향'], ['중앙고속도로', 55, '대구 방향']];
+const VILL = [['1차선 정속주행러', '정속주행 김사장', '지정차로 위반 (1차로 저속 점유)', 40000], ['화물차 나란히 주행', '형님 & 아우', '지정차로 위반 (화물차 1·2차로 병렬)', 50000], ['차선 물고 가는 SUV', '걸침 SUV', '차로 통행방법 위반 (두 차로 걸침)', 30000], ['폰 보며 지그재그', '폰좀비', '운전 중 휴대전화 사용', 60000], ['1차선 경운기', '경운기 할배', '고속도로 통행금지 위반 (농기계)', 30000], ['깜빡이 실종 칼치기', '칼치기 BMW', '진로변경 방법 위반 (신호 불이행)', 30000], ['상향등 테러범', '눈뽕 SUV', '등화 점등·조작 불이행', 20000], ['갓길 얌체 질주', '갓길 얌체', '갓길 통행 위반', 60000], ['급정거 보복운전', '브레이크 체크남', '안전거리 미확보 · 보복운전', 40000], ['톨게이트 끼어들기', '새치기 세단', '끼어들기 금지 위반', 30000]];
+function makeStages(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const ch = Math.floor(i / 10) + 1, k = i % 10, t = STAGES[i % STAGES.length], hw = HW[(ch - 1) % HW.length], v = VILL[(i * 3 + ch) % VILL.length];
+    out.push({ ...t, id: i + 1, chapter: ch, highway: hw[0], route: hw[1], direction: hw[2], title: k === 9 ? `${v[0]} (최종보스)` : v[0], violation: v[2], fine: v[3],
+      villains: [{ ...t.villains[0], name: v[1], color: [0xd9c9a3, 0x2f6fd6, 0x3a3f47, 0xf4f4f2, 0x7a8a4a, 0xd8342c][i % 6] }], displayKm: +(2 + (i % 10) * 1.3).toFixed(1) });
+  }
+  return out;
+}
+const N = Math.max(1, Math.min(200, +(P.get('n') || (screen === 'album' && !CAT ? 100 : 0)) || 0));
+const BIG = CAT || N > STAGES.length;
+const STAGES_X = CAT ? STAGES : BIG ? makeStages(N) : STAGES;
+const PHOTOS = BIG || screen === 'album' || screen === 'result' ? ['day', 'sunset', 'morning', 'night'].map((k, i) => makePhoto(i + 3, k, ['#d9c9a3', '#2f6fd6', '#d8342c', '#f4f4f2'][i])) : [];
+function makeProgress(stages, unlocked) {
+  const p = { unlocked, stars: {}, best: {}, wallet: 1234500, subs: 31240, album: {} };
+  let r = 11; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  stages.forEach((s, i) => {
+    if (i >= unlocked - 1) return;
+    if (rnd() < 0.12) return;                 // 깼지만 앨범 도입 전(또는 스킵) → 일부 미수집
+    const st = 1 + Math.floor(rnd() * 3);
+    p.stars[s.id] = st; p.best[s.id] = 20000 + Math.floor(rnd() * 40000);
+    p.album[s.id] = { stars: st, fine: s.fine || 40000, photo: rnd() < 0.85 ? PHOTOS[i % PHOTOS.length] : null, count: 1 + Math.floor(rnd() * rnd() * 9), at: Date.now() };
+  });
+  return p;
+}
+const progress = BIG ? makeProgress(STAGES_X, +(P.get('unlocked') || 27)) : { unlocked: 3, stars: { 1: 3, 2: 2 }, best: { 1: 48210, 2: 35120 }, wallet: 123400, subs: 31240, album: { 1: { stars: 3, fine: 40000, photo: PHOTOS[0] || null, count: 4 }, 2: { stars: 2, fine: 50000, photo: PHOTOS[1] || null, count: 1 } } };
+// 차고: 보유/장착 (기본 = 지갑 ₩350,000 · 마름쇠 + 블박 4K + 점프 보유 · 기본 장착)
+progress.owned = (P.get('owned') ?? 'wpn_caltrop,pas_4k,mv_jump').split(',').filter(Boolean);
+progress.equip = { car: 'car_hatch', weapon: 'wpn_tack', finish: 'fin_rocket' };
+if (screen === 'shop' || P.has('wallet')) progress.wallet = +(P.get('wallet') ?? 350000);
+if (P.get('equip')) { const it = SHOP.find((x) => x.id === P.get('equip')); if (it) progress.equip[it.cat] = it.id; }
+// 별 미션 (main.js stageMissions 와 같은 문구). &mis=101 → done 플래그
+const MIS_LABELS = ['원인 제거 (참교육 완료)', '추돌·피격 합계 3회 이하', '잔챙이 빌런 3명 전원 참교육'];
+const misParam = P.get('mis') ?? '101';
+const MISSIONS = misParam === 'none' ? null : MIS_LABELS.map((label, i) => ({ label, done: misParam[i] === '1' }));
+window.makePhoto = makePhoto; window.makeStages = makeStages; window.CHAPTERS = CHAPTERS; window.progress = progress; window.STAGES_X = STAGES_X;
+let frame = null;
+function every(fn) { const f = (t) => { fn(t); requestAnimationFrame(f); }; requestAnimationFrame(f); }
+
+function playHUD(phase, opts = {}) {
+  ui.showStageCard(stage).then(() => {});  // 칩/내비 패턴 세팅용 (setHUD 가 곧 닫음)
+  ui.setTouchVisible(touch);
+  ui.setControls({ jump: P.get('jump') !== '0', jumpCd: +(P.get('jumpcd') || 0) });
+  const [md, mt] = (P.get('minis') || opts.minis || '1/3').split('/').map(Number);
+  const boost = +(P.get('boost') ?? opts.boost ?? 0);
+  let score = opts.score ?? 12840, combo = opts.combo ?? 0;
+  const t0 = performance.now();
+  every((t) => {
+    const k = (t - t0) / 1000;
+    const speed = phase === 'release' || phase === 'cruise' ? 128 + Math.round(Math.sin(k) * 3) : phase === 'boss' ? 82 : Math.round(18 + 10 * Math.sin(k * 1.3));
+    ui.setHUD({ phase, speedKmh: speed, distM: Math.max(0, Math.round(182 - k * 4)), rage: opts.rage ?? 0.58, score, combo, minis: { done: md, total: mt }, boostT: boost, rageMode: P.get('ragemode') || undefined });
+    ui.setNav({ progress: opts.progress ?? 0.38, released: opts.released ? Math.min(opts.released, k * 0.25) : 0 });
+    ui.vignette(phase === 'jam' ? Math.max(0, (opts.rage ?? 0.58) - 0.5) * 0.7 : 0);
+    for (const b of opts.bubbles || []) { const c = car(b.who); ui.bubble(b.key, c.sx, c.sy, b.text, b.kind); }
+    if (opts.boss) ui.showBoss({ name: opts.boss.name, hp: Math.max(0.12, opts.boss.hp - k * 0.01), tires: opts.boss.tires });
+  });
+}
+
+switch (screen) {
+  case 'title':
+    if (BIG) ui.showTitle(STAGES_X, progress, CAT ? CATALOG.chapters : CHAPTERS, SHOP);
+    else ui.showTitle(STAGES, progress, undefined, P.get('noshop') === '1' ? undefined : SHOP);
+    break;
+  case 'shop':
+    if (BIG) ui.showTitle(STAGES_X, progress, CHAPTERS, SHOP); else ui.showTitle(STAGES, progress, undefined, SHOP);
+    ui.showShop(SHOP, progress, P.get('tab') || undefined);
+    if (P.get('buy')) setTimeout(() => { const b = document.querySelector(`.ui-item[data-id="${P.get('buy')}"] [data-act="buy"]`); if (b) b.click(); else { const it = SHOP.find((x) => x.id === P.get('buy')); if (it) { progress.owned.push(it.id); ui.refreshShop(progress); } } }, +(P.get('buyat') || 700));
+    break;
+  case 'album':
+    if (BIG) { const ch = CAT ? CATALOG.chapters : CHAPTERS; ui.showTitle(STAGES_X, progress, ch); ui.showAlbum(STAGES_X, progress, ch); }
+    else { ui.showTitle(STAGES, progress); ui.showAlbum(STAGES, progress); }
+    break;
+  case 'card': {
+    // &road=none,echo[,특수] → v0.4 도로 상황 (없으면 기존 카드)
+    const rp = P.get('road');
+    const [sh, hk, ...sp] = (rp || '').split(',');
+    const road = rp ? { shoulder: sh || undefined, honk: hk || undefined, special: sp.join(',') || undefined, hint: P.get('hint') || undefined } : undefined;
+    if (P.get('hold') === '1') { const st = document.createElement('style'); st.textContent = '.ui-card__timer i{animation-play-state:paused!important}'; document.head.appendChild(st); }
+    onLoad(() => ui.showStageCard(stage, MISSIONS ? MISSIONS.map(({ label }) => ({ label })) : undefined, road).then(() => console.log('card resolved')));
+    break;
+  }
+  case 'hp': {
+    // v0.4 내구도 '범퍼 5칸'
+    const max = +(P.get('max') ?? 100), hp0 = +(P.get('hp') ?? 37);
+    const phase = P.get('phase') || 'boss';
+    playHUD(phase, phase === 'boss' ? { combo: 4, rage: 0.4, progress: 0.97, boss: { name: stage.villains[0].name, hp: 0.62, tires: 3 } } : { rage: 0.4 });
+    const lowFx = P.get('lowfx') === '1' ? true : P.get('lowfx') === '0' ? false : undefined;
+    let hp = hp0;
+    const push = (inv) => ui.setHP({ hp, max, invuln: inv ?? (P.get('inv') === '1'), lowFx });
+    push();
+    window.setHP = (v, inv) => { hp = v; push(inv); };
+    if (P.get('hit')) setTimeout(() => { hp = Math.max(0, hp - +P.get('hit')); push(true); }, 800);
+    if (P.get('demo') === '1') {
+      hp = max; push();
+      const dmg = [10, 20, 5, 30, 10, 40];
+      let i = 0;
+      setInterval(() => { if (hp <= 0) { hp = max; push(false); return; } hp = Math.max(0, hp - dmg[i++ % dmg.length] * max / 100); push(true); }, 1300);
+    }
+    if (P.get('toast') === '1') setTimeout(() => { ui.toast('또 빵? (경적 피로)', 'warn'); ui.toast('레커 출동!', 'good'); }, 300);
+    break;
+  }
+  case 'fail': {
+    playHUD('boss', { combo: 0, rage: 0.2, progress: 0.97, boss: { name: stage.villains[0].name, hp: 0.41, tires: 2 } });
+    ui.setHP({ hp: 0, max: 100 });
+    onLoad(() => setTimeout(() => {
+      ui.showFail({
+        title: P.get('title') || undefined,
+        reason: P.get('reason') ?? '돌진에 들이받힘',
+        villainName: P.get('who') ?? stage.villains.map((v) => v.name).join(' & '),
+        hpLost: +(P.get('lost') ?? 40),
+        retryLabel: P.get('retry') || undefined,
+      }).then((c) => { console.log('fail choice', c); window.__failChoice = c; });
+    }, 60));
+    break;
+  }
+  case 'toast': {
+    playHUD('jam', { rage: 0.3 });
+    const seq = [['또 빵? (경적 피로)', 'warn'], ['틈 없음', 'info'], ['레커 출동!', 'good'], ['또 빵? (경적 피로)', 'warn']];
+    seq.forEach(([t, k], i) => setTimeout(() => ui.toast(t, k), 200 + i * 250));
+    break;
+  }
+  case 'roads': {
+    // 아이콘 갤러리: 카드를 조합마다 띄워서 .ui-road 를 복사 (개발용)
+    const SH = ['open', 'crowded', 'blocked', 'closed', 'dark', 'debris', 'watched', 'merge', 'occupied', 'none', 'open'];
+    const HK = ['yield', 'gapRace', 'backfire', 'push', 'ignoredWhileYielding', 'rescue', 'normal', 'bait', 'notify', 'evict', 'echo'];
+    const SP = ['안개', '야간', '카메라 3곳', '터널', '빗길', '눈길', '공사 구간', '합류 테이퍼', '', '기차 차량', ''];
+    const gal = document.createElement('div');
+    gal.style.cssText = 'position:fixed;inset:0;z-index:60;overflow:auto;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:8px;align-content:start;background:#2a3140';
+    gal.className = 'ui-root';
+    onLoad(() => {
+      SH.forEach((sh, i) => {
+        ui.showStageCard(stage, undefined, { shoulder: sh, honk: HK[i], special: SP[i] || undefined });
+        const r = document.querySelector('#ui .ui-road');
+        if (r) { const c = r.cloneNode(true); c.style.margin = '0'; c.style.gridArea = 'auto'; c.querySelectorAll('.ui-road__tile').forEach((t) => { t.style.animation = 'none'; }); gal.appendChild(c); }
+      });
+      document.body.appendChild(gal);
+    });
+    break;
+  }
+  case 'hud':
+    playHUD('jam', {
+      combo: 0, rage: 0.58,
+      bubbles: [
+        { key: 'a', who: (c) => c.lane === 1 && c.d > 18, text: '어딜 끼어들어!', kind: 'angry' },
+        { key: 'b', who: (c) => c.lane === 3 && c.d > 24, text: '네네 가세요~', kind: 'thanks' },
+        { key: 'v', who: (c) => c.villain, text: '1차선은 내 차선인데?', kind: 'taunt' },
+        { key: 'e', who: (c) => c.lane === 0 && c.d > 15, text: '빵빵!!', kind: 'angry' },
+      ],
+    });
+    setInterval(() => { const p = car((c) => c.player); ui.popText(p.sx, p.sy - 20, '빵!', 'warn'); }, 900);
+    setTimeout(() => { const p = car((c) => c.lane === 2 && c.d > 15 && !c.player); ui.popText(p.sx, p.sy + 20, '쿵!', 'bump'); }, 300);
+    setTimeout(() => ui.hint('막히면 경적(Space/발사)으로 비키게!', 60000), 200);
+    break;
+  case 'boss':
+    playHUD('boss', {
+      combo: 23, rage: 1, progress: 0.97, score: 31570,
+      boss: { name: stage.villains.map((v) => v.name).join(' & '), hp: 0.62, tires: 2 },
+      bubbles: [{ key: 'v', who: (c) => c.villain, text: stage.taunts[0], kind: 'taunt' }],
+    });
+    setInterval(() => { const v = car((c) => c.villain); ui.popText(v.sx, v.sy + 40, '-4', 'hit'); }, 140);
+    setInterval(() => { const v = car((c) => c.villain); ui.popText(v.sx + 30, v.sy + 10, '분노 폭발! -38', 'crit'); }, 1200);
+    setTimeout(() => { const v = car((c) => c.villain); ui.popText(v.sx - 40, v.sy + 30, '펑크!', 'crit'); }, 400);
+    break;
+  case 'release':
+    playHUD('release', {
+      progress: 0.99, released: 0.65, score: 54210, combo: 0, rage: 0.2,
+      bubbles: [
+        { key: 't1', who: (c) => c.lane === 1 && c.d > 18, text: THANKS_LINES[0], kind: 'thanks' },
+        { key: 't2', who: (c) => c.lane === 3 && c.d > 20, text: THANKS_LINES[2], kind: 'thanks' },
+        { key: 't3', who: (c) => c.lane === 0 && c.d > 40, text: THANKS_LINES[3], kind: 'thanks' },
+      ],
+    });
+    onLoad(() => {
+      ui.banner('참교육 완료!', 'big', 1500);
+      ui.banner('뻥 뚫렸다!!', 'big', P.has('long') ? 60000 : 2400);
+      ui.setReleaseCounter(0);
+      let n = 0; const iv = setInterval(() => { n += 37 + Math.floor(Math.random() * 20); ui.setReleaseCounter(Math.min(1284, n)); if (n >= 1284) clearInterval(iv); }, 60);
+    });
+    break;
+  case 'result':
+    ui.showStageCard(stage); ui.setHUD({ phase: 'cruise', speedKmh: 120, distM: 0, rage: 0, score: 0, combo: 0 });
+    ui.showResult({
+      stageName: `${stage.highway} · ${stage.direction}`,
+      villainName: stage.villains.map((v) => v.name).join(' & '),
+      stars: MISSIONS ? MISSIONS.filter((m) => m.done).length : +(P.get('stars') ?? 3), score: 58730, isLast: si === STAGES.length - 1,
+      missions: MISSIONS || undefined,
+      reward: P.get('reward') === '0' ? undefined : (() => {
+        const st = MISSIONS ? MISSIONS.filter((m) => m.done).length : +(P.get('stars') ?? 3), fine = stage.fine ?? 40000, bonus = P.get('bonus') === '0' ? 0 : 10000;
+        const payout = Math.round(((stage.payout ?? fine) * [1, 1, 1.5, 2][st] + bonus) / 100) * 100;   // rewards.js 와 같은 식
+        const ms = P.get('milestone') || 'silver';
+        return {
+          photo: P.get('photo') === '0' ? null : makePhoto(si + 3, stage.sky, '#' + (stage.villains[0].color >>> 0).toString(16).padStart(6, '0')),
+          villainName: stage.villains.map((v) => v.name).join(' & '), violation: stage.violation || '지정차로 위반', fine, payout, bonus, stars: st,
+          wallet: 123400, views: 123456, subsGain: 1204, subs: ms === 'gold' ? 1000400 : ms === 'silver' ? 100400 : 31204,
+          comments: ['사이다 ㅋㅋㅋㅋㅋ', '이분 국가유공자 지정해라', `${stage.villains[0].name} 보고 혈압 올랐는데 덕분에 내려감`],
+          milestone: ms === 'none' ? null : ms === 'gold' ? '골드 참교육 버튼 획득!' : ms === 'bronze' ? '구독자 1만 돌파!' : '실버 참교육 버튼 획득!',
+          stageId: stage.id, cause: stage.cause, card: stage.card,
+        };
+      })(),
+      stats: [
+        { label: '속시원함 지수', value: '94%' },
+        { label: '해방된 차량', value: '1,506대' },
+        { label: '정체 해소', value: `${stage.displayKm}km` },
+        { label: '소요 시간', value: '1:12' },
+        { label: '추돌', value: '2회' },
+        { label: '최대 콤보', value: 'x41' },
+        { label: '분노 미사일', value: '3발' },
+      ],
+    });
+    break;
+  case 'pause':
+    playHUD('boss', { combo: 5, rage: 0.4, progress: 0.96, boss: { name: stage.villains[0].name, hp: 0.8, tires: 4 } });
+    setTimeout(() => ui.setPausedVisible(true), 100);
+    break;
+  default: break;
+}
+</script>
+</body>
+</html>

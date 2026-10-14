@@ -1,0 +1,214 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/vehicles/villainSedan_v0.res" id="1_jhggd"]
+[ext_resource type="Script" path="res://assets/vehicles/vehicle_template.gd" id="2_qftcw"]
+[ext_resource type="ArrayMesh" path="res://assets/vehicles/villainSedan_v0.driver.res" id="3_l1vch"]
+[ext_resource type="ArrayMesh" path="res://assets/vehicles/villainSedan_v0.wheel.res" id="4_01uxd"]
+
+[resource]
+script = ExtResource("2_qftcw")
+kind = &"villainSedan"
+detailed = true
+length = 4.9
+width = 1.84
+height = 1.81
+wheel_radius = 0.36
+mesh = ExtResource("1_jhggd")
+surface_names = PackedStringArray("body", "lamps", "glass", "fx")
+parts = {
+"beam": {
+"aabb": AABB(-3.4, 0.05, -15.401, 6.8, 0, 13),
+"first_index": 0,
+"first_vertex": 0,
+"id": 24,
+"index_count": 6,
+"surface": 3,
+"vertex_count": 4
+},
+"blink_FL": {
+"aabb": AABB(-1.122, 0.6, -2.502, 0.39199996, 0.502, 1.9320002),
+"first_index": 648,
+"first_vertex": 432,
+"id": 13,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"blink_FR": {
+"aabb": AABB(0.73, 0.6, -2.502, 0.39199996, 0.502, 1.9320002),
+"first_index": 864,
+"first_vertex": 576,
+"id": 14,
+"index_count": 216,
+"surface": 1,
+"vertex_count": 144
+},
+"blink_RL": {
+"aabb": AABB(-1.006, 0.51, 2.21, 0.35600007, 0.43199998, 0.30200005),
+"first_index": 1080,
+"first_vertex": 720,
+"id": 15,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"blink_RR": {
+"aabb": AABB(0.65, 0.51, 2.21, 0.35600007, 0.43199998, 0.30200005),
+"first_index": 1188,
+"first_vertex": 792,
+"id": 16,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"body": {
+"aabb": AABB(-1.09, 0.13, -2.501, 2.16, 1.68, 4.977),
+"first_index": 0,
+"first_vertex": 0,
+"id": 0,
+"index_count": 3198,
+"surface": 0,
+"vertex_count": 2130
+},
+"brake_L": {
+"aabb": AABB(-0.67, 0.55, 2.15, 0.37, 0.34600002, 0.296),
+"first_index": 0,
+"first_vertex": 0,
+"id": 1,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"brake_R": {
+"aabb": AABB(0.3, 0.55, 2.15, 0.37, 0.34600002, 0.296),
+"first_index": 72,
+"first_vertex": 48,
+"id": 2,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"glass": {
+"aabb": AABB(-0.87, 0.86, -0.86, 1.74, 0.52, 2.0500002),
+"first_index": 0,
+"first_vertex": 0,
+"id": 25,
+"index_count": 72,
+"surface": 2,
+"vertex_count": 46
+},
+"hazard_FL": {
+"aabb": AABB(-1.07, 0.64, -2.436, 0.32000005, 0.41999996, 1.8460002),
+"first_index": 288,
+"first_vertex": 192,
+"id": 7,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"hazard_FR": {
+"aabb": AABB(0.75, 0.64, -2.436, 0.32000005, 0.41999996, 1.8460002),
+"first_index": 396,
+"first_vertex": 264,
+"id": 8,
+"index_count": 108,
+"surface": 1,
+"vertex_count": 72
+},
+"hazard_RL": {
+"aabb": AABB(-0.934, 0.55, 2.23, 0.264, 0.34600002, 0.21600008),
+"first_index": 504,
+"first_vertex": 336,
+"id": 9,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"hazard_RR": {
+"aabb": AABB(0.67, 0.55, 2.23, 0.264, 0.34600002, 0.21600008),
+"first_index": 576,
+"first_vertex": 384,
+"id": 10,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_L": {
+"aabb": AABB(-0.75, 0.64, -2.436, 0.19999999, 0.15000004, 0.086000204),
+"first_index": 144,
+"first_vertex": 96,
+"id": 4,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+},
+"head_R": {
+"aabb": AABB(0.55, 0.64, -2.436, 0.19999999, 0.15000004, 0.086000204),
+"first_index": 216,
+"first_vertex": 144,
+"id": 5,
+"index_count": 72,
+"surface": 1,
+"vertex_count": 48
+}
+}
+lamp_groups = {
+"beam": PackedStringArray("beam"),
+"blink_L": PackedStringArray("blink_FL", "blink_RL"),
+"blink_R": PackedStringArray("blink_FR", "blink_RR"),
+"brake": PackedStringArray("brake_L", "brake_R"),
+"hazard": PackedStringArray("hazard_FL", "hazard_FR", "hazard_RL", "hazard_RR"),
+"head": PackedStringArray("head_L", "head_R")
+}
+lamp_off_multiplier = {
+"brake": Color(0.65882355, 0.20392157, 0.20392157, 1),
+"hazard": Color(0.3529412, 0.2901961, 0.1882353, 1),
+"head": Color(0.6039216, 0.6039216, 0.5647059, 1)
+}
+sub_meshes = {
+"driver": {
+"mesh": ExtResource("3_l1vch"),
+"transforms": Array[Transform3D]([Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4089, 0.7528, -0.0864)])
+},
+"wheel": {
+"mesh": ExtResource("4_01uxd"),
+"transforms": Array[Transform3D]([Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.79, 0.36, -1.56), Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.79, 0.36, -1.56), Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.79, 0.36, 1.5), Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.79, 0.36, 1.5)])
+}
+}
+points = {
+"blink_halo_L": PackedVector3Array(-1.034, 0.77, -2.63, -1.034, 0.74, 2.64),
+"blink_halo_R": PackedVector3Array(1.034, 0.77, -2.63, 1.034, 0.74, 2.64),
+"exhaust": Vector3(0.55, 0.3, 2.45),
+"smokePoint": Vector3(0, 0.96, -1.625)
+}
+paint_default = Color(0.8509804, 0.7882353, 0.6392157, 1)
+tintable = true
+js_ref = {
+"ao": {
+"dist": 0.5,
+"ground": false,
+"occluder_tris": 1780.0,
+"rays": 418560.0
+},
+"bbox": AABB(-3.4, 0, -15.401, 6.8, 1.81, 17.913),
+"paint_fit": {
+"checked_colors": 14.0,
+"default": "#d9c9a3",
+"geometry_varies": false,
+"livery": false,
+"nonfit_vertices": 0.0,
+"paint_vertices": 444.0,
+"tintable": true
+},
+"source": {
+"args": ["villainSedan", {
+"variant": 0.0
+}],
+"fn": "buildVehicle",
+"module": "vehicles"
+},
+"three": "170",
+"tris": 2238,
+"web_frozen_sha": "753549a",
+"welded_vertices": 3676
+}

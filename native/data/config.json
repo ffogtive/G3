@@ -1,0 +1,872 @@
+{
+  "boss": {
+    "attackInterval": [2.5, 3.5],
+    "discoverDist": 35,
+    "fightGap": 11,
+    "finish": "rocket",
+    "firstAttack": 2,
+    "genericWindow": {
+      "dur": 1.2,
+      "hint": "발사 꾹 · 빈틈 노려",
+      "on": true,
+      "period": 4.5
+    },
+    "hintJam": 3.4,
+    "immuneBelow": 0.3,
+    "introTime": 2.05,
+    "kill": {
+      "hitstop": 0.16,
+      "releaseDelay": 0.95,
+      "slow": 0.28,
+      "slowFor": 1.25
+    },
+    "leash": {
+      "dv": 4,
+      "far": 14,
+      "passedHint": 15
+    },
+    "lockAt": 2.5,
+    "release": {
+      "cruiseAfter": 0.8,
+      "cruiseV": 27,
+      "minTime": 4.2,
+      "waveExtra": 1.4
+    },
+    "retry": {
+      "back": 33,
+      "obstaclePad": 4,
+      "v": 10
+    },
+    "stuckHint": 2.2,
+    "vulnMul": 4,
+    "wreck": {
+      "failAfter": 1.6,
+      "slow": 0.3,
+      "slowFor": 1.4
+    }
+  },
+  "fonts": {
+    "display": "\"Black Han Sans\", \"Jua\", \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif",
+    "ui": "\"Jua\", \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif"
+  },
+  "generated": "tools/content/build.mjs from native/data/src/config.json — do not edit",
+  "hp": {
+    "boostPush": true,
+    "jamFloor": 60,
+    "star2": 60
+  },
+  "npc": {
+    "colorsMono": [16053490, 16053490, 15330543, 2829617, 1908514, 10133929, 12830926, 7041401],
+    "colorsPop": [3108822, 14169132, 3841373, 14722342, 7162808, 9132604, 1483957],
+    "kinds": [
+      ["sedan", 30],
+      ["compact", 14],
+      ["suv", 20],
+      ["taxi", 6],
+      ["van", 6],
+      ["pickup1t", 9],
+      ["truck", 6],
+      ["bus", 4]
+    ],
+    "playerColor": 16763176
+  },
+  "rng": {
+    "algorithm": "mulberry32",
+    "mathRandom": "web Math.random (boss attack pick, taunts, fx) → native RandomNumberGenerator(--seed) (NATIVE_PORT 3-3)",
+    "source": "function mulberry32(a) {\n  return function () {\n    a |= 0; a = (a + 0x6d2b79f5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}",
+    "stagegen": "build-time only: rngFor(id) LCG a = (id*2654435761)>>>0; a = (a*1664525 + 1013904223)>>>0; a/2^32 (tools/content/stagegen.js)",
+    "traffic": "mulberry32(stage.id * 1000 + 7)  (main.js:360)",
+    "vehicleVariant": "seed = floor(rng * 1e6); variant = canon[seed % variants]  (traffic.js:88, vehicles.js buildVehicle)",
+    "world": "mulberry32(stage.id * 7919 + 13)  (world.js:132)"
+  },
+  "road": {
+    "laneW": 3.6,
+    "laneX": [-5.4, -1.8, 1.8, 5.4, 9],
+    "medianGap": 0.6,
+    "medianW": 0.9,
+    "medianX": -8.25,
+    "numLanes": 4,
+    "oppLaneX": [-11.1, -14.7, -18.299999999999997, -21.9],
+    "oppRoadLeft": -23.7,
+    "roadLeft": -7.2,
+    "roadRight": 7.2,
+    "segLen": 40,
+    "shoulderLane": 4,
+    "shoulderW": 3
+  },
+  "schema_version": 1,
+  "setup": {
+    "frontGap": 30,
+    "noShoulderJamLength": 85,
+    "noShoulderModes": ["closed", "none"],
+    "noShoulderStartLane": 1,
+    "startLane": 3,
+    "startS": 0,
+    "trafficSeedAdd": 7,
+    "trafficSeedMul": 1000,
+    "worldSeedAdd": 13,
+    "worldSeedMul": 7919
+  },
+  "skills": {
+    "cineGap": 6,
+    "combo": {
+      "breakEventMin": 5,
+      "c10": {
+        "delays": [0.15, 0.21, 0.27],
+        "dur": 0.4,
+        "fracIn": 0.025,
+        "fracOut": 0.01,
+        "id": "c10_burst",
+        "label": "따다닥!",
+        "name": "따다닥",
+        "score": 100
+      },
+      "c20": {
+        "cancel": true,
+        "delays": [0.25],
+        "dur": 0.5,
+        "fracIn": 0.09,
+        "fracOut": 0.05,
+        "hitstop": 0.04,
+        "id": "c20_snipe",
+        "label": "타이어 저격!",
+        "name": "타이어 저격",
+        "pop": 1,
+        "score": 300,
+        "stun": 0.8
+      },
+      "c5": {
+        "delays": [0.12, 0.18],
+        "dur": 0.3,
+        "fracIn": 0.012,
+        "fracOut": 0.005,
+        "id": "c5_double",
+        "label": "따닥!",
+        "name": "따닥",
+        "score": 50
+      },
+      "cycle": 20,
+      "milestones": {
+        "10": "c10",
+        "15": "c5",
+        "20": "c20",
+        "5": "c5"
+      },
+      "timeout": 1.5
+    },
+    "finish": {
+      "balloon": {
+        "done": 2.1,
+        "lift": 0.5,
+        "settle": 0.5,
+        "twinkle": 1.9
+      },
+      "heli": {
+        "done": 2.3,
+        "hook": 0.9,
+        "settle": 0.3,
+        "twinkle": 2.1
+      },
+      "hitstop": 0.14,
+      "pullover": {
+        "done": 2.2
+      },
+      "releaseDelay": 0.3,
+      "rocket": {
+        "done": 1.9,
+        "lift": 0.6,
+        "settle": 0.5,
+        "twinkle": 1.6
+      },
+      "skipAfter": 0.6,
+      "slow": 0.3,
+      "ufo": {
+        "beam": 0.4,
+        "done": 2,
+        "settle": 0.15,
+        "twinkle": 1.8
+      }
+    },
+    "fx": {
+      "c10": {
+        "banner": "따다닥!",
+        "sfx": [
+          ["tack", 0.15, 1, 1.1],
+          ["tack", 0.21, 1, 1.25],
+          ["tack", 0.27, 1, 1.4],
+          ["crit", 0.27, 0.8, 1]
+        ]
+      },
+      "c20": {
+        "banner": "타이어 저격!",
+        "camera": {
+          "punch": -2,
+          "shake": 0.3
+        },
+        "flash": ["ffd23a", 0.15, 60],
+        "hitstop": 0.04,
+        "sfx": [
+          ["whoosh", 0, 0.8, 1.6],
+          ["pop", 0.25, 1, 1],
+          ["crit", 0.25, 0.9, 1],
+          ["explosion", 0.25, 0.3, 1.5]
+        ]
+      },
+      "c5": {
+        "banner": "따닥!",
+        "sfx": [
+          ["tack", 0.12, 0.85, 1.1],
+          ["tack", 0.18, 0.85, 1.25]
+        ]
+      },
+      "mv_drone": {
+        "banner": "드론 폭격!",
+        "camera": {
+          "shake": 0.15
+        },
+        "sfx": [
+          ["whoosh", 0, 0.7, 1.5],
+          ["explosion", 0.7, 0.35, 1.2],
+          ["pop", 0.75, 0.5, 1.1],
+          ["crit", 1, 0.6, 1]
+        ]
+      },
+      "mv_jump": {
+        "banner": "쿵!",
+        "camera": {
+          "punch": -4,
+          "shake": 0.45
+        },
+        "castBanner": "점프!",
+        "sfx": [
+          ["whoosh", 0, 0.6, 1.3],
+          ["bump", 0.75, 1, 0.6],
+          ["explosion", 0.75, 0.3, 1.6]
+        ]
+      },
+      "t1": {
+        "banner": "갓길 청소!!",
+        "bannerWave": "충격파!!",
+        "camera": {
+          "punch": -3,
+          "shake": 0.35
+        },
+        "flash": ["ffd23a", 0.3, 90],
+        "sfx": [
+          ["hornTruck", 0, 1, 1],
+          ["superHit", 0.12, 0.5, 1.15]
+        ]
+      },
+      "t1_wave": {
+        "banner": "충격파!!",
+        "camera": {
+          "kick": 0.6,
+          "punch": -5,
+          "shake": 0.5
+        },
+        "flash": ["ffd23a", 0.25, 80],
+        "sfx": [
+          ["sk_wave", 0, 1, 1],
+          ["superHit", 0.12, 0.7, 1],
+          ["explosion", 0.12, 0.35, 1.6]
+        ]
+      },
+      "t3": {
+        "banner": "압정 폭격!!",
+        "camera": {
+          "lift": 0.25,
+          "punch": -7,
+          "shake": 0.65
+        },
+        "flash": ["ff7a1a", 0.25, 120],
+        "sfx": [
+          ["launch", 0, 0.7, 1],
+          ["tack", 0.05, 0.6, 0.9],
+          ["tack", 0.1, 0.6, 1.05],
+          ["tack", 0.15, 0.6, 1.2]
+        ]
+      },
+      "t5": {
+        "banner": "참교육!!",
+        "camera": {
+          "punch": -8,
+          "push": -6,
+          "shake": 0.9
+        },
+        "flash": ["fff1c4", 0.45, 70],
+        "sfx": [
+          ["rageFull", 0, 0.7, 0.8],
+          ["super", 0, 0.6, 1],
+          ["superHit", 0.35, 1, 1],
+          ["explosion", 0.35, 0.95, 1]
+        ]
+      }
+    },
+    "hpMul": 1.7,
+    "invulnPad": 0.2,
+    "items": {
+      "mv_drone": {
+        "bombGap": 0.05,
+        "bomblets": 6,
+        "charges": -1,
+        "cool": 12,
+        "coolJam": 8,
+        "delay": 0.7,
+        "dmgIn": 15,
+        "dmgOut": 5,
+        "dur": 1,
+        "jamRange": 40,
+        "passive": "minis",
+        "passiveEvery": 0.7,
+        "range": 45,
+        "score": 300,
+        "slot": 2
+      },
+      "mv_jump": {
+        "charges": -1,
+        "cool": 6,
+        "coolJam": 4,
+        "dmgIn": 8,
+        "dmgOut": 3,
+        "dur": 0.95,
+        "hop": 0.75,
+        "invuln": 0.85,
+        "jamMinSlot": 1.2,
+        "jamReach": 19,
+        "jamSlotPad": 0.7,
+        "landRange": 14,
+        "laneRange": 1,
+        "score": 150,
+        "slot": 1,
+        "stun": 0.6
+      },
+      "mv_tow": {
+        "charges": 1,
+        "cool": 0,
+        "delay": 0.8,
+        "dur": 1,
+        "jamRange": 60,
+        "pin": 1.5,
+        "range": 45,
+        "score": 300,
+        "slot": 2,
+        "wreckerBonus": 1
+      }
+    },
+    "jamTier": 1,
+    "ladder": [1, 3, 5],
+    "minKillT": 6,
+    "preLockLadder": [1],
+    "rageGain": {
+      "dodge": 0.04,
+      "fightCap": 0.6,
+      "lock": 0.3,
+      "windowHit": 0.03
+    },
+    "select": "highest",
+    "skipAfter": 0.5,
+    "stunCap": 2,
+    "stunImmune": 1.5,
+    "t1": {
+      "cancel": true,
+      "chase": 0.8,
+      "cost": 1,
+      "delay": 0.12,
+      "delayFrom": 15,
+      "delayPerM": 0.00833,
+      "dmgIn": 12,
+      "dmgInFrac": 0.05,
+      "dmgOut": 6,
+      "dmgOutFrac": 0.04,
+      "dur": 0.5,
+      "hitstop": 0.07,
+      "jam": {
+        "boost": 2.2
+      },
+      "laneRange": 99,
+      "reach": 60,
+      "score": 200,
+      "slow": 1,
+      "slowFor": 0,
+      "stun": 0.6,
+      "stunPreLock": 0.4
+    },
+    "t3": {
+      "cost": 3,
+      "delay": 0.4,
+      "dmgIn": 30,
+      "dmgInFrac": 0.18,
+      "dmgOut": 20,
+      "dmgOutFrac": 0.14,
+      "dur": 1.2,
+      "hitGap": 0.1,
+      "hits": 4,
+      "hitstop": 0.11,
+      "laneRange": 1,
+      "pop": 1,
+      "score": 600,
+      "slow": 0.4,
+      "slowFor": 0.45,
+      "strip": 12,
+      "stun": 1.2,
+      "tacks": 18
+    },
+    "t5": {
+      "cost": 5,
+      "delay": 0.45,
+      "dmgInFrac": 0.3,
+      "dmgOutFrac": 0.15,
+      "dur": 2.5,
+      "execute": 0.4,
+      "executeBonus": 1000,
+      "hitstop": 0.14,
+      "score": 1500,
+      "slow": 0.3,
+      "slowFor": 0.8,
+      "stun": 2
+    }
+  },
+  "source": "game/js/config.js + inline constants of traffic.js/main.js @ web-frozen 753549a",
+  "traffic": {
+    "car": {
+      "lcDurDefault": 1.8,
+      "lenFallback": 4.5,
+      "monoP": 0.68,
+      "personalBase": 0.97,
+      "personalSpan": 0.06,
+      "seedScale": 1000000,
+      "slowKinds": ["truck", "bus", "pickup1t"],
+      "vFreeDefault": 30,
+      "wFallback": 1.9
+    },
+    "idm": {
+      "accMin": -9,
+      "b": 3,
+      "brakeV0": 0.01,
+      "cheater": {
+        "T": 0.6,
+        "aMax": 2.5,
+        "s0": 2,
+        "v0Fallback": 5
+      },
+      "delta": 4,
+      "gapFloor": 0.3,
+      "lanes": {
+        "flow": {
+          "T": 0.8,
+          "aMax": 1.6,
+          "personal": true,
+          "s0": 2.2,
+          "v0Mul": 0.95
+        },
+        "packed": {
+          "T": 0.5,
+          "aMax": 1.8,
+          "lfAmp": 0.65,
+          "lfBase": 0.35,
+          "lfFreq": 0.42,
+          "lfLanePhase": 1.9,
+          "personal": true,
+          "s0": 1.4,
+          "v0Mul": 1.25
+        },
+        "pass": {
+          "T": 1,
+          "aMax": 2,
+          "personal": true,
+          "s0": 3,
+          "v0MulFallback": 2.2,
+          "v0MulKey": "jamShape.passV"
+        },
+        "spaced": {
+          "T": 1.6,
+          "aMax": 1.4,
+          "personal": true,
+          "s0": 5.5,
+          "v0Mul": 1.05
+        },
+        "train": {
+          "T": 0.45,
+          "aMax": 1.6,
+          "personal": false,
+          "s0": 1.2,
+          "v0Mul": 1
+        }
+      },
+      "pull": {
+        "T": 0.3,
+        "aMax": 3.6,
+        "s0": 1,
+        "v0Mul": 2.2,
+        "v0MulLetIn": 3.6
+      },
+      "released": {
+        "T": 0.5,
+        "aMax": 4.6,
+        "aMaxSlow": 2.6,
+        "s0": 2
+      },
+      "stopGap": 0.25,
+      "vFloor": 0.1,
+      "villainWall": {
+        "back": 3,
+        "zigExtra": 5
+      },
+      "wall": {
+        "T": 0.5,
+        "aMax": 3,
+        "follow": 0.9,
+        "s0": 1.5
+      }
+    },
+    "occupancy": {
+      "halfLaneMargin": 0.6
+    },
+    "queries": {
+      "canMergeInto": {
+        "margin": 0.35,
+        "yieldOverlap": 1.3
+      },
+      "carsBehindFront": {
+        "n": 6,
+        "range": 35
+      },
+      "hasGap": {
+        "extra": 1,
+        "lenFallback": 4.2,
+        "window": 6
+      },
+      "honk": {
+        "cheaterLcDur": 1.1,
+        "cheaterRange": 30,
+        "cheaterRangeSiren": 50,
+        "fatigueHalfP": 0.5,
+        "fatigueIgnoreAt": 3,
+        "fatigueRelax": 8,
+        "probeBack": 0.5,
+        "range": 18,
+        "rangeSiren": 45,
+        "rangeSlack": 2,
+        "rangeTrot": 24,
+        "villainRange": 30,
+        "yieldLcDur": 0.85,
+        "yieldMargin": 1.6
+      },
+      "letIn": {
+        "aheadMax": 22,
+        "aheadMin": -3.5,
+        "behindMax": -14,
+        "brake": 2.2,
+        "pull": 2.2,
+        "yieldFor": 2.8
+      },
+      "miniHit": {
+        "brake": 2.5,
+        "hazard": 4,
+        "jolt": 0.6,
+        "lcDur": 0.9
+      },
+      "miniTarget": {
+        "ahead": 26,
+        "behind": -3,
+        "lateralLanes": 1.2
+      },
+      "pullAhead": {
+        "hold": 1.2,
+        "range": 18
+      },
+      "rageHorn": {
+        "behind": 2,
+        "lcDur": 0.7,
+        "startledHold": 0.5
+      },
+      "safeToEnter": {
+        "closingGain": 1.5,
+        "touch": -0.1
+      }
+    },
+    "spawn": {
+      "barrier": {
+        "fromBehindPlayer": 20,
+        "pastFront": 30,
+        "spacing": 6,
+        "xOffset": 1.2,
+        "zScale": 0.5
+      },
+      "blocked": {
+        "count": 5,
+        "spacing": 12,
+        "startFrac": 0.45
+      },
+      "cheaterKinds": [
+        ["sedan", 3],
+        ["suv", 2],
+        ["compact", 1]
+      ],
+      "cheaterSpawnV": 4.5,
+      "cheaterVBase": 4,
+      "cheaterVSpan": 2.5,
+      "crowdedCheaters": 3,
+      "darkSpec": [
+        ["debris", 3],
+        ["breakdown", 1],
+        ["cheater", 1]
+      ],
+      "debrisSpec": [
+        ["debris", 4],
+        ["cheater", 1]
+      ],
+      "emptyFrontRearBack": 3,
+      "frontRowFallback": [null, "truck", "truck", "truck"],
+      "gap": {
+        "flow": {
+          "base": 2.6,
+          "span": 2
+        },
+        "packed": {
+          "base": 1.5,
+          "dividedByDensity": true,
+          "span": 1.7
+        },
+        "pass": {
+          "base": 9,
+          "span": 5
+        },
+        "spaced": {
+          "base": 7,
+          "span": 5
+        },
+        "train": {
+          "base": 1.2,
+          "span": 0.5
+        }
+      },
+      "jitterBase": 0.25,
+      "jitterSpan": 0.5,
+      "laneCarV0Mul": 0.7,
+      "leadGap": {
+        "base": 2.2,
+        "spacedBase": 9,
+        "spacedSpan": 4,
+        "span": 1.6,
+        "zigExtra": 6
+      },
+      "minis": {
+        "base": 2,
+        "coolBase": 0.6,
+        "hp": 12,
+        "max": 4,
+        "perDifficulty": 3,
+        "window": 30
+      },
+      "obstacleXOffset": 0.1,
+      "opp": {
+        "count": 26,
+        "lanes": 4,
+        "monoP": 0.7,
+        "sBehind": 100,
+        "sSpan": 520,
+        "vBase": 24,
+        "vPerLane": 2,
+        "vSpan": 12
+      },
+      "playerHoleHalf": 3.4,
+      "playerHolePushBack": 2,
+      "shoulderEndBeforeFront": 22,
+      "shoulderFallbackSpec": [
+        ["breakdown", 1],
+        ["cones", 1],
+        ["cheater", 1]
+      ],
+      "shoulderStartAhead": 38,
+      "tailBehindPlayer": 45,
+      "wallOffsetSpan": 1.2
+    },
+    "update": {
+      "brakeLight": {
+        "accBelow": -0.25,
+        "flickerAbove": 0.2,
+        "flickerFreq": 1.3,
+        "vBelow": 1.6
+      },
+      "cheaterEvent": {
+        "blockMargin": 2,
+        "firstDelay": 6,
+        "lcDur": 0.9,
+        "minPlayerV": 8,
+        "nextBase": 7,
+        "nextSpan": 5,
+        "vBase": 4,
+        "vSpan": 2,
+        "windowMax": 30,
+        "windowMin": 14
+      },
+      "hazard": {
+        "cheaterFreq": 2.2,
+        "onFrac": 0.27,
+        "period": 0.5
+      },
+      "jamWave": {
+        "amp": 0.88,
+        "hitMargin": 1.2,
+        "hold": 0.6,
+        "holdCap": 2.5,
+        "life": 6,
+        "minStrength": 0.15,
+        "speed": 6
+      },
+      "laneChange": {
+        "dtFloor": 0.0001,
+        "yawGain": 0.8,
+        "yawMinV": 2
+      },
+      "minis": {
+        "cutin": {
+          "blockMargin": 2,
+          "cool": 3,
+          "dsMin": 10,
+          "lcDur": 0.8,
+          "v": 3.5
+        },
+        "dsMax": 30,
+        "dsMin": 4,
+        "marker": {
+          "bobAmp": 0.18,
+          "bobFreq": 6,
+          "lift": 1.1
+        },
+        "throw": {
+          "coolBase": 2,
+          "coolSpan": 1.2,
+          "maxActs": 2
+        }
+      },
+      "opp": {
+        "recycleBehind": 130,
+        "respawnAhead": 280,
+        "respawnSpan": 160
+      },
+      "postRelease": {
+        "cheaterReturnLcDur": 1.2,
+        "cheaterReturnMargin": 2.5,
+        "lookGap": 22,
+        "nextBase": 0.8,
+        "nextSpan": 0.8,
+        "passLcDur": 0.95,
+        "passMargin": 3.5,
+        "slowLcDur": 1.4,
+        "slowMargin": 3,
+        "vMargin": 3
+      },
+      "randomBrake": {
+        "aheadPlayer": 80,
+        "behindPlayer": 10,
+        "holdBase": 0.6,
+        "holdSpan": 0.7,
+        "ratePerSec": 0.6
+      },
+      "release": {
+        "carExtra": 0.08,
+        "hazard": 1.05,
+        "laneDelayCap": 3,
+        "nextLcBase": 0.4,
+        "nextLcSpan": 0.6,
+        "wallExtra": 0.35
+      },
+      "stuck": {
+        "autoTowAfter": 2,
+        "decay": 2,
+        "pullAheadAfter": 1,
+        "rubberFallback": 2.5,
+        "rubberSafetyFallback": 4,
+        "towProbeAhead": 16,
+        "towProbeBehind": 6,
+        "vBelow": 2.5
+      },
+      "yieldSource": {
+        "ahead": 5,
+        "behind": 20,
+        "holdFallback": 2.5,
+        "periodFallback": 2.5,
+        "waveAmp": 0.8,
+        "waveOffset": 1,
+        "waveStrength": 0.7
+      }
+    }
+  },
+  "tune": {
+    "baseRage": 0.005,
+    "boostTime": 2.2,
+    "bossAheadGap": 11,
+    "bumpRage": 0.06,
+    "cruiseSpeed": 30.5,
+    "cruiseTime": 4.2,
+    "cutinRage": 0.05,
+    "hitRage": 0.08,
+    "honkCool": 1,
+    "hp": {
+      "bumpDmg": 10,
+      "bumpRelV": 6,
+      "coneDmg": 5,
+      "healMini": 10,
+      "healPhase": 10,
+      "invuln": 1,
+      "jamFloor": 20,
+      "max": 100,
+      "miniDmg": 5,
+      "obstacleDmg": 20,
+      "retryPayMin": 0.6,
+      "retryPayStep": 0.2,
+      "tier": {
+        "fatal": 40,
+        "heavy": 30,
+        "light": 10,
+        "mid": 20
+      }
+    },
+    "jamDensity": 125,
+    "laneChangeTime": 0.18,
+    "miniRage": 0.04,
+    "nowayRage": 0.015,
+    "playerAccel": 9,
+    "playerBrake": 22,
+    "playerMaxV": 18,
+    "rageHornRange": 48,
+    "rageSegs": 5,
+    "releaseLaneDelay": 0.45,
+    "releaseSpeed": [25, 30],
+    "releaseWaveSpeed": 70,
+    "shoulderMaxV": 18,
+    "smashRage": 0.012,
+    "superCost": 0.2,
+    "superDmg": 28,
+    "tackDmg": 4,
+    "tackRate": 7,
+    "tauntRage": 0.015,
+    "timeRage": 0.016,
+    "truckFreeSpeed": [22, 25]
+  },
+  "units": {
+    "kmh": 0.2777777777777778
+  },
+  "weapons": {
+    "bomb": {
+      "cool": 0.45,
+      "dmg": 16,
+      "dmgOut": 8,
+      "dur": 0.62
+    },
+    "tack": {
+      "behindRange": 42,
+      "dmg": 1,
+      "dur": 0.32,
+      "hitPad": 0.9,
+      "holdGrace": 0.5,
+      "laneRange": 1,
+      "lobDur": 0.46,
+      "missBack": 9,
+      "missEvery": 0.4,
+      "rate": 5
+    }
+  }
+}

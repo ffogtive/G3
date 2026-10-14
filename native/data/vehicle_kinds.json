@@ -1,0 +1,743 @@
+{
+  "doc": "variant = canon[floor(|seed|) % variants] (NPC cars: seed = floor(rng*1e6)); if seed and variant are both absent: colorVariant ? color % variants : canon[0]. len = dims[detailed?\"detailed\":\"simple\"][variant].L, w = .W. detailed defaults to detailedDefault (villains are built with detailed:true, NPC/obstacle cars with the default).",
+  "generated": "tools/content/build.mjs from native/data/src/vehicle_kinds.json — do not edit",
+  "kinds": {
+    "beginner": {
+      "canon": [0, 1],
+      "colorVariant": false,
+      "defaultColor": 10478537,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.59,
+            "L": 3.6,
+            "W": 1.66
+          },
+          {
+            "H": 1.75,
+            "L": 3.6,
+            "W": 1.62
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.59,
+            "L": 3.6,
+            "W": 1.66
+          },
+          {
+            "H": 1.75,
+            "L": 3.6,
+            "W": 1.62
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 2
+    },
+    "bus": {
+      "canon": [0, 0, 1],
+      "colorVariant": false,
+      "defaultColor": 3108822,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 3.3,
+            "L": 11.5,
+            "W": 2.5
+          },
+          {
+            "H": 3.3,
+            "L": 11.5,
+            "W": 2.5
+          }
+        ],
+        "simple": [
+          {
+            "H": 3.3,
+            "L": 11.5,
+            "W": 2.5
+          },
+          {
+            "H": 3.3,
+            "L": 11.5,
+            "W": 2.5
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 3
+    },
+    "chairmanSedan": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 789776,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.67,
+            "L": 6,
+            "W": 2
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.67,
+            "L": 6,
+            "W": 2
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "compact": {
+      "canon": [0, 0, 1],
+      "colorVariant": false,
+      "defaultColor": 16053490,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.59,
+            "L": 3.6,
+            "W": 1.66
+          },
+          {
+            "H": 1.75,
+            "L": 3.6,
+            "W": 1.62
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.59,
+            "L": 3.6,
+            "W": 1.66
+          },
+          {
+            "H": 1.75,
+            "L": 3.6,
+            "W": 1.62
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 3
+    },
+    "motorbike": {
+      "canon": [0, 1, 2, 3],
+      "colorVariant": false,
+      "defaultColor": null,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2.68,
+            "L": 2.14,
+            "W": 0.8
+          },
+          {
+            "H": 2.02,
+            "L": 2.39,
+            "W": 0.8
+          },
+          {
+            "H": 2.34,
+            "L": 2.14,
+            "W": 0.8
+          },
+          {
+            "H": 2.68,
+            "L": 1.92,
+            "W": 0.8
+          }
+        ],
+        "simple": [
+          {
+            "H": 2.68,
+            "L": 2.14,
+            "W": 0.8
+          },
+          {
+            "H": 2.02,
+            "L": 2.39,
+            "W": 0.8
+          },
+          {
+            "H": 2.34,
+            "L": 2.14,
+            "W": 0.8
+          },
+          {
+            "H": 2.68,
+            "L": 1.92,
+            "W": 0.8
+          }
+        ]
+      },
+      "hasVariantColor": true,
+      "livery": null,
+      "variants": 4
+    },
+    "pickup1t": {
+      "canon": [0, 1, 2],
+      "colorVariant": false,
+      "defaultColor": null,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.99,
+            "L": 4.9,
+            "W": 1.78
+          },
+          {
+            "H": 1.99,
+            "L": 4.9,
+            "W": 1.78
+          },
+          {
+            "H": 1.99,
+            "L": 4.9,
+            "W": 1.78
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.99,
+            "L": 4.9,
+            "W": 1.78
+          },
+          {
+            "H": 1.99,
+            "L": 4.9,
+            "W": 1.78
+          },
+          {
+            "H": 1.99,
+            "L": 4.9,
+            "W": 1.78
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": [2776496, 2776496, 2776496],
+      "variants": 3
+    },
+    "player": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 16763176,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2.38,
+            "L": 4.2,
+            "W": 1.92
+          }
+        ],
+        "simple": [
+          {
+            "H": 2.38,
+            "L": 4.2,
+            "W": 1.92
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "playerPatrol": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 2241386,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2.2,
+            "L": 4.6,
+            "W": 1.92
+          }
+        ],
+        "simple": [
+          {
+            "H": 2.2,
+            "L": 4.6,
+            "W": 1.92
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "playerPorter": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 16763176,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2.84,
+            "L": 4.6,
+            "W": 1.88
+          }
+        ],
+        "simple": [
+          {
+            "H": 2.84,
+            "L": 4.6,
+            "W": 1.88
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "playerWrecker": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 16763176,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 3.67,
+            "L": 5.3,
+            "W": 1.88
+          }
+        ],
+        "simple": [
+          {
+            "H": 3.67,
+            "L": 5.3,
+            "W": 1.88
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "police": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": null,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.62,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.62,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": [16053490],
+      "variants": 1
+    },
+    "sedan": {
+      "canon": [0, 1, 2],
+      "colorVariant": false,
+      "defaultColor": 16053490,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          },
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          },
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          },
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          },
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 3
+    },
+    "starSedan": {
+      "canon": [0, 1],
+      "colorVariant": false,
+      "defaultColor": 1381914,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.54,
+            "L": 5.53,
+            "W": 1.96
+          },
+          {
+            "H": 1.54,
+            "L": 5.53,
+            "W": 1.96
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.54,
+            "L": 5.53,
+            "W": 1.96
+          },
+          {
+            "H": 1.54,
+            "L": 5.53,
+            "W": 1.96
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 2
+    },
+    "suv": {
+      "canon": [0, 1],
+      "colorVariant": false,
+      "defaultColor": 2829617,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.85,
+            "L": 4.7,
+            "W": 1.94
+          },
+          {
+            "H": 1.85,
+            "L": 4.7,
+            "W": 1.94
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.85,
+            "L": 4.7,
+            "W": 1.94
+          },
+          {
+            "H": 1.85,
+            "L": 4.7,
+            "W": 1.94
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 2
+    },
+    "taxi": {
+      "canon": [0, 0, 0, 0, 1],
+      "colorVariant": false,
+      "defaultColor": null,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.68,
+            "L": 4.6,
+            "W": 1.84
+          },
+          {
+            "H": 1.68,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.68,
+            "L": 4.6,
+            "W": 1.84
+          },
+          {
+            "H": 1.68,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": [15764004, 15764004, 15764004, 15764004, 1908514],
+      "variants": 5
+    },
+    "tractor": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 4165434,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2.13,
+            "L": 3.75,
+            "W": 1.64
+          }
+        ],
+        "simple": [
+          {
+            "H": 2.13,
+            "L": 3.75,
+            "W": 1.64
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "truck": {
+      "canon": [0, 1],
+      "colorVariant": false,
+      "defaultColor": 16053490,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 3.63,
+            "L": 9.5,
+            "W": 2.5
+          },
+          {
+            "H": 3.5,
+            "L": 9.5,
+            "W": 2.5
+          }
+        ],
+        "simple": [
+          {
+            "H": 3.63,
+            "L": 9.5,
+            "W": 2.5
+          },
+          {
+            "H": 3.5,
+            "L": 9.5,
+            "W": 2.5
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 2
+    },
+    "unmarked": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 3882822,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.51,
+            "L": 4.6,
+            "W": 1.84
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "van": {
+      "canon": [0, 0, 1],
+      "colorVariant": false,
+      "defaultColor": 16053490,
+      "detailedDefault": false,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2,
+            "L": 5.1,
+            "W": 1.92
+          },
+          {
+            "H": 2.64,
+            "L": 5.2,
+            "W": 1.84
+          }
+        ],
+        "simple": [
+          {
+            "H": 2,
+            "L": 5.1,
+            "W": 1.92
+          },
+          {
+            "H": 2.64,
+            "L": 5.2,
+            "W": 1.84
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 3
+    },
+    "villainPhone": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 15228314,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.6,
+            "L": 3.7,
+            "W": 1.68
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.6,
+            "L": 3.7,
+            "W": 1.68
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "villainSedan": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 14272931,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 1.81,
+            "L": 4.9,
+            "W": 1.84
+          }
+        ],
+        "simple": [
+          {
+            "H": 1.81,
+            "L": 4.9,
+            "W": 1.84
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "villainSuv": {
+      "canon": [0],
+      "colorVariant": false,
+      "defaultColor": 1908514,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 2.52,
+            "L": 5.45,
+            "W": 2.42
+          }
+        ],
+        "simple": [
+          {
+            "H": 2.52,
+            "L": 5.45,
+            "W": 2.42
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 1
+    },
+    "villainTruck": {
+      "canon": [0, 1],
+      "colorVariant": true,
+      "defaultColor": 3108822,
+      "detailedDefault": true,
+      "dims": {
+        "detailed": [
+          {
+            "H": 3.5,
+            "L": 9.5,
+            "W": 2.5
+          },
+          {
+            "H": 3.5,
+            "L": 9.5,
+            "W": 2.5
+          }
+        ],
+        "simple": [
+          {
+            "H": 3.5,
+            "L": 9.5,
+            "W": 2.5
+          },
+          {
+            "H": 3.5,
+            "L": 9.5,
+            "W": 2.5
+          }
+        ]
+      },
+      "hasVariantColor": false,
+      "livery": null,
+      "variants": 2
+    }
+  },
+  "schema_version": 1,
+  "source": "game/js/vehicles.js KINDS + real buildVehicle() (web-frozen 753549a)"
+}

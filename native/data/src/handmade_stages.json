@@ -1,0 +1,275 @@
+{
+  "_doc": "stagegen input; same normalized form as stages.json",
+  "schema_version": 1,
+  "source": "config.js STAGES (5 handmade, merged by stagegen via catalog handmade_id) @ 753549a",
+  "stages": [
+    {
+      "attackInterval": [2.4, 3.6],
+      "attacks": [
+        ["highbeam", 2],
+        ["horn", 2],
+        ["lunge", 2],
+        ["throw", 1]
+      ],
+      "blurb": "추월차선(1차선)을 혼자 정속주행. 2~4차선은 화물차라 아무도 못 지나간다.",
+      "cause": "1차선 저속차량",
+      "density": 1,
+      "direction": "부산 방향",
+      "displayKm": 2.4,
+      "fine": 40000,
+      "frontRow": [null, "bus", "truck", "truck"],
+      "highway": "경부고속도로",
+      "id": 1,
+      "jamLength": 170,
+      "jamSpeed": 2.4,
+      "road": [
+        {
+          "type": "straight"
+        }
+      ],
+      "route": 1,
+      "shoulder": [
+        ["breakdown", 1],
+        ["cones", 1],
+        ["cheater", 1]
+      ],
+      "signs": [
+        ["부산", "387km"],
+        ["대전", "128km"]
+      ],
+      "sky": "day",
+      "taunts": ["규정속도 준수 중입니다~", "추월은 2차선으로 하세요", "1차선은 내 차선인데?", "왜 빵빵거려?", "난 안 급해~", "정속주행이 죄냐?"],
+      "throwItem": "cup",
+      "title": "1차선 정속주행러",
+      "villainLine": "\"규정속도 지키는데 뭐가 문제죠?\"",
+      "villainSpeedLabel": "정속 80km/h",
+      "villains": [
+        {
+          "color": 14272931,
+          "hp": 140,
+          "kind": "villainSedan",
+          "lane": 0,
+          "name": "정속주행 김사장"
+        }
+      ],
+      "violation": "지정차로 위반 (1차로 저속 점유)",
+      "vms": "1차선은 추월차선입니다"
+    },
+    {
+      "attackInterval": [2, 3],
+      "attacks": [
+        ["roll", 3],
+        ["horn", 2],
+        ["lunge", 1]
+      ],
+      "blurb": "25톤 두 대가 1·2차선을 나란히 막고 무전 수다 중. 3·4차선도 화물차 행렬.",
+      "cause": "화물차 병렬 주행",
+      "density": 1,
+      "direction": "강릉 방향",
+      "displayKm": 4.1,
+      "fine": 50000,
+      "frontRow": [null, null, "truck", "pickup1t"],
+      "highway": "영동고속도로",
+      "id": 2,
+      "jamLength": 190,
+      "jamSpeed": 2.4,
+      "road": [
+        {
+          "type": "straight"
+        }
+      ],
+      "route": 50,
+      "shoulder": [
+        ["breakdown", 1],
+        ["debris", 2],
+        ["cheater", 1]
+      ],
+      "signs": [
+        ["강릉", "164km"],
+        ["원주", "52km"]
+      ],
+      "sky": "sunset",
+      "taunts": ["형님 먼저 가세요~", "아우 먼저 가~", "우린 나란히가 좋아", "수박 사세요~", "무전기 감도 좋고~"],
+      "throwItem": "watermelon",
+      "title": "화물차 나란히 주행",
+      "villainLine": "\"형님 먼저~ 아우 먼저~\"",
+      "villainSpeedLabel": "나란히 60km/h",
+      "villains": [
+        {
+          "color": 3108822,
+          "hp": 120,
+          "kind": "villainTruck",
+          "lane": 0,
+          "name": "형님 트럭"
+        },
+        {
+          "color": 3841373,
+          "hp": 120,
+          "kind": "villainTruck",
+          "lane": 1,
+          "name": "아우 트럭"
+        }
+      ],
+      "violation": "지정차로 위반 (화물차 1·2차로 병렬)",
+      "vms": "화물차는 우측 차로로"
+    },
+    {
+      "attackInterval": [2, 3],
+      "attacks": [
+        ["swerve", 3],
+        ["highbeam", 2],
+        ["lunge", 1],
+        ["throw", 1]
+      ],
+      "blurb": "1·2차선을 물고 달리다가 추월하려는 차가 오면 옆으로 막아버린다.",
+      "cause": "차선 걸침 주행",
+      "density": 1.02,
+      "direction": "목포 방향",
+      "displayKm": 3,
+      "fine": 30000,
+      "frontRow": [null, null, null, "truck"],
+      "highway": "서해안고속도로",
+      "id": 3,
+      "jamLength": 200,
+      "jamSpeed": 2.4,
+      "road": [
+        {
+          "type": "straight"
+        }
+      ],
+      "route": 15,
+      "shoulder": [
+        ["cones", 2],
+        ["breakdown", 1],
+        ["cheater", 1]
+      ],
+      "signs": [
+        ["목포", "241km"],
+        ["서산", "38km"]
+      ],
+      "sky": "morning",
+      "taunts": ["내 차 크잖아~", "두 칸이 편해", "깜빡이? 고장났어", "비켜 비켜~", "안 보여서 몰랐어"],
+      "throwItem": "cup",
+      "title": "차선 물고 가는 SUV",
+      "villainLine": "\"차선? 그게 뭐임?\"",
+      "villainSpeedLabel": "두 차선 점유",
+      "villains": [
+        {
+          "color": 1908514,
+          "hp": 200,
+          "kind": "villainSuv",
+          "lane": 0.5,
+          "name": "차선물기 대마왕"
+        }
+      ],
+      "violation": "차로 통행방법 위반 (두 차로 걸침)",
+      "vms": "차선을 지켜주세요"
+    },
+    {
+      "attackInterval": [1.8, 2.8],
+      "attacks": [
+        ["zigzag", 3],
+        ["highbeam", 2],
+        ["throw", 1],
+        ["lunge", 1]
+      ],
+      "blurb": "숏폼 보면서 1~3차선을 갈지자로. 무서워서 아무도 옆으로 못 지나간다.",
+      "cause": "휴대폰 보며 갈지자 운전",
+      "density": 1.04,
+      "direction": "통영 방향",
+      "displayKm": 2.6,
+      "fine": 60000,
+      "frontRow": [null, null, null, "bus"],
+      "highway": "중부고속도로",
+      "id": 4,
+      "jamLength": 200,
+      "jamSpeed": 2.4,
+      "road": [
+        {
+          "type": "straight"
+        }
+      ],
+      "route": 35,
+      "shoulder": [
+        ["breakdown", 1],
+        ["debris", 2],
+        ["cones", 1],
+        ["cheater", 1]
+      ],
+      "signs": [
+        ["통영", "201km"],
+        ["이천", "12km"]
+      ],
+      "sky": "night",
+      "taunts": ["ㅋㅋㅋㅋ", "잠만 이것만", "어? 여기 차선이었어?", "좋아요 눌러주세요~", "구독과 알림설정!"],
+      "throwItem": "phone",
+      "title": "폰 보며 지그재그",
+      "villainLine": "\"ㅋㅋㅋ 잠만 이것만 보고\"",
+      "villainSpeedLabel": "시속 ??km",
+      "villains": [
+        {
+          "color": 15228314,
+          "hp": 220,
+          "kind": "villainPhone",
+          "lane": 1,
+          "name": "숏폼중독 드라이버"
+        }
+      ],
+      "violation": "운전 중 휴대전화 사용",
+      "vms": "운전 중 휴대폰 사용금지"
+    },
+    {
+      "attackInterval": [1.7, 2.6],
+      "attacks": [
+        ["roll", 3],
+        ["smoke", 2],
+        ["throw", 1],
+        ["horn", 1]
+      ],
+      "blurb": "시속 15km 경운기가 1차선을 점령. 옆 차선은 벌초 가는 트럭 행렬.",
+      "cause": "1차선 경운기",
+      "density": 1.05,
+      "direction": "순천 방향",
+      "displayKm": 5.8,
+      "fine": 30000,
+      "frontRow": [null, "pickup1t", "truck", "truck"],
+      "highway": "남해고속도로",
+      "id": 5,
+      "jamLength": 220,
+      "jamSpeed": 2.4,
+      "road": [
+        {
+          "type": "straight"
+        }
+      ],
+      "route": 10,
+      "shoulder": [
+        ["cones", 2],
+        ["debris", 2],
+        ["breakdown", 1],
+        ["cheater", 1]
+      ],
+      "signs": [
+        ["순천", "58km"],
+        ["진주", "12km"]
+      ],
+      "sky": "day",
+      "taunts": ["탈탈탈탈탈", "건초 받아라~", "트럭 동생들, 줄 맞춰!", "논에 물 대러 가는 길이여~", "1차선이 제일 편하구먼"],
+      "throwItem": "hay",
+      "title": "[보스] 1차선 경운기",
+      "villainLine": "\"논에 물 대러 가는 길이여~\"",
+      "villainSpeedLabel": "시속 15km",
+      "villains": [
+        {
+          "color": 4165434,
+          "hp": 340,
+          "kind": "tractor",
+          "lane": 0,
+          "name": "경운기 대장 탈탈이"
+        }
+      ],
+      "violation": "고속도로 통행금지 위반 (농기계)",
+      "vms": "저속차량 주의"
+    }
+  ]
+}

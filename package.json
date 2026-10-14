@@ -1,0 +1,16 @@
+{
+  "name": "lane1-chamgyoyuk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "1차선 참교육 — 고속도로 정체 원흉 참교육 쾌감 게임 목업 (Three.js)",
+  "scripts": {
+    "dev": "http-server . -p 8080 -c-1",
+    "build": "node tools/build.mjs",
+    "build:app": "npm run build && node tools/sync-app.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0",
+    "three": "0.170.0"
+  },
+  "type": "module"
+}

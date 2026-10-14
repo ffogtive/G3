@@ -1,0 +1,124 @@
+{
+  "default": {
+    "fatigue": true,
+    "gapCheck": true,
+    "honk": "yield",
+    "rageHorn": 24,
+    "rubber": 2.5,
+    "rubberSafety": 4,
+    "shoulder": "open"
+  },
+  "generated": "tools/content/build.mjs from native/data/src/approach.json — do not edit",
+  "labels": {
+    "honk": {
+      "backfire": {
+        "label": "경적 역효과",
+        "short": "역효과",
+        "tone": "bad"
+      },
+      "bait": {
+        "label": "경적=미끼",
+        "short": "미끼",
+        "tone": "warn"
+      },
+      "echo": {
+        "label": "경적=메아리",
+        "short": "메아리",
+        "tone": "warn"
+      },
+      "evict": {
+        "label": "경적=퇴거 통보",
+        "short": "퇴거 통보",
+        "tone": "warn"
+      },
+      "gapRace": {
+        "label": "경적=틈 경쟁",
+        "short": "틈 경쟁",
+        "tone": "warn"
+      },
+      "ignoredWhileYielding": {
+        "label": "양보 대기 차는 무시",
+        "short": "대기 차엔 무시",
+        "tone": "warn"
+      },
+      "normal": {
+        "label": "경적 정상",
+        "short": "정상",
+        "tone": "ok"
+      },
+      "notify": {
+        "label": "경적=알림음",
+        "short": "알림음",
+        "tone": "warn"
+      },
+      "push": {
+        "label": "경적=방향 밀기",
+        "short": "방향 밀기",
+        "tone": "warn"
+      },
+      "rescue": {
+        "label": "경적=구출 교대",
+        "short": "구출 교대",
+        "tone": "ok"
+      },
+      "yield": {
+        "label": "경적=양보",
+        "short": "양보",
+        "tone": "ok"
+      }
+    },
+    "shoulder": {
+      "blocked": {
+        "label": "갓길 공사 구간",
+        "short": "공사 구간",
+        "tone": "warn"
+      },
+      "closed": {
+        "label": "갓길 폐쇄",
+        "short": "폐쇄",
+        "tone": "bad"
+      },
+      "crowded": {
+        "label": "갓길 혼잡(얌체)",
+        "short": "혼잡",
+        "tone": "warn"
+      },
+      "dark": {
+        "label": "어두운 갓길(낙하물)",
+        "short": "어둠",
+        "tone": "warn"
+      },
+      "debris": {
+        "label": "갓길 낙하물",
+        "short": "낙하물",
+        "tone": "warn"
+      },
+      "merge": {
+        "label": "갓길=합류차로",
+        "short": "합류차로",
+        "tone": "warn"
+      },
+      "none": {
+        "label": "갓길 없음(터널)",
+        "short": "없음(터널)",
+        "tone": "bad"
+      },
+      "occupied": {
+        "label": "갓길 불법주차",
+        "short": "불법주차",
+        "tone": "warn"
+      },
+      "open": {
+        "label": "갓길 개방",
+        "short": "개방",
+        "tone": "ok"
+      },
+      "watched": {
+        "label": "갓길 단속 카메라",
+        "short": "단속 카메라",
+        "tone": "warn"
+      }
+    }
+  },
+  "schema_version": 1
+}

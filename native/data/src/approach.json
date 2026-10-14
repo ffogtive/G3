@@ -1,0 +1,181 @@
+{
+  "_doc": "runtime: A = {...default, ...stage.approach}. byId is a stagegen input (already resolved into stages.json; edit here + build.mjs --regen-stages).",
+  "byId": {
+    "1": {
+      "fatigue": false,
+      "gapCheck": false,
+      "hint": "튜토리얼: 갓길 + 경적이 통하는 유일한 판 (1차로 기차 차량은 안 비켜줌)",
+      "honk": "yield",
+      "rubber": 1.2,
+      "shoulder": "open"
+    },
+    "10": {
+      "fatigue": true,
+      "hint": "갓길 지인 주차. 경적 2회 = 세입자 퇴거 통보",
+      "honk": "evict",
+      "shoulder": "occupied"
+    },
+    "2": {
+      "hint": "경적으로 연 틈은 0.8초 안에 들어가야 내 것",
+      "honk": "gapRace",
+      "shoulder": "open"
+    },
+    "3": {
+      "hint": "수다 듀오 근처에서 경적 = 역효과. 조용히 기다리면 4차로가 끼워줌",
+      "honk": "backfire",
+      "shoulder": "crowded"
+    },
+    "4": {
+      "hint": "갓길 중간 공사 구간. 안개 속 차선물기를 경적으로 밀어내기",
+      "honk": "push",
+      "shoulder": "blocked"
+    },
+    "5": {
+      "hint": "갓길 폐쇄. 좀비 깜빡이에 양보하느라 멈칫한 1차로 틈을 노려라",
+      "honk": "ignoredWhileYielding",
+      "shoulder": "closed"
+    },
+    "6": {
+      "hint": "밤 갓길엔 무등화 낙하물. 경적 = 피해차 구출 교대",
+      "honk": "rescue",
+      "shoulder": "dark"
+    },
+    "7": {
+      "hint": "갓길 단속 카메라 지점 주의. 카메라 매듭 안에선 경적 무효",
+      "honk": "normal",
+      "shoulder": "watched"
+    },
+    "8": {
+      "hint": "갓길이 합류차로. 경적 = 남의 깜빡이를 켜게 하는 미끼",
+      "honk": "bait",
+      "shoulder": "merge"
+    },
+    "9": {
+      "hint": "갓길 낙하물 지대. 경적 = 알림음(폰을 보게 만듦)",
+      "honk": "notify",
+      "shoulder": "debris"
+    }
+  },
+  "default": {
+    "fatigue": true,
+    "gapCheck": true,
+    "honk": "yield",
+    "rageHorn": 24,
+    "rubber": 2.5,
+    "rubberSafety": 4,
+    "shoulder": "open"
+  },
+  "labels": {
+    "honk": {
+      "backfire": {
+        "label": "경적 역효과",
+        "short": "역효과",
+        "tone": "bad"
+      },
+      "bait": {
+        "label": "경적=미끼",
+        "short": "미끼",
+        "tone": "warn"
+      },
+      "echo": {
+        "label": "경적=메아리",
+        "short": "메아리",
+        "tone": "warn"
+      },
+      "evict": {
+        "label": "경적=퇴거 통보",
+        "short": "퇴거 통보",
+        "tone": "warn"
+      },
+      "gapRace": {
+        "label": "경적=틈 경쟁",
+        "short": "틈 경쟁",
+        "tone": "warn"
+      },
+      "ignoredWhileYielding": {
+        "label": "양보 대기 차는 무시",
+        "short": "대기 차엔 무시",
+        "tone": "warn"
+      },
+      "normal": {
+        "label": "경적 정상",
+        "short": "정상",
+        "tone": "ok"
+      },
+      "notify": {
+        "label": "경적=알림음",
+        "short": "알림음",
+        "tone": "warn"
+      },
+      "push": {
+        "label": "경적=방향 밀기",
+        "short": "방향 밀기",
+        "tone": "warn"
+      },
+      "rescue": {
+        "label": "경적=구출 교대",
+        "short": "구출 교대",
+        "tone": "ok"
+      },
+      "yield": {
+        "label": "경적=양보",
+        "short": "양보",
+        "tone": "ok"
+      }
+    },
+    "shoulder": {
+      "blocked": {
+        "label": "갓길 공사 구간",
+        "short": "공사 구간",
+        "tone": "warn"
+      },
+      "closed": {
+        "label": "갓길 폐쇄",
+        "short": "폐쇄",
+        "tone": "bad"
+      },
+      "crowded": {
+        "label": "갓길 혼잡(얌체)",
+        "short": "혼잡",
+        "tone": "warn"
+      },
+      "dark": {
+        "label": "어두운 갓길(낙하물)",
+        "short": "어둠",
+        "tone": "warn"
+      },
+      "debris": {
+        "label": "갓길 낙하물",
+        "short": "낙하물",
+        "tone": "warn"
+      },
+      "merge": {
+        "label": "갓길=합류차로",
+        "short": "합류차로",
+        "tone": "warn"
+      },
+      "none": {
+        "label": "갓길 없음(터널)",
+        "short": "없음(터널)",
+        "tone": "bad"
+      },
+      "occupied": {
+        "label": "갓길 불법주차",
+        "short": "불법주차",
+        "tone": "warn"
+      },
+      "open": {
+        "label": "갓길 개방",
+        "short": "개방",
+        "tone": "ok"
+      },
+      "watched": {
+        "label": "갓길 단속 카메라",
+        "short": "단속 카메라",
+        "tone": "warn"
+      }
+    }
+  },
+  "schema_version": 1,
+  "source": "TUNE.approach (config.js) + APPROACH_BY_ID (stagegen.js) + SH_MODES/HONK_MODES labels (ui.js) @ 753549a"
+}

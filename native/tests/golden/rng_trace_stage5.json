@@ -1,0 +1,4921 @@
+{
+  "algorithm": "mulberry32",
+  "calls": [
+    {
+      "caller": null,
+      "f": 0.61797918146476150,
+      "i": 0,
+      "site": "traffic.js:142:20",
+      "tag": "wall.offset",
+      "u32": 2654200374
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.21267402730882168,
+      "i": 1,
+      "site": "traffic.js:85:18",
+      "tag": "wall/car.mono",
+      "u32": 913427992
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.62944791791960597,
+      "i": 2,
+      "site": "traffic.js:87:38",
+      "tag": "wall/car.color",
+      "u32": 2703458222
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.64404053380712867,
+      "i": 3,
+      "site": "traffic.js:88:63",
+      "tag": "wall/car.seed",
+      "u32": 2766133030
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.81044737272895873,
+      "i": 4,
+      "site": "traffic.js:95:24",
+      "tag": "wall/car.personal",
+      "u32": 3480844961
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.091445147059857845,
+      "i": 5,
+      "site": "traffic.js:96:14",
+      "tag": "wall/car.phase",
+      "u32": 392753916
+    },
+    {
+      "caller": null,
+      "f": 0.45802934770472348,
+      "i": 6,
+      "site": "traffic.js:142:20",
+      "tag": "wall.offset",
+      "u32": 1967221069
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.20950674870982766,
+      "i": 7,
+      "site": "traffic.js:85:18",
+      "tag": "wall/car.mono",
+      "u32": 899824634
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.091198417590931058,
+      "i": 8,
+      "site": "traffic.js:87:38",
+      "tag": "wall/car.color",
+      "u32": 391694221
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.42231366341002285,
+      "i": 9,
+      "site": "traffic.js:88:63",
+      "tag": "wall/car.seed",
+      "u32": 1813823373
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.43766363547183573,
+      "i": 10,
+      "site": "traffic.js:95:24",
+      "tag": "wall/car.personal",
+      "u32": 1879751001
+    },
+    {
+      "caller": "traffic.js:143:22",
+      "f": 0.59949331637471914,
+      "i": 11,
+      "site": "traffic.js:96:14",
+      "tag": "wall/car.phase",
+      "u32": 2574804188
+    },
+    {
+      "caller": null,
+      "f": 0.37868931167759001,
+      "i": 12,
+      "site": "traffic.js:158:76",
+      "tag": "lead",
+      "u32": 1626458209
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.39101325441151857,
+      "i": 13,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1679389140
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.75943231862038374,
+      "i": 14,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3261736972
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.38845639047212899,
+      "i": 15,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1668407493
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.33457511942833662,
+      "i": 16,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1436989196
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.89401787309907377,
+      "i": 17,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3839777527
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64748301962390542,
+      "i": 18,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2780918394
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.50088648009113967,
+      "i": 19,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 2151291051
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.90812752582132816,
+      "i": 20,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3900378024
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.63212992949411273,
+      "i": 21,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2714977374
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.58349131932482123,
+      "i": 22,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2506076134
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.31359119690023363,
+      "i": 23,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1346863935
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.12520602229051292,
+      "i": 24,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 537755771
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.43419681210070848,
+      "i": 25,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1864861108
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.39198206574656069,
+      "i": 26,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 1683550153
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.56733508245088160,
+      "i": 27,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2436685625
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.28622527024708688,
+      "i": 28,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1229328175
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.74172328202985227,
+      "i": 29,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3185677239
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.72229948290623724,
+      "i": 30,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3102252657
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.29384491266682744,
+      "i": 31,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1262054290
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.76543583604507148,
+      "i": 32,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3287521883
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.64773831609636545,
+      "i": 33,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 2782014884
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.39202928077429533,
+      "i": 34,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1683752940
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.068276757607236505,
+      "i": 35,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 293246441
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.86918391217477620,
+      "i": 36,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3733116477
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.89047964918427169,
+      "i": 37,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3824580971
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.45645664166659117,
+      "i": 38,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1960466348
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.76295732893049717,
+      "i": 39,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3276876776
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.29698338848538697,
+      "i": 40,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 1275533941
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.52576874569058418,
+      "i": 41,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2258159568
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.075189881958067417,
+      "i": 42,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 322938084
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.11226974567398429,
+      "i": 43,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 482194886
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.38509016414172947,
+      "i": 44,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1653949661
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.12308000819757581,
+      "i": 45,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 528624610
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.58717406238429248,
+      "i": 46,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2521893395
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.32146309851668775,
+      "i": 47,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 1380673495
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.094467171700671315,
+      "i": 48,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 405733413
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.62896687630563974,
+      "i": 49,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2701392164
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.44513079780153930,
+      "i": 50,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1911822219
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.50158608308993280,
+      "i": 51,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2154295823
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.83742328989319503,
+      "i": 52,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3596705643
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.61853979271836579,
+      "i": 53,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2656608181
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.050040271366015077,
+      "i": 54,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 214921329
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.096172943245619535,
+      "i": 55,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 413059646
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.87244231579825282,
+      "i": 56,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3747111214
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.98966957372613251,
+      "i": 57,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 4250598453
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.20827216003090143,
+      "i": 58,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 894522116
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.95682693086564541,
+      "i": 59,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 4109540376
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.068320747232064605,
+      "i": 60,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 293435375
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.27942582103423774,
+      "i": 61,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 1200124763
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.80084747308865190,
+      "i": 62,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3439613706
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.059497284702956676,
+      "i": 63,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 255538892
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.38273041881620884,
+      "i": 64,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1643814632
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.99398869927972555,
+      "i": 65,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 4269148956
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.47752987314015627,
+      "i": 66,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2050975188
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.18709517270326614,
+      "i": 67,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 803567648
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.094014335889369249,
+      "i": 68,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 403788498
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.29342800076119602,
+      "i": 69,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1260263667
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.66803886205889285,
+      "i": 70,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2869205065
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.16671351739205420,
+      "i": 71,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 716029105
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.051315515534952283,
+      "i": 72,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 220398461
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.0054604522883892059,
+      "i": 73,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 23452464
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.21884652646258473,
+      "i": 74,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 939938674
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.0066670412197709084,
+      "i": 75,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 28634724
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.80040332186035812,
+      "i": 76,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3437706091
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.41018612612970173,
+      "i": 77,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1761735997
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.29893113835714757,
+      "i": 78,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1283899463
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.75999432196840644,
+      "i": 79,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3264150758
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.048149967333301902,
+      "i": 80,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 206802535
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.33096543746069074,
+      "i": 81,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1421485730
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.66711401334032416,
+      "i": 82,
+      "site": "traffic.js:157:81",
+      "tag": "lane/gap.pass",
+      "u32": 2865232870
+    },
+    {
+      "caller": null,
+      "f": 0.75342081673443317,
+      "i": 83,
+      "site": "traffic.js:158:58",
+      "tag": "lead.spaced",
+      "u32": 3235917768
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.53847714536823332,
+      "i": 84,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2312741729
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88157595344819129,
+      "i": 85,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3786339889
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.43490406125783920,
+      "i": 86,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1867898720
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.70222095097415149,
+      "i": 87,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3016016019
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.43486769031733274,
+      "i": 88,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1867742508
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.031391200376674533,
+      "i": 89,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 134824179
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.76943403785116971,
+      "i": 90,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 3304694029
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.90692214015871286,
+      "i": 91,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3895200932
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.80235142330639064,
+      "i": 92,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3446073123
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88406769256107509,
+      "i": 93,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3797041827
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.22370888222940266,
+      "i": 94,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 960822333
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.96458758926019073,
+      "i": 95,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 4142872150
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.94233209337107837,
+      "i": 96,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 4047285523
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.99526550667360425,
+      "i": 97,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 4274632802
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.11494894605129957,
+      "i": 98,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 493701964
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.34686442161910236,
+      "i": 99,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1489771347
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.56439280253835022,
+      "i": 100,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2424048629
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.37967957765795290,
+      "i": 101,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1630711369
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.70922564715147018,
+      "i": 102,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3046100960
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.40071395086124539,
+      "i": 103,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1721053314
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.14803531719371676,
+      "i": 104,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 635806846
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.69337478675879538,
+      "i": 105,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2978022033
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.90567938401363790,
+      "i": 106,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3889863335
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.31893423921428621,
+      "i": 107,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1369812127
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64863159414380789,
+      "i": 108,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2785851484
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.056670959806069732,
+      "i": 109,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 243399919
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.74917339114472270,
+      "i": 110,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3217675214
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.64785807649604976,
+      "i": 111,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 2782529251
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.40160202956758440,
+      "i": 112,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1724867583
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.12215170566923916,
+      "i": 113,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 524637581
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.90813543391413987,
+      "i": 114,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3900411989
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.84452606784179807,
+      "i": 115,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3627211842
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.42539070779457688,
+      "i": 116,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1827039178
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.36018341383896768,
+      "i": 117,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1546975983
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.44211207306943834,
+      "i": 118,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 1898856895
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.78145603206939995,
+      "i": 119,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3356328101
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.65550683997571468,
+      "i": 120,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2815380440
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.52044722181744874,
+      "i": 121,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2235303797
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73467840487137437,
+      "i": 122,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3155419722
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.44575748243369162,
+      "i": 123,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1914513809
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.017187382094562054,
+      "i": 124,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 73819244
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.58927761204540730,
+      "i": 125,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 2530928072
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.59050908079370856,
+      "i": 126,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2536217190
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.34081731876358390,
+      "i": 127,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1463799238
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.55539164156652987,
+      "i": 128,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2385388937
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.092459501000121236,
+      "i": 129,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 397110533
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.48507687496021390,
+      "i": 130,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2083389314
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.10451658675447106,
+      "i": 131,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 448895322
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.86458061542361975,
+      "i": 132,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 3713345468
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.78408123273402452,
+      "i": 133,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3367603252
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.039401934482157230,
+      "i": 134,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 169230020
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.061637344770133495,
+      "i": 135,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 264730380
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.85659064934588969,
+      "i": 136,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3679028825
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.71753359306603670,
+      "i": 137,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3081783316
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.17207797034643590,
+      "i": 138,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 739069255
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.65068851783871651,
+      "i": 139,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 2794685904
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.62402116553857923,
+      "i": 140,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2680150498
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.87548860046081245,
+      "i": 141,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3760194907
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.68217954551801085,
+      "i": 142,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2929938838
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.39751878473907709,
+      "i": 143,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1707330180
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.65241375681944191,
+      "i": 144,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2802095749
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.90410571149550378,
+      "i": 145,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3883104463
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.15192637732252479,
+      "i": 146,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 652518822
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.67656801571138203,
+      "i": 147,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2905837501
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.63231335766613483,
+      "i": 148,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2715765192
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.28540634876117110,
+      "i": 149,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1225810934
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.15408139489591122,
+      "i": 150,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 661774552
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.20310932071879506,
+      "i": 151,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 872347890
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.29076444031670690,
+      "i": 152,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1248823762
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.035179048078134656,
+      "i": 153,
+      "site": "traffic.js:157:49",
+      "tag": "lane/gap.spaced",
+      "u32": 151092861
+    },
+    {
+      "caller": null,
+      "f": 0.56122018001042306,
+      "i": 154,
+      "site": "traffic.js:158:76",
+      "tag": "lead",
+      "u32": 2410422319
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.48395092459395528,
+      "i": 155,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2078553394
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.58451202395372093,
+      "i": 156,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2510460027
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54433553130365908,
+      "i": 157,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2337903305
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.36319301766343415,
+      "i": 158,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1559902133
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.61263105273246765,
+      "i": 159,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2631230336
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.87722358130849898,
+      "i": 160,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3767646593
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.30045312969014049,
+      "i": 161,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1290436366
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.79515103530138731,
+      "i": 162,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3415147692
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.40233872015960515,
+      "i": 163,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1728031645
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.67139042750932276,
+      "i": 164,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2883599929
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88561651809141040,
+      "i": 165,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3803693982
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.80714536178857088,
+      "i": 166,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3466662932
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54408006696030498,
+      "i": 167,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2336806094
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.48302902467548847,
+      "i": 168,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2074593864
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.37014061375521123,
+      "i": 169,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1589741831
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.78559652087278664,
+      "i": 170,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3374111365
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.39656674419529736,
+      "i": 171,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1703241197
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.91291308775544167,
+      "i": 172,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3920931856
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.56183072156272829,
+      "i": 173,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2413044575
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.36897638323716819,
+      "i": 174,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1584741499
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.16968131274916232,
+      "i": 175,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 728775689
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.59199705347418785,
+      "i": 176,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2542607984
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.84995801723562181,
+      "i": 177,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3650541887
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.45612562447786331,
+      "i": 178,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1959044640
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64982859161682427,
+      "i": 179,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2790992549
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.25537778856232762,
+      "i": 180,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1096839250
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64454048010520637,
+      "i": 181,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2768280283
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.94304106617346406,
+      "i": 182,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 4050330538
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.48962928284890950,
+      "i": 183,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2102941757
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.51281878212466836,
+      "i": 184,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2202539898
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.43325726524926722,
+      "i": 185,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1860825785
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88269175542518497,
+      "i": 186,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3791132222
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.51760957692749798,
+      "i": 187,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2223116205
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.94903689087368548,
+      "i": 188,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 4076082409
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.12708919611759484,
+      "i": 189,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 545843941
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.83153261151164770,
+      "i": 190,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3571405372
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.50715033989399672,
+      "i": 191,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2178194124
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.077357597881928086,
+      "i": 192,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 332248353
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.71095441281795502,
+      "i": 193,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3053525952
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.67201562644913793,
+      "i": 194,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2886285138
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.027095539728179574,
+      "i": 195,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 116374457
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.71642303373664618,
+      "i": 196,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3077013500
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.80975698120892048,
+      "i": 197,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3477879752
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.66946409991942346,
+      "i": 198,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2875326415
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.67953982530161738,
+      "i": 199,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2918601326
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.71419704193249345,
+      "i": 200,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3067452938
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88537465012632310,
+      "i": 201,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3802655167
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69379324535839260,
+      "i": 202,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2979819299
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.65275314077734947,
+      "i": 203,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2803553392
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.52019233116880059,
+      "i": 204,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2234209050
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.067285307217389345,
+      "i": 205,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 288988194
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.72402165457606316,
+      "i": 206,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3109649328
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.76228494127281010,
+      "i": 207,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3273988893
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.85836545354686677,
+      "i": 208,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3686651551
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73083799658343196,
+      "i": 209,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3138925294
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.20786801585927606,
+      "i": 210,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 892786330
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.95128612127155066,
+      "i": 211,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 4085742780
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69648083159700036,
+      "i": 212,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2991362394
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.79739609151147306,
+      "i": 213,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3424790135
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.91988484701141715,
+      "i": 214,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3950875334
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.55796515312977135,
+      "i": 215,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2396442085
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.60172969941049814,
+      "i": 216,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2584409380
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.34142241720110178,
+      "i": 217,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1466398116
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.51870876364409924,
+      "i": 218,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2227837176
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.082382325315847993,
+      "i": 219,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 353829393
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.44950378476642072,
+      "i": 220,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1930604055
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.17440471891313791,
+      "i": 221,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 749062564
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.27919423393905163,
+      "i": 222,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1199130104
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.26562985382042825,
+      "i": 223,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1140871535
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.84075225749984384,
+      "i": 224,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3611003450
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.81354174297302961,
+      "i": 225,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3494135180
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.89298018557019532,
+      "i": 226,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3835320693
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.60029773833230138,
+      "i": 227,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2578259154
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73746172129176557,
+      "i": 228,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3167373975
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.28631842602044344,
+      "i": 229,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1229728276
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73513373592868447,
+      "i": 230,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3157375354
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.96560484869405627,
+      "i": 231,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 4147241246
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.24925903580151498,
+      "i": 232,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1070559407
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.86054184264503419,
+      "i": 233,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3695999071
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.33736721123568714,
+      "i": 234,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1448981139
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54040233744308352,
+      "i": 235,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2321010366
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.30778916296549141,
+      "i": 236,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1321944389
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.094205589732155204,
+      "i": 237,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 404609927
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.27538116276264191,
+      "i": 238,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1182753088
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.94909837329760194,
+      "i": 239,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 4076346474
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.37173641147091985,
+      "i": 240,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1596595730
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.58686413522809744,
+      "i": 241,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2520562268
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.76007655309513211,
+      "i": 242,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3264503938
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.99489897349849343,
+      "i": 243,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 4273058554
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.75852814177051187,
+      "i": 244,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3257853562
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.58649714034982026,
+      "i": 245,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2518986037
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.99236378935165703,
+      "i": 246,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 4262170021
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.86690105660818517,
+      "i": 247,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3723311687
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.12483083573170006,
+      "i": 248,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 536144357
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.53457547444850206,
+      "i": 249,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2295984180
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.091181244002655149,
+      "i": 250,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 391620461
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.12576017645187676,
+      "i": 251,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 540135845
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.91612636041827500,
+      "i": 252,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3934732757
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.11493311240337789,
+      "i": 253,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 493633959
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.32519364566542208,
+      "i": 254,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1396696073
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88905803929083049,
+      "i": 255,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3818475203
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.56079642171971500,
+      "i": 256,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2408602291
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.024037981173023582,
+      "i": 257,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 103242343
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69791636406444013,
+      "i": 258,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2997527959
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.91383308055810630,
+      "i": 259,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3924883195
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.11067406530492008,
+      "i": 260,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 475341491
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.25403274968266487,
+      "i": 261,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1091062352
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.87265137955546379,
+      "i": 262,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3748009136
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.98971488908864558,
+      "i": 263,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 4250793081
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.33111571334302425,
+      "i": 264,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1422131160
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64820138970389962,
+      "i": 265,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2784003770
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.025718165561556816,
+      "i": 266,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 110458680
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.34348702174611390,
+      "i": 267,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1475265525
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.82722181221470237,
+      "i": 268,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3552890630
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.20843883068300784,
+      "i": 269,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 895237961
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.22503978875465691,
+      "i": 270,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 966538533
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.63539149030111730,
+      "i": 271,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2728985671
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.91376424534246325,
+      "i": 272,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3924587550
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.36211363854818046,
+      "i": 273,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1555266235
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.43024167604744434,
+      "i": 274,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1847873928
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73746709176339209,
+      "i": 275,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3167397041
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.57900167116895318,
+      "i": 276,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2486793242
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.63142084167338908,
+      "i": 277,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2711931865
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.32042564032599330,
+      "i": 278,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1376217646
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.77989907213486731,
+      "i": 279,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3349641009
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.86225270712748170,
+      "i": 280,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3703347178
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.39430224639363587,
+      "i": 281,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1693515253
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.31993919634260237,
+      "i": 282,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1374128385
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.077920707641169429,
+      "i": 283,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 334666891
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.090730631491169333,
+      "i": 284,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 389685095
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.28734301775693893,
+      "i": 285,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1234128864
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.66985874180682003,
+      "i": 286,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2877021389
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.98546904232352972,
+      "i": 287,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 4232557308
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.92805611994117498,
+      "i": 288,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3985970684
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.74817343195900321,
+      "i": 289,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3213380422
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.53694984689354897,
+      "i": 290,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2306182032
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.63759707007557154,
+      "i": 291,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2738458564
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.74075994500890374,
+      "i": 292,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3181539738
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.82623193622566760,
+      "i": 293,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3548639145
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.56885748682543635,
+      "i": 294,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2443224302
+    },
+    {
+      "caller": null,
+      "f": 0.37796817603521049,
+      "i": 295,
+      "site": "traffic.js:158:76",
+      "tag": "lead",
+      "u32": 1623360955
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.13953013555146754,
+      "i": 296,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 599277369
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54794299765489995,
+      "i": 297,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2353397255
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54768445901572704,
+      "i": 298,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2352286840
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54865103610791266,
+      "i": 299,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2356438257
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.37916028779000044,
+      "i": 300,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1628481036
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.18688340391963720,
+      "i": 301,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 802658108
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.63730031112208962,
+      "i": 302,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2737183994
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.73872748669236898,
+      "i": 303,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3172810396
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.55284475092776120,
+      "i": 304,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2374450125
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.98582191555760801,
+      "i": 305,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 4234072887
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.023383669555187225,
+      "i": 306,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 100432096
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.75117178494110703,
+      "i": 307,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3226258250
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.23801963194273412,
+      "i": 308,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1022286535
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.68986178003251553,
+      "i": 309,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2962933784
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.23172164801508188,
+      "i": 310,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 995236900
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.15139092248864472,
+      "i": 311,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 650219061
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.47829547151923180,
+      "i": 312,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2054263408
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.19494575308635831,
+      "i": 313,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 837285634
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.48737724428065121,
+      "i": 314,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2093269325
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54445230145938694,
+      "i": 315,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2338404829
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.57872558129020035,
+      "i": 316,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2485607445
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.30677837901748717,
+      "i": 317,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1317603105
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.56774992961436510,
+      "i": 318,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2438467380
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.97621769900433719,
+      "i": 319,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 4192823091
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64093983941711485,
+      "i": 320,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2752815649
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.90001128753647208,
+      "i": 321,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3865519046
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.81244188663549721,
+      "i": 322,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3489411333
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.077313477871939540,
+      "i": 323,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 332058859
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.33661879040300846,
+      "i": 324,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1445766696
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88309027370996773,
+      "i": 325,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3792843845
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.57219669385813177,
+      "i": 326,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2457566087
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.65091324178501964,
+      "i": 327,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2795651086
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.92820551875047386,
+      "i": 328,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3986612347
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.51167923770844936,
+      "i": 329,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2197645592
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.099851471604779363,
+      "i": 330,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 428858805
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.52741894149221480,
+      "i": 331,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2265247105
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.93076826585456729,
+      "i": 332,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3997619262
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.80620677443221211,
+      "i": 333,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3462631730
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.094322199234738946,
+      "i": 334,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 405110761
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.77043385757133365,
+      "i": 335,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3308988222
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.87893241620622575,
+      "i": 336,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3774985983
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.12740976060740650,
+      "i": 337,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 547220755
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.84831593465059996,
+      "i": 338,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3643489196
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.26734789158217609,
+      "i": 339,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1148250451
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.45236293622292578,
+      "i": 340,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1942884017
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.10784915089607239,
+      "i": 341,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 463208576
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.28433798393234611,
+      "i": 342,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1221222342
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.49048736249096692,
+      "i": 343,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2106627181
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.39900690270587802,
+      "i": 344,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1713721598
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.83309220196679235,
+      "i": 345,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3578103762
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.95715722697786987,
+      "i": 346,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 4110958987
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69160179304890335,
+      "i": 347,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2970407083
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.12402089196257293,
+      "i": 348,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 532665675
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.79769724793732166,
+      "i": 349,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3426083592
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.42074572108685970,
+      "i": 350,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1807089112
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.36622376227751374,
+      "i": 351,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1572919082
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.50309243146330118,
+      "i": 352,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2160765540
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.86201558727771044,
+      "i": 353,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3702328756
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.83403998683206737,
+      "i": 354,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3582174467
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.32862082100473344,
+      "i": 355,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1411415679
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.79662890010513365,
+      "i": 356,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3421495073
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.92159986682236195,
+      "i": 357,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3958241288
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.65226881881244481,
+      "i": 358,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2801473245
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.51319830515421927,
+      "i": 359,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2204169937
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.41803715913556516,
+      "i": 360,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1795455927
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.55389214912429452,
+      "i": 361,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2378948666
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.058496864978224039,
+      "i": 362,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 251242122
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.22399325529113412,
+      "i": 363,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 962043706
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.22848721384070814,
+      "i": 364,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 981345111
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.37722225114703178,
+      "i": 365,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1620157232
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.051845859736204147,
+      "i": 366,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 222676272
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.86430056788958609,
+      "i": 367,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3712142673
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.35144092375412583,
+      "i": 368,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1509427274
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.25097741349600255,
+      "i": 369,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1077939783
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.17741066426970065,
+      "i": 370,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 761973001
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.14445444755256176,
+      "i": 371,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 620427128
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.31184923672117293,
+      "i": 372,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1339382273
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.96791835990734398,
+      "i": 373,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 4157177701
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.46166359726339579,
+      "i": 374,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1982830052
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.59328266535885632,
+      "i": 375,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2548129645
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.0092817144468426704,
+      "i": 376,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 39864660
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.80588915920816362,
+      "i": 377,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3461267583
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.82285145833157003,
+      "i": 378,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3534120103
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.47369929985143244,
+      "i": 379,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2034523001
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.012601191177964211,
+      "i": 380,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 54121704
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.094275782583281398,
+      "i": 381,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 404911403
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69028703402727842,
+      "i": 382,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2964760236
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.82029203861020505,
+      "i": 383,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3523127479
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.64966642973013222,
+      "i": 384,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 2790296069
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.27336736116558313,
+      "i": 385,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1174103876
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.82630072464235127,
+      "i": 386,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3548934589
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.10347003187052906,
+      "i": 387,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 444400403
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.60900020692497492,
+      "i": 388,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2615635972
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.54209301318041980,
+      "i": 389,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2328271763
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.017186361132189631,
+      "i": 390,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 73814859
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.92196047957986593,
+      "i": 391,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3959790108
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.034420327283442020,
+      "i": 392,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 147834180
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.73072463297285140,
+      "i": 393,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 3138438401
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.73386968788690865,
+      "i": 394,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3151946309
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.50303718820214272,
+      "i": 395,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2160528272
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.30896358843892813,
+      "i": 396,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1326988508
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.53510348778218031,
+      "i": 397,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2298251980
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.78805604926310480,
+      "i": 398,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3384674959
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.19693148392252624,
+      "i": 399,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 845814283
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.26800983631983399,
+      "i": 400,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1151093482
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.077067916048690677,
+      "i": 401,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 331004179
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73022910719737411,
+      "i": 402,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3136310134
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.50880548194982111,
+      "i": 403,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2185302905
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.49848357704468071,
+      "i": 404,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2140970661
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.90770478313788772,
+      "i": 405,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3898562358
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69219525624066591,
+      "i": 406,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2972955988
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.14419964235275984,
+      "i": 407,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 619332748
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.22054264135658741,
+      "i": 408,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 947223432
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.73725458071567118,
+      "i": 409,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3166484313
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.89699159562587738,
+      "i": 410,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 3852549568
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.36948838550597429,
+      "i": 411,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 1586940532
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.98375888075679541,
+      "i": 412,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 4225212220
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.71470114449039102,
+      "i": 413,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3069618042
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.68550404347479343,
+      "i": 414,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2944217448
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.12310774275101721,
+      "i": 415,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 528743729
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.62160758092068136,
+      "i": 416,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 2669784231
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.65938008599914610,
+      "i": 417,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 2832015905
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.80136419832706451,
+      "i": 418,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3441833024
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.87686645146459341,
+      "i": 419,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3766112732
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.58193453378044069,
+      "i": 420,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 2499389791
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.039080371847376227,
+      "i": 421,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 167848919
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.63462483324110508,
+      "i": 422,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 2725692904
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.71854261984117329,
+      "i": 423,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 3086117053
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.23442953242920339,
+      "i": 424,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1006867175
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.91404243092983961,
+      "i": 425,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3925782348
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.93680290575139225,
+      "i": 426,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 4023537843
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.74450578866526484,
+      "i": 427,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3197628014
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.13366796402260661,
+      "i": 428,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 574099534
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.020661290036514401,
+      "i": 429,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 88739565
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.21667413669638336,
+      "i": 430,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 930608331
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.34613094246014953,
+      "i": 431,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1486621078
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88464655121788383,
+      "i": 432,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 3799528006
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.34824792225845158,
+      "i": 433,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1495713437
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.88634039973840117,
+      "i": 434,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 3806803030
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.27066274150274694,
+      "i": 435,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1162487623
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.25751090934500098,
+      "i": 436,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 1106000934
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.017854561330750585,
+      "i": 437,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 76684757
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.30199931329116225,
+      "i": 438,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 1297077174
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.0049177219625562429,
+      "i": 439,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 21121455
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.77739977021701634,
+      "i": 440,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 3338906589
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.047416905174031854,
+      "i": 441,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 203654057
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.66159373638220131,
+      "i": 442,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 2841523461
+    },
+    {
+      "caller": "traffic.js:160:22",
+      "f": 0.86141941649839282,
+      "i": 443,
+      "site": "traffic.js:42:11",
+      "tag": "lane/pickWeighted",
+      "u32": 3699768222
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.32376368995755911,
+      "i": 444,
+      "site": "traffic.js:85:18",
+      "tag": "lane/car.mono",
+      "u32": 1390554460
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.074081385973840952,
+      "i": 445,
+      "site": "traffic.js:87:38",
+      "tag": "lane/car.color",
+      "u32": 318177130
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.69617345323786139,
+      "i": 446,
+      "site": "traffic.js:88:63",
+      "tag": "lane/car.seed",
+      "u32": 2990042214
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.42829854041337967,
+      "i": 447,
+      "site": "traffic.js:95:24",
+      "tag": "lane/car.personal",
+      "u32": 1839528224
+    },
+    {
+      "caller": "traffic.js:161:26",
+      "f": 0.24002316361293197,
+      "i": 448,
+      "site": "traffic.js:96:14",
+      "tag": "lane/car.phase",
+      "u32": 1030891638
+    },
+    {
+      "caller": "traffic.js:169:36",
+      "f": 0.29635354876518250,
+      "i": 449,
+      "site": "traffic.js:157:171",
+      "tag": "lane/gap.packed",
+      "u32": 1272828800
+    },
+    {
+      "caller": null,
+      "f": 0.58271315647289157,
+      "i": 450,
+      "site": "traffic.js:217:37",
+      "tag": "mini.type",
+      "u32": 2502733950
+    },
+    {
+      "caller": null,
+      "f": 0.75108459871262312,
+      "i": 451,
+      "site": "traffic.js:218:56",
+      "tag": "mini.cool",
+      "u32": 3225883788
+    },
+    {
+      "caller": null,
+      "f": 0.81538312719203532,
+      "i": 452,
+      "site": "traffic.js:217:37",
+      "tag": "mini.type",
+      "u32": 3502043865
+    },
+    {
+      "caller": null,
+      "f": 0.99028894980438054,
+      "i": 453,
+      "site": "traffic.js:218:56",
+      "tag": "mini.cool",
+      "u32": 4253258653
+    },
+    {
+      "caller": null,
+      "f": 0.65126681490801275,
+      "i": 454,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 2797169671
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.10606915573589504,
+      "i": 455,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 455563555
+    },
+    {
+      "caller": null,
+      "f": 0.88377306191250682,
+      "i": 456,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3795776398
+    },
+    {
+      "caller": null,
+      "f": 0.49827454215846956,
+      "i": 457,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 2140072863
+    },
+    {
+      "caller": null,
+      "f": 0.77900318708270788,
+      "i": 458,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3345793212
+    },
+    {
+      "caller": null,
+      "f": 0.54828268336132169,
+      "i": 459,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2354856194
+    },
+    {
+      "caller": null,
+      "f": 0.44162378204055130,
+      "i": 460,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1896759701
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.98849708284251392,
+      "i": 461,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 4245562643
+    },
+    {
+      "caller": null,
+      "f": 0.84856266854330897,
+      "i": 462,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3644548910
+    },
+    {
+      "caller": null,
+      "f": 0.64800404920242727,
+      "i": 463,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 2783156199
+    },
+    {
+      "caller": null,
+      "f": 0.92334770923480392,
+      "i": 464,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3965748214
+    },
+    {
+      "caller": null,
+      "f": 0.39671092666685581,
+      "i": 465,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1703860456
+    },
+    {
+      "caller": null,
+      "f": 0.32926638564094901,
+      "i": 466,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1414188358
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.73804900515824556,
+      "i": 467,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3169896340
+    },
+    {
+      "caller": null,
+      "f": 0.75789634371176362,
+      "i": 468,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3255140010
+    },
+    {
+      "caller": null,
+      "f": 0.013146149925887585,
+      "i": 469,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 56462284
+    },
+    {
+      "caller": null,
+      "f": 0.90438890503719449,
+      "i": 470,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3884320770
+    },
+    {
+      "caller": null,
+      "f": 0.51857856055721641,
+      "i": 471,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2227277958
+    },
+    {
+      "caller": null,
+      "f": 0.70692345872521400,
+      "i": 472,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3036213136
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.37267401930876076,
+      "i": 473,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1600622725
+    },
+    {
+      "caller": null,
+      "f": 0.067347467178478837,
+      "i": 474,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 289255169
+    },
+    {
+      "caller": null,
+      "f": 0.32309333072043955,
+      "i": 475,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 1387675289
+    },
+    {
+      "caller": null,
+      "f": 0.99959740624763072,
+      "i": 476,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 4293238169
+    },
+    {
+      "caller": null,
+      "f": 0.64761900948360562,
+      "i": 477,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2781502466
+    },
+    {
+      "caller": null,
+      "f": 0.43611761787906289,
+      "i": 478,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1873110906
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.36793172475881875,
+      "i": 479,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1580254725
+    },
+    {
+      "caller": null,
+      "f": 0.35012199752964079,
+      "i": 480,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 1503762529
+    },
+    {
+      "caller": null,
+      "f": 0.037199692102149129,
+      "i": 481,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 159771461
+    },
+    {
+      "caller": null,
+      "f": 0.52378969034180045,
+      "i": 482,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 2249659590
+    },
+    {
+      "caller": null,
+      "f": 0.82674867846071720,
+      "i": 483,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 3550858536
+    },
+    {
+      "caller": null,
+      "f": 0.15636659343726933,
+      "i": 484,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 671589405
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.94165449542924762,
+      "i": 485,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 4044375262
+    },
+    {
+      "caller": null,
+      "f": 0.31650129635818303,
+      "i": 486,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 1359362717
+    },
+    {
+      "caller": null,
+      "f": 0.32479308266192675,
+      "i": 487,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 1394975668
+    },
+    {
+      "caller": null,
+      "f": 0.25034069409593940,
+      "i": 488,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 1075205094
+    },
+    {
+      "caller": null,
+      "f": 0.80599247687496245,
+      "i": 489,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 3461711329
+    },
+    {
+      "caller": null,
+      "f": 0.59506452456116676,
+      "i": 490,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 2555782672
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.35603783652186394,
+      "i": 491,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1529170864
+    },
+    {
+      "caller": null,
+      "f": 0.89415424317121506,
+      "i": 492,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3840363232
+    },
+    {
+      "caller": null,
+      "f": 0.77908907295204699,
+      "i": 493,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3346162089
+    },
+    {
+      "caller": null,
+      "f": 0.86693206080235541,
+      "i": 494,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3723444849
+    },
+    {
+      "caller": null,
+      "f": 0.47056704433634877,
+      "i": 495,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2021070066
+    },
+    {
+      "caller": null,
+      "f": 0.73775788419879973,
+      "i": 496,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3168645985
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.43359142541885376,
+      "i": 497,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1862260992
+    },
+    {
+      "caller": null,
+      "f": 0.89191319863311946,
+      "i": 498,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3830738019
+    },
+    {
+      "caller": null,
+      "f": 0.62751510529778898,
+      "i": 499,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 2695156855
+    },
+    {
+      "caller": null,
+      "f": 0.36807422619313002,
+      "i": 500,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 1580866764
+    },
+    {
+      "caller": null,
+      "f": 0.87231468991376460,
+      "i": 501,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 3746563065
+    },
+    {
+      "caller": null,
+      "f": 0.84493905259296298,
+      "i": 502,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3628985598
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.11184514011256397,
+      "i": 503,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 480371219
+    },
+    {
+      "caller": null,
+      "f": 0.76762170414440334,
+      "i": 504,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3296910115
+    },
+    {
+      "caller": null,
+      "f": 0.15500270342454314,
+      "i": 505,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 665731542
+    },
+    {
+      "caller": null,
+      "f": 0.31082331575453281,
+      "i": 506,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 1334975976
+    },
+    {
+      "caller": null,
+      "f": 0.18208573409356177,
+      "i": 507,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 782052273
+    },
+    {
+      "caller": null,
+      "f": 0.025545201497152448,
+      "i": 508,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 109715805
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.25418567191809416,
+      "i": 509,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1091719148
+    },
+    {
+      "caller": null,
+      "f": 0.68828886630944908,
+      "i": 510,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 2956178171
+    },
+    {
+      "caller": null,
+      "f": 0.25005416339263320,
+      "i": 511,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 1073974454
+    },
+    {
+      "caller": null,
+      "f": 0.98545377468690276,
+      "i": 512,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 4232491734
+    },
+    {
+      "caller": null,
+      "f": 0.42933024489320815,
+      "i": 513,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1843959361
+    },
+    {
+      "caller": null,
+      "f": 0.68692563171498477,
+      "i": 514,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 2950323123
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.92850119317881763,
+      "i": 515,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3987882259
+    },
+    {
+      "caller": null,
+      "f": 0.71979874675162137,
+      "i": 516,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3091512077
+    },
+    {
+      "caller": null,
+      "f": 0.48064651247113943,
+      "i": 517,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 2064361052
+    },
+    {
+      "caller": null,
+      "f": 0.79583485424518585,
+      "i": 518,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3418084672
+    },
+    {
+      "caller": null,
+      "f": 0.99885833007283509,
+      "i": 519,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 4290063861
+    },
+    {
+      "caller": null,
+      "f": 0.15256753191351891,
+      "i": 520,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 655272560
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.98940905998460948,
+      "i": 521,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 4249479555
+    },
+    {
+      "caller": null,
+      "f": 0.45104465773329139,
+      "i": 522,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 1937222054
+    },
+    {
+      "caller": null,
+      "f": 0.23222140688449144,
+      "i": 523,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 997383348
+    },
+    {
+      "caller": null,
+      "f": 0.64173202402889729,
+      "i": 524,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 2756218056
+    },
+    {
+      "caller": null,
+      "f": 0.044687390793114901,
+      "i": 525,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 191930882
+    },
+    {
+      "caller": null,
+      "f": 0.52980052842758596,
+      "i": 526,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 2275475943
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.26723188511095941,
+      "i": 527,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1147752207
+    },
+    {
+      "caller": null,
+      "f": 0.54253055341541767,
+      "i": 528,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 2330150984
+    },
+    {
+      "caller": null,
+      "f": 0.70413316576741636,
+      "i": 529,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3024228919
+    },
+    {
+      "caller": null,
+      "f": 0.078619493404403329,
+      "i": 530,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 337668153
+    },
+    {
+      "caller": null,
+      "f": 0.62810052698478103,
+      "i": 531,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2697671222
+    },
+    {
+      "caller": null,
+      "f": 0.29276800854131579,
+      "i": 532,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1257429022
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.48452355479821563,
+      "i": 533,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 2081012822
+    },
+    {
+      "caller": null,
+      "f": 0.085676420712843537,
+      "i": 534,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 367977425
+    },
+    {
+      "caller": null,
+      "f": 0.89111460861749947,
+      "i": 535,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3827308101
+    },
+    {
+      "caller": null,
+      "f": 0.24494399549439549,
+      "i": 536,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 1052026450
+    },
+    {
+      "caller": null,
+      "f": 0.56126408069394529,
+      "i": 537,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2410610871
+    },
+    {
+      "caller": null,
+      "f": 0.16589064197614789,
+      "i": 538,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 712494882
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.85291393473744392,
+      "i": 539,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3663237456
+    },
+    {
+      "caller": null,
+      "f": 0.21322947344742715,
+      "i": 540,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 915813615
+    },
+    {
+      "caller": null,
+      "f": 0.81359977554529905,
+      "i": 541,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3494384428
+    },
+    {
+      "caller": null,
+      "f": 0.13125403621234000,
+      "i": 542,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 563731793
+    },
+    {
+      "caller": null,
+      "f": 0.35227453638799489,
+      "i": 543,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1513007613
+    },
+    {
+      "caller": null,
+      "f": 0.68887799861840904,
+      "i": 544,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 2958708475
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.91767325578257442,
+      "i": 545,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3941376622
+    },
+    {
+      "caller": null,
+      "f": 0.90861048875376582,
+      "i": 546,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3902452334
+    },
+    {
+      "caller": null,
+      "f": 0.90253395028412342,
+      "i": 547,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3876353800
+    },
+    {
+      "caller": null,
+      "f": 0.98581114830449224,
+      "i": 548,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 4234026642
+    },
+    {
+      "caller": null,
+      "f": 0.37156303436495364,
+      "i": 549,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1595851081
+    },
+    {
+      "caller": null,
+      "f": 0.87458887347020209,
+      "i": 550,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3756330609
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.75364586547948420,
+      "i": 551,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3236884345
+    },
+    {
+      "caller": null,
+      "f": 0.39643587917089462,
+      "i": 552,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 1702679136
+    },
+    {
+      "caller": null,
+      "f": 0.93466707854531705,
+      "i": 553,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 4014364535
+    },
+    {
+      "caller": null,
+      "f": 0.88942556711845100,
+      "i": 554,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3820053723
+    },
+    {
+      "caller": null,
+      "f": 0.97513011447153986,
+      "i": 555,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 4188151951
+    },
+    {
+      "caller": null,
+      "f": 0.30714757111854851,
+      "i": 556,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1319188773
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.87419388047419488,
+      "i": 557,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3754634127
+    },
+    {
+      "caller": null,
+      "f": 0.57024645619094372,
+      "i": 558,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 2449189880
+    },
+    {
+      "caller": null,
+      "f": 0.086594377178698778,
+      "i": 559,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 371920018
+    },
+    {
+      "caller": null,
+      "f": 0.98677323549054563,
+      "i": 560,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 4238158775
+    },
+    {
+      "caller": null,
+      "f": 0.95312036341056228,
+      "i": 561,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 4093620790
+    },
+    {
+      "caller": null,
+      "f": 0.32968845078721642,
+      "i": 562,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1416001114
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.23610325134359300,
+      "i": 563,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1014055743
+    },
+    {
+      "caller": null,
+      "f": 0.12948733498342335,
+      "i": 564,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 556143869
+    },
+    {
+      "caller": null,
+      "f": 0.64408939471468329,
+      "i": 565,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 2766342886
+    },
+    {
+      "caller": null,
+      "f": 0.18038750952109694,
+      "i": 566,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 774758454
+    },
+    {
+      "caller": null,
+      "f": 0.25506355520337820,
+      "i": 567,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1095489628
+    },
+    {
+      "caller": null,
+      "f": 0.30296021420508623,
+      "i": 568,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1301204212
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.85158259794116020,
+      "i": 569,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3657519408
+    },
+    {
+      "caller": null,
+      "f": 0.48213831405155361,
+      "i": 570,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 2070768291
+    },
+    {
+      "caller": null,
+      "f": 0.57266577053815126,
+      "i": 571,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 2459580756
+    },
+    {
+      "caller": null,
+      "f": 0.31654630578123033,
+      "i": 572,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 1359556031
+    },
+    {
+      "caller": null,
+      "f": 0.20751542947255075,
+      "i": 573,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 891271983
+    },
+    {
+      "caller": null,
+      "f": 0.74062430439516902,
+      "i": 574,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3180957166
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.70804927009157836,
+      "i": 575,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 3041048459
+    },
+    {
+      "caller": null,
+      "f": 0.65094920643605292,
+      "i": 576,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 2795805553
+    },
+    {
+      "caller": null,
+      "f": 0.81227648467756808,
+      "i": 577,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3488700937
+    },
+    {
+      "caller": null,
+      "f": 0.66842859191820025,
+      "i": 578,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 2870878942
+    },
+    {
+      "caller": null,
+      "f": 0.35021439357660711,
+      "i": 579,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1504159367
+    },
+    {
+      "caller": null,
+      "f": 0.13229482062160969,
+      "i": 580,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 568201928
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.56189184985123575,
+      "i": 581,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 2413307119
+    },
+    {
+      "caller": null,
+      "f": 0.33603833103552461,
+      "i": 582,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 1443273642
+    },
+    {
+      "caller": null,
+      "f": 0.39939991291612387,
+      "i": 583,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 1715409564
+    },
+    {
+      "caller": null,
+      "f": 0.82191629684530199,
+      "i": 584,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3530103615
+    },
+    {
+      "caller": null,
+      "f": 0.049615562427788973,
+      "i": 585,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 213097218
+    },
+    {
+      "caller": null,
+      "f": 0.54009971511550248,
+      "i": 586,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 2319710613
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.39528432581573725,
+      "i": 587,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 1697733252
+    },
+    {
+      "caller": null,
+      "f": 0.56296192924492061,
+      "i": 588,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 2417903075
+    },
+    {
+      "caller": null,
+      "f": 0.83569972054101527,
+      "i": 589,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 3589302969
+    },
+    {
+      "caller": null,
+      "f": 0.34050100110471249,
+      "i": 590,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 1462440664
+    },
+    {
+      "caller": null,
+      "f": 0.38829083018936217,
+      "i": 591,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 1667696417
+    },
+    {
+      "caller": null,
+      "f": 0.27544665033929050,
+      "i": 592,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 1183034355
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.93906996375881135,
+      "i": 593,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 4033274783
+    },
+    {
+      "caller": null,
+      "f": 0.85398843535222113,
+      "i": 594,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3667852401
+    },
+    {
+      "caller": null,
+      "f": 0.27139227185398340,
+      "i": 595,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 1165620932
+    },
+    {
+      "caller": null,
+      "f": 0.71872571459971368,
+      "i": 596,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3086903439
+    },
+    {
+      "caller": null,
+      "f": 0.99345309450291097,
+      "i": 597,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 4266848551
+    },
+    {
+      "caller": null,
+      "f": 0.82048946386203170,
+      "i": 598,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3523975414
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.066965369740501046,
+      "i": 599,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 287614073
+    },
+    {
+      "caller": null,
+      "f": 0.20887492108158767,
+      "i": 600,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 897110955
+    },
+    {
+      "caller": null,
+      "f": 0.94193601864390075,
+      "i": 601,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 4045584395
+    },
+    {
+      "caller": null,
+      "f": 0.98466915474273264,
+      "i": 602,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 4229121817
+    },
+    {
+      "caller": null,
+      "f": 0.89266299898736179,
+      "i": 603,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 3833958387
+    },
+    {
+      "caller": null,
+      "f": 0.88355250051245093,
+      "i": 604,
+      "site": "traffic.js:228:28",
+      "tag": "opp.lane",
+      "u32": 3794829094
+    },
+    {
+      "caller": "traffic.js:229:20",
+      "f": 0.14943992602638900,
+      "i": 605,
+      "site": "traffic.js:42:11",
+      "tag": "opp/pickWeighted",
+      "u32": 641839595
+    },
+    {
+      "caller": null,
+      "f": 0.91317293839529157,
+      "i": 606,
+      "site": "traffic.js:230:19",
+      "tag": "opp.mono",
+      "u32": 3922047906
+    },
+    {
+      "caller": null,
+      "f": 0.052411373937502503,
+      "i": 607,
+      "site": "traffic.js:231:63",
+      "tag": "opp.color",
+      "u32": 225105137
+    },
+    {
+      "caller": null,
+      "f": 0.87191302888095379,
+      "i": 608,
+      "site": "traffic.js:235:53",
+      "tag": "opp.s",
+      "u32": 3744837944
+    },
+    {
+      "caller": null,
+      "f": 0.64740844909101725,
+      "i": 609,
+      "site": "traffic.js:235:74",
+      "tag": "opp.v",
+      "u32": 2780598116
+    }
+  ],
+  "description": "every traffic rng() call during stage 5 spawnJam: call index, call-site tag, value. The C++ port must make the same calls in the same tag order (NATIVE_PORT 3-3: the trace is the contract)",
+  "draws": 610,
+  "generator": "tools/export-content.mjs",
+  "kind": "rng_trace",
+  "next_u32": 385620849,
+  "schema_version": 1,
+  "seed": 5007,
+  "stage": 5,
+  "tag_counts": {
+    "lane/car.color": 62,
+    "lane/car.mono": 62,
+    "lane/car.personal": 62,
+    "lane/car.phase": 62,
+    "lane/car.seed": 62,
+    "lane/gap.packed": 42,
+    "lane/gap.pass": 10,
+    "lane/gap.spaced": 10,
+    "lane/pickWeighted": 62,
+    "lead": 3,
+    "lead.spaced": 1,
+    "mini.cool": 2,
+    "mini.type": 2,
+    "opp.color": 26,
+    "opp.lane": 26,
+    "opp.mono": 26,
+    "opp.s": 26,
+    "opp.v": 26,
+    "opp/pickWeighted": 26,
+    "wall.offset": 2,
+    "wall/car.color": 2,
+    "wall/car.mono": 2,
+    "wall/car.personal": 2,
+    "wall/car.phase": 2,
+    "wall/car.seed": 2
+  },
+  "web_frozen_sha": "753549a"
+}

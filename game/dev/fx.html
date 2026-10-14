@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FX Harness</title>
+<style>
+  :root { --bg: #0e1220; --panel: rgba(14,18,32,0.82); --fg: #f4f6ff; --mute: #9aa3c0; --accent: #ffc928; --line: rgba(255,255,255,0.14); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font: 13px/1.35 system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel { position: fixed; left: 10px; top: 10px; bottom: 10px; width: 210px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; box-sizing: border-box; }
+  #panel h1 { font-size: 14px; margin: 2px 4px 6px; color: var(--accent); }
+  #panel h2 { font-size: 11px; margin: 8px 4px 4px; color: var(--mute); text-transform: uppercase; letter-spacing: .06em; }
+  #panel button { display: block; width: 100%; margin: 3px 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,0.06); color: var(--fg); text-align: left; cursor: pointer; font: inherit; }
+  #panel button:hover { background: rgba(255,201,40,0.18); border-color: var(--accent); }
+  #panel .row { display: flex; gap: 4px; } #panel .row button { text-align: center; }
+  #stats { position: fixed; right: 10px; top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; white-space: pre; font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; color: var(--fg); pointer-events: none; }
+  #label { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 700; color: var(--accent); pointer-events: none; }
+  body.shot #panel, body.shot #stats { display: none; }
+  @media (max-width: 640px) { #panel { width: auto; right: 10px; top: auto; height: 38%; } #stats { display: none; } }
+</style>
+<script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel"></div>
+<div id="stats"></div>
+<div id="label"></div>
+<script type="module">
+// FX 단독 하네스.  ?auto=1 타이머로 순환 · ?shot=explosion|confetti|twinkle|sparks|kill|missile|smoke|trail|hearts|hit|shockwave|debris|speed|shake [&t=초] 대표 순간 고정
+import * as THREE from 'three';
+import { FX } from '../js/fx.js';
+
+const params = new URLSearchParams(location.search);
+const SHOT = params.get('shot');
+const AUTO = params.get('auto') === '1';
+const TEST = params.get('test') === '1';
+if (SHOT) document.body.classList.add('shot');
+
+// ───────── 렌더러/씬 (world.js day 프리셋과 비슷하게)
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: !!SHOT || TEST });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true;
+const scene = new THREE.Scene();
+const SKY = { day: [0xd8f0ff, 0xcfeaff, 120, 420, 1.25, 2.6], night: [0x2a2f5c, 0x1c2148, 60, 340, 0.9, 0.7] };
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.5, 1400);
+scene.add(camera); // 계약: 코어가 카메라를 씬에 넣어준다 (스피드라인이 camera 자식)
+const hemi = new THREE.HemisphereLight(0xbfe4ff, 0x8a9a6a, 1.25); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4dc, 2.6); sun.position.set(-40, 80, 30); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 300 }); sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun, sun.target);
+function applySky(name) {
+  const p = SKY[name] || SKY.day;
+  scene.background = new THREE.Color(p[0]); scene.fog = new THREE.Fog(p[1], p[2], p[3]);
+  hemi.intensity = p[4]; sun.intensity = p[5];
+}
+applySky(params.get('sky') || 'day');
+
+// ───────── 바닥: 잔디 + 아스팔트 4차선 + 차선 + 중앙분리대
+const grass = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshLambertMaterial({ color: 0x7fb24a }));
+grass.rotation.x = -Math.PI / 2; grass.position.y = -0.02; grass.receiveShadow = true; scene.add(grass);
+const road = new THREE.Mesh(new THREE.PlaneGeometry(20.4, 900), new THREE.MeshLambertMaterial({ color: 0x45474d }));
+road.rotation.x = -Math.PI / 2; road.position.set(1.5, 0, -200); road.receiveShadow = true; scene.add(road);
+const dashGeo = new THREE.BoxGeometry(0.16, 0.02, 3), dashMat = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
+const dashes = new THREE.InstancedMesh(dashGeo, dashMat, 3 * 70);
+let di = 0; const dm = new THREE.Matrix4();
+for (const x of [-3.6, 0, 3.6]) for (let k = 0; k < 70; k++) { dm.makeTranslation(x, 0.01, 60 - k * 9); dashes.setMatrixAt(di++, dm); }
+scene.add(dashes);
+const yl = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 900), new THREE.MeshLambertMaterial({ color: 0xffc400 })); yl.position.set(-7.1, 0.01, -200); scene.add(yl);
+const median = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 900), new THREE.MeshLambertMaterial({ color: 0xbdbdb6 })); median.position.set(-8.25, 0.45, -200); median.castShadow = true; scene.add(median);
+const glare = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 900), new THREE.MeshLambertMaterial({ color: 0x2e8b57 })); glare.position.set(-8.25, 1.3, -200); scene.add(glare);
+
+// ───────── 차 (통통한 박스)
+const LANES = [-5.4, -1.8, 1.8, 5.4];
+const bodyGeo = new THREE.BoxGeometry(1, 1, 1);
+function makeCar(color, len = 4.4) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const body = new THREE.Mesh(bodyGeo, mat); body.scale.set(1.9, 0.8, len); body.position.y = 0.75; body.castShadow = true;
+  const cab = new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: 0x1b2340 })); cab.scale.set(1.6, 0.62, len * 0.48); cab.position.set(0, 1.45, 0.2); cab.castShadow = true;
+  const roof = new THREE.Mesh(bodyGeo, mat); roof.scale.set(1.62, 0.12, len * 0.46); roof.position.set(0, 1.8, 0.2);
+  g.add(body, cab, roof);
+  const wm = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+  g.userData.wheels = [];
+  for (const [x, z] of [[-0.95, -len * 0.32], [0.95, -len * 0.32], [-0.95, len * 0.32], [0.95, len * 0.32]]) {
+    const w = new THREE.Mesh(bodyGeo, wm); w.scale.set(0.42, 0.78, 0.78); w.position.set(x, 0.39, z); g.add(w); g.userData.wheels.push(w);
+  }
+  g.userData.height = 1.86;
+  return g;
+}
+const traffic = [];
+const POP = [0xf4f4f2, 0x2b2d31, 0x9aa1a9, 0xc3c8ce, 0x2f6fd6, 0xd8342c, 0x3a9d5d, 0xe0a526, 0xf4f4f2, 0x1d1f22];
+for (let row = 0; row < 18; row++) for (let l = 0; l < 4; l++) {
+  if ((row * 7 + l * 3) % 5 === 0) continue;
+  const z = 40 - row * 9 - (l % 2) * 3.5;
+  if (l === 0 && z < 0 && z > -22) continue; // 원흉 자리 비움
+  const c = makeCar(POP[(row * 4 + l) % POP.length]); c.position.set(LANES[l], 0, z); scene.add(c); traffic.push(c);
+}
+const player = makeCar(0xffc928); player.position.set(1.8, 0, 6); scene.add(player);
+let villain = makeCar(0xd9c9a3); villain.position.set(-5.4, 0, -9); scene.add(villain);
+function resetVillain() {
+  scene.remove(villain);
+  villain = makeCar(0xd9c9a3); villain.position.set(-5.4, 0, -9); scene.add(villain);
+  return villain;
+}
+const wheelPos = (m, i, out) => m.userData.wheels[i].getWorldPosition(out);
+
+// ───────── FX
+const fx = new FX(scene, camera);
+
+// ───────── 카메라 프리셋
+const cam = { pos: new THREE.Vector3(2.4, 12.5, 22), look: new THREE.Vector3(0, 0.4, -5), tPos: new THREE.Vector3(), tLook: new THREE.Vector3(), k: 6, mode: 'chase', snap: true };
+const camModes = {
+  chase: (o) => { o.tPos.set(player.position.x * 0.45 + 2.4, 12.5, player.position.z + 16); o.tLook.set(player.position.x * 0.6, 0.4, player.position.z - 11); o.k = 6; },
+  boss: (o) => { o.tPos.set(player.position.x * 0.4 + 3.4, 11.5, player.position.z + 12); o.tLook.set((player.position.x + villain.position.x) * 0.45, 0.6, (player.position.z + villain.position.z) / 2 - 3); o.k = 4; },
+  kill: (o, t) => {
+    const vp = villain.position, ang = 0.7 + t * 0.55;
+    o.tPos.set(vp.x + Math.cos(ang) * 10.5, Math.max(3.5, vp.y * 0.55 + 4), vp.z + Math.sin(ang) * 10.5); o.tLook.copy(vp); o.k = 7;
+  },
+  drone: (o, t) => { const r = cur && cur.s.rel != null ? t - cur.s.rel : t; o.tPos.set(13 + r * 1.2, 30 + r * 2.2, -35 - r * 13); o.tLook.set(-2, 0, 76 - r * 12); o.k = r < 0.4 ? 3 : 2.2; },
+  droneFixed: (o) => { o.tPos.set(14, 32, -48); o.tLook.set(-2, 0, 50); o.k = 4; },
+  cruise: (o) => { o.tPos.set(player.position.x * 0.45 + 2.4, 10.5, player.position.z + 15); o.tLook.set(player.position.x * 0.6, 0.4, player.position.z - 14); o.k = 5; },
+};
+function setCam(mode, snap = false) { cam.mode = mode; if (snap) cam.snap = true; }
+
+// ───────── 시나리오 (버튼 / auto / shot 공용)
+const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+let cur = null;
+let fxScale = 1; // 히트스톱/슬로모션 흉내
+const SCN = {
+  sparks: { label: '불꽃: 펑크 버스트 + 바퀴 끌림', cam: 'boss', dur: 2.6, t: 0.32,
+    start(s) { resetVillain(); s.n = 0; s.next = 0; s.pops = [0, 1]; },
+    tick(s, t) {
+      if (s.n < 2 && t >= s.n * 0.18) {
+        const i = s.pops[s.n++]; wheelPos(villain, i, _a); villain.userData.wheels[i].visible = false;
+        fx.sparks(_a, { count: 26, speed: 10 }); fx.smokePuff(_a, { count: 8, color: 0xdddddd }); fx.shake(0.35, 0.25);
+      }
+      villain.position.z -= 0; // 제자리
+      if (t >= s.next && s.n > 0) { s.next = t + 0.07; wheelPos(villain, s.pops[Math.floor(Math.random() * s.n)], _a); _a.y = 0.15; fx.sparks(_a, { count: 4, speed: 5, dir: new THREE.Vector3(0, 0.6, 1) }); }
+    } },
+  explosion: { label: '폭발 (원흉 사망, scale 1.2)', cam: 'boss', dur: 2.8, t: 0.12,
+    start() { resetVillain(); _a.copy(villain.position); _a.y += 1; fx.explosion(_a, 1.2); fx.debris(_a, [0xd9c9a3, 0x222222, 0xdddddd], 18); fx.shake(1.1, 0.6); } },
+  missile: { label: '분노 미사일 착탄 (0.75 + 링)', cam: 'boss', dur: 2.2, t: 0.1,
+    start(s) { resetVillain(); s.m = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 1.4), new THREE.MeshBasicMaterial({ color: 0xff3b30 })); scene.add(s.m); s.m.position.set(1.8, 1.5, 4); fx.smokeTrail(s.m, 0.7); s.hit = false; },
+    tick(s, t) {
+      const p = Math.min(1, t / 0.62), u = 1 - p, from = _a.set(1.8, 1.5, 4), to = _b.set(-5.4, 1, -9);
+      const cx = (from.x + to.x) / 2 + 4, cy = 8, cz = (from.z + to.z) / 2;
+      s.m.position.set(u * u * from.x + 2 * u * p * cx + p * p * to.x, u * u * from.y + 2 * u * p * cy + p * p * to.y, u * u * from.z + 2 * u * p * cz + p * p * to.z);
+      if (p >= 1 && !s.hit) { s.hit = true; s.m.visible = false; const pos = s.m.position.clone(); fx.explosion(pos, 0.75); fx.shockwave(new THREE.Vector3(pos.x, 0.05, pos.z), 9, 0xffd04a); fx.shake(0.8, 0.35); }
+    },
+    end(s) { scene.remove(s.m); } },
+  smoke: { label: '연기: 퍼프 + 매연 공격(검정 ×5)', cam: 'boss', dur: 3, t: 0.6,
+    start() { resetVillain(); for (let i = 0; i < 5; i++) fx.smokePuff(new THREE.Vector3(-5.4, 1.5, -9 + 2.2), { color: 0x222222, count: 8, size: 1.6 }); fx.smokePuff(new THREE.Vector3(1.8, 0.3, -2), { count: 8, color: 0xeeeeee }); fx.smokePuff(new THREE.Vector3(-1.8, 1.2, -6), { count: 5, color: 0xd9cfb8 }); fx.smokePuff(new THREE.Vector3(3.6, 1, -10)); } },
+  trail: { label: '연기 꼬리 → 하늘로 발사', cam: 'kill', dur: 2.6, t: 0.9,
+    start(s) { resetVillain(); s.vel = new THREE.Vector3(1, 36, -14); fx.smokeTrail(villain, 2.2); },
+    tick(s, t, dt) { s.vel.y -= 5 * dt; villain.position.addScaledVector(s.vel, dt); villain.rotation.x += 6 * dt; villain.rotation.y += 9 * dt; if (t > 1.3 && villain.visible) { fx.twinkle(villain.position.clone()); villain.visible = false; } } },
+  kill: { label: '★ 풀 킬 시퀀스 (히트스톱+슬로모)', cam: 'kill', dur: 6.5, t: 1.2, real: true,
+    start(s) {
+      resetVillain(); s.gt = 0; s.stage = 0; s.vel = new THREE.Vector3(0, 8, -5); s.spin = new THREE.Vector3(4.5, 8, 2.5); s.hitstop = 0.16; s.slow = 1.25;
+      for (let i = 0; i < 4; i++) { wheelPos(villain, i, _a); villain.userData.wheels[i].visible = false; fx.sparks(_a, { count: 26, speed: 10 }); fx.smokePuff(_a, { count: 8, color: 0xdddddd }); fx.shake(0.35, 0.25); }
+      _a.copy(villain.position); _a.y += 1; fx.explosion(_a, 1.0); fx.debris(_a, [0xd9c9a3, 0x222222, 0xdddddd], 18); fx.shake(1.1, 0.6);
+    },
+    tick(s, t, rdt) {
+      let ts = 1;
+      if (s.hitstop > 0) { s.hitstop -= rdt; ts = 0; } else if (s.slow > 0) { s.slow -= rdt; ts = 0.28; }
+      fxScale = ts;
+      const dt = rdt * ts; s.gt += dt;
+      const m = villain;
+      if (s.stage === 0 && s.gt > 0.85) { s.stage = 1; s.vel.set(1.5, 36, -16); s.spin.multiplyScalar(1.8); fx.smokeTrail(m, 2.2); }
+      s.vel.y += (s.stage ? -5 : -26) * dt; m.position.addScaledVector(s.vel, dt);
+      if (!s.stage && m.position.y < 0) { m.position.y = 0; s.vel.y = Math.abs(s.vel.y) * 0.45; fx.sparks(m.position, { count: 10 }); }
+      m.rotation.x += s.spin.x * dt; m.rotation.y += s.spin.y * dt; m.rotation.z += s.spin.z * dt;
+      // main.js 와 똑같이: twinkle 과 같은 프레임에 release 진입 (드론 카메라 전환 + 컨페티)
+      if (s.stage === 1 && s.gt > 2.15) { s.stage = 3; fx.twinkle(m.position.clone()); m.visible = false; s.tw = t; setCam('drone'); s.rel = t; fx.confetti(new THREE.Vector3(0, 0, -9 + 30), 220, 46); fx.shake(0.5, 0.4); }
+      if (s.stage === 3) { const k = t - s.rel; for (const c of traffic) if (!c.userData.thx && c.position.z < -9 + k * 70) { c.userData.thx = 1; if (Math.random() < 0.6) fx.hearts(c.position.clone().setY(2.4)); } }
+    },
+    end() { fxScale = 1; for (const c of traffic) c.userData.thx = 0; } },
+  twinkle: { label: '반짝★ (하늘 50m)', cam: 'sky', dur: 1.6, t: 0.2,
+    start(s) { resetVillain(); villain.visible = false; s.p = new THREE.Vector3(-4, 46, -48); fx.twinkle(s.p); } },
+  confetti: { label: '컨페티 (220, spread 46) 드론샷', cam: 'droneFixed', dur: 5, t: 1.4,
+    start() { fx.confetti(new THREE.Vector3(0, 0, 14), 220, 46); fx.shake(0.5, 0.4); } },
+  hearts: { label: '하트 스트림 (초당 20회)', cam: 'droneFixed', dur: 4, t: 1.5,
+    start(s) { s.acc = 0; },
+    tick(s, t, dt) { s.acc += dt * 20; while (s.acc >= 1 && t < 3) { s.acc--; const c = traffic[Math.floor(Math.random() * traffic.length)]; fx.hearts(c.position.clone().setY(2.4)); } } },
+  hit: { label: '압정 명중 (hitFlash ×7/s)', cam: 'boss', dur: 2.5, t: 0.9,
+    start(s) { resetVillain(); s.next = 0; },
+    tick(s, t) { if (t >= s.next && t < 2) { s.next = t + 1 / 7; _a.set(-5.4 + (Math.random() - 0.5) * 1.2, 1 + Math.random() * 0.6, -9 + 1.5); fx.hitFlash(_a); if (Math.random() < 0.5) fx.sparks(_a, { count: 5, speed: 5 }); } } },
+  shockwave: { label: '충격파 링', cam: 'boss', dur: 1.6, t: 0.2,
+    start() { fx.shockwave(new THREE.Vector3(-1.8, 0.05, -10), 9, 0xffd04a); fx.shockwave(new THREE.Vector3(3.6, 0.05, -18), 6); } },
+  debris: { label: '파편 (아이템 피격)', cam: 'boss', dur: 2.6, t: 0.35,
+    start() { fx.debris(new THREE.Vector3(0, 1.2, -8), [0x2f9e44, 0xe03131, 0x1b5e20], 16); fx.sparks(new THREE.Vector3(0, 1.2, -8), { count: 6 }); fx.debris(new THREE.Vector3(-3.6, 1, -14)); } },
+  speed: { label: '스피드라인 0.85 (질주)', cam: 'cruise', dur: 4, t: 0.8,
+    start() { fx.speedLines(0.85); },
+    tick(s, t, dt) { player.position.z -= 37 * dt; if (t > 3.2) fx.speedLines(0.3); },
+    end() { player.position.z = 6; fx.speedLines(0); } },
+  shake: { label: '셰이크 누적 (0.45 → 1.1)', cam: 'chase', dur: 1.5, t: 0.08,
+    start() { fx.shake(0.45, 0.25); fx.shake(0.6, 0.35); fx.shake(1.1, 0.6); } },
+};
+camModes.sky = (o) => { o.tPos.set(10, 30, -22); o.tLook.set(-4, 44, -48); o.k = 6; };
+
+function play(name) {
+  if (cur && cur.sc.end) cur.sc.end(cur.s);
+  const sc = SCN[name]; if (!sc) return;
+  fxScale = 1;
+  cur = { name, sc, t: 0, s: {} };
+  villain.visible = true;
+  setCam(sc.cam, false);
+  sc.start && sc.start(cur.s);
+  document.getElementById('label').textContent = sc.label;
+}
+
+// ───────── 스텝
+function step(dt) {
+  if (cur) {
+    cur.t += dt;
+    cur.sc.tick && cur.sc.tick(cur.s, cur.t, dt);
+  }
+  fx.update(dt * fxScale);
+  const f = camModes[cam.mode] || camModes.chase;
+  f(cam, cur ? cur.t : 0);
+  const a = cam.snap ? 1 : 1 - Math.exp(-cam.k * dt);
+  cam.snap = false;
+  cam.pos.lerp(cam.tPos, a); cam.look.lerp(cam.tLook, a);
+  camera.position.copy(cam.pos).add(fx.shakeOffset);
+  camera.lookAt(cam.look);
+  const fov = cam.mode === 'cruise' ? 54 : cam.mode.startsWith('drone') ? 50 : cam.mode === 'boss' ? 46 : 42;
+  camera.fov += (fov - camera.fov) * (cam.snap ? 1 : 1 - Math.exp(-3 * dt));
+  camera.updateProjectionMatrix();
+}
+
+// ───────── UI
+const panel = document.getElementById('panel');
+panel.innerHTML = '<h1>FX 하네스</h1><h2>시나리오</h2>';
+for (const [k, sc] of Object.entries(SCN)) {
+  const b = document.createElement('button'); b.textContent = sc.label; b.onclick = () => play(k); panel.appendChild(b);
+}
+const raw = [
+  ['sparks()', () => fx.sparks(new THREE.Vector3(0, 0.6, -6))],
+  ['explosion(1.4)', () => fx.explosion(new THREE.Vector3(0, 1, -10), 1.4)],
+  ['smokeTrail(player, 2)', () => fx.smokeTrail(player, 2)],
+  ['confetti()', () => fx.confetti(new THREE.Vector3(0, 0, -10))],
+  ['hearts(×1)', () => fx.hearts(new THREE.Vector3(1.8, 2.4, -4))],
+  ['hitFlash()', () => fx.hitFlash(new THREE.Vector3(-1.8, 1.2, -6))],
+  ['twinkle(근거리)', () => fx.twinkle(new THREE.Vector3(0, 12, -24))],
+  ['shake(0.5)', () => fx.shake()],
+];
+panel.insertAdjacentHTML('beforeend', '<h2>단발 호출</h2>');
+for (const [l, f] of raw) { const b = document.createElement('button'); b.textContent = l; b.onclick = f; panel.appendChild(b); }
+panel.insertAdjacentHTML('beforeend', '<h2>스피드라인 / 카메라 / 기타</h2>');
+const row1 = document.createElement('div'); row1.className = 'row';
+for (const v of [0, 0.3, 0.85, 1]) { const b = document.createElement('button'); b.textContent = String(v); b.onclick = () => fx.speedLines(v); row1.appendChild(b); }
+panel.appendChild(row1);
+const row2 = document.createElement('div'); row2.className = 'row';
+for (const m of ['chase', 'boss', 'kill', 'droneFixed', 'sky']) { const b = document.createElement('button'); b.textContent = m.replace('Fixed', ''); b.onclick = () => setCam(m); row2.appendChild(b); }
+panel.appendChild(row2);
+const row3 = document.createElement('div'); row3.className = 'row';
+for (const [l, f] of [['clear()', () => fx.clear()], ['낮', () => applySky('day')], ['밤', () => applySky('night')]]) { const b = document.createElement('button'); b.textContent = l; b.onclick = f; row3.appendChild(b); }
+panel.appendChild(row3);
+
+const statsEl = document.getElementById('stats');
+let fpsAcc = 0, fpsN = 0, fps = 0, upMs = 0;
+function drawStats() {
+  const st = fx._debugStats();
+  statsEl.textContent = `fps ${fps}  fx.update ${upMs.toFixed(2)}ms\ncalls ${renderer.info.render.calls}  tris ${renderer.info.render.triangles}\n` +
+    Object.entries(st).map(([k, v]) => `${k.padEnd(12)}${v}`).join('\n');
+}
+
+function onResize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', onResize);
+
+// 디버그 노출 (테스트 스크립트용)
+Object.assign(window, { __fx: fx, __THREE: THREE, __scene: scene, __camera: camera, __renderer: renderer, __play: play, __step: step, __render: () => renderer.render(scene, camera), __player: player });
+
+// ───────── 실행 모드
+if (SHOT) {
+  // 결정적: 고정 dt 로 대표 순간까지 진행한 뒤 한 프레임만 렌더하고 멈춘다.
+  fx._seed(12345);
+  const sc = SCN[SHOT] || SCN.explosion;
+  const T = +(params.get('t') || sc.t);
+  play(SCN[SHOT] ? SHOT : 'explosion');
+  cam.snap = true; step(0);
+  const DT = 1 / 60;
+  for (let t = 0; t < T - 1e-6; t += DT) step(DT);
+  renderer.render(scene, camera);
+  window.__shotReady = true;
+  window.__shotStats = fx._debugStats();
+  drawStats();
+} else if (!TEST) {
+  let last = performance.now();
+  let autoI = 0, autoNext = 0;
+  const order = ['kill', 'explosion', 'sparks', 'missile', 'hit', 'smoke', 'debris', 'shockwave', 'trail', 'twinkle', 'confetti', 'hearts', 'speed', 'shake'];
+  if (!AUTO) play('explosion');
+  function frame(now) {
+    requestAnimationFrame(frame);
+    const raw = Math.max(0, (now - last) / 1000); last = now;
+    const dt = Math.min(0.05, raw);
+    if (AUTO && performance.now() > autoNext) {
+      const name = order[autoI++ % order.length];
+      play(name); autoNext = performance.now() + (SCN[name].dur + 0.4) * 1000;
+    }
+    const t0 = performance.now(); step(dt); upMs = upMs * 0.9 + (performance.now() - t0) * 0.1;
+    renderer.render(scene, camera);
+    fpsAcc += raw; fpsN++; if (fpsAcc > 0.5) { fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; drawStats(); }
+  }
+  requestAnimationFrame(frame);
+} else {
+  renderer.render(scene, camera);
+  window.__testReady = true;
+}
+</script>
+</body>
+</html>

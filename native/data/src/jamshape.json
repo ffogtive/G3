@@ -1,0 +1,28 @@
+{
+  "_doc": "stagegen input (resolved into stages.json). lanes[0..3]: packed|train|flow|spaced|pass",
+  "byId": {
+    "1": {
+      "lanes": ["train", "packed", "flow", "flow"]
+    },
+    "3": {
+      "lanes": ["spaced", "spaced", "packed", "packed"]
+    },
+    "5": {
+      "lanes": ["pass", "spaced", "packed", "packed"],
+      "passV": 3.4,
+      "sources": [
+        {
+          "hold": 1.2,
+          "lane": 0,
+          "period": 1.6,
+          "type": "yield"
+        }
+      ]
+    },
+    "6": {
+      "lanes": ["packed", "flow", "flow", "flow"]
+    }
+  },
+  "schema_version": 1,
+  "source": "stagegen.js JAMSHAPE_BY_ID @ 753549a"
+}
