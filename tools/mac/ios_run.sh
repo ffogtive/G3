@@ -648,6 +648,11 @@ if GODOT="$GODOT_BIN" bash "$SCRIPT_DIR/build_ios_ext.sh" "${EXT_ARGS[@]}" >"$RU
     warn "extensions: $EXT_RESULT"
     hint "stub = that extension is left out on the iPhone (traffic -> GDScript fallback, haptics -> vibrate_handheld)." \
       "log: $(rel "$RUN_DIR/ext.log")"
+    # Show why, right here (device run 2026-10-14 only said traffic=failed): the build log's error lines.
+    if grep -q '^traffic=failed' "$LANE1_NATIVE/build/ios/ext_status.txt" 2>/dev/null; then
+      printf '      ── traffic build errors (send these lines if this keeps failing) ──\n' >&2
+      grep -E -i 'error|fail|could not|not found' "$RUN_DIR/ext.log" | grep -v -i 'continuing' | head -n 15 >&2 || true
+    fi
   else
     ok "extensions: $EXT_RESULT"
   fi

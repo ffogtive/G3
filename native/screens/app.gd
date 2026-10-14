@@ -56,6 +56,7 @@ var _pause_settings: ScrSettings
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_write_boot()
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--game="):
 			game_scene_path = REAL_GAME if a.ends_with("real") else FAKE_GAME
@@ -440,3 +441,15 @@ func _music(name: StringName) -> void:
 	var a: Node = get_tree().root.get_node_or_null(^"Audio") if is_inside_tree() else null
 	if a != null and a.has_method(&"music"):
 		a.call(&"music", name)
+
+
+## user://boot.txt for tools/mac/ios_run.sh (devicectl copy-from): proves this launch reached the main scene and
+## whether the C++ traffic core loaded. Device run 2026-10-14 read "boot.txt is from an earlier launch" because only
+## game.gd wrote it, and the app now opens on the dashboard. Best effort: never fails the app.
+func _write_boot() -> void:
+	var native: bool = TrafficBridge.native_available()
+	var f := FileAccess.open("user://boot.txt", FileAccess.WRITE)
+	if f != null:
+		f.store_line("INFO app: dashboard native=%s haptics=%s boot_unix=%d" % [native, ClassDB.class_exists(&"IOSHaptics"),
+			int(Time.get_unix_time_from_system())])
+		f.close()

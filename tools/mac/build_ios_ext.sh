@@ -174,13 +174,22 @@ build_traffic_ios() {
   bash "$LANE1_ROOT/tools/godot/build_ext.sh" --fetch-only || return 1
   gen=${CMAKE_GENERATOR:-Xcode}
   log "traffic ios $t (cmake -G $gen, -j$JOBS)"
-  cmake -S "$EXT_DIR" -B "$bdir" -G "$gen" -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_MIN" -DGODOTCPP_TARGET="$t" >"$STATUS_DIR/traffic_cmake.log" 2>&1 || {
-    tail -n 20 "$STATUS_DIR/traffic_cmake.log" >&2
+  # Device run 2026-10-14: traffic=failed in ~7 s on Xcode 27 + CMake 4.3. With the Xcode generator and
+  # CMAKE_SYSTEM_NAME=iOS, CMake's compiler checks build a signed test *app* and fail without a team. A static
+  # library needs no signing: make try_compile build static libs and turn code signing off for these targets.
+  cmake -S "$EXT_DIR" -B "$bdir" -G "$gen" -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
+    -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_MIN" -DGODOTCPP_TARGET="$t" \
+    -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+    -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
+    -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" >"$STATUS_DIR/traffic_cmake.log" 2>&1 || {
+    warn "cmake configure failed (iOS traffic). Last lines of $(rel "$STATUS_DIR/traffic_cmake.log"):"
+    grep -E -i 'error|fail|could not|not found' "$STATUS_DIR/traffic_cmake.log" | head -n 12 >&2 || true
+    tail -n 12 "$STATUS_DIR/traffic_cmake.log" >&2
     return 1
   }
   cmake --build "$bdir" --target traffic --config Release -j "$JOBS" >"$STATUS_DIR/traffic_build.log" 2>&1 || {
-    grep -E 'error:|Error' "$STATUS_DIR/traffic_build.log" | head -n 20 >&2 || true
+    warn "cmake build failed (iOS traffic). Errors from $(rel "$STATUS_DIR/traffic_build.log"):"
+    grep -E 'error:|Error|BUILD FAILED' "$STATUS_DIR/traffic_build.log" | head -n 20 >&2 || true
     return 1
   }
   lib=$(find "$EXT_DIR/bin" "$bdir" -name "libtraffic.ios.$t.arm64.a" 2>/dev/null | head -n 1 || true)
