@@ -1,5 +1,33 @@
 {
   "events": {
+    "bomb": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 70,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 1,
+          "sharpness": 0.5,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.18,
+          "intensity": 0.7,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 200,
+      "note": "GameSim 'bomb' (rage missile launch); the landing is a 'hit' kind bomb",
+      "web": []
+    },
     "bossPhase": {
       "android": [
         {
@@ -39,6 +67,76 @@
       "note": "crit hit; same pattern as shoulderSmash",
       "web": []
     },
+    "damage": {
+      "android": [
+        {
+          "amp": 0.85,
+          "ms": 55,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.85,
+          "sharpness": 0.25,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.1,
+          "intensity": 0.45,
+          "sharpness": 0.2,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 150,
+      "note": "GameSim 'damage' (player HP lost, P0#5: the villain's telegraphed attacks)",
+      "web": []
+    },
+    "fire": {
+      "android": [
+        {
+          "amp": 0.12,
+          "ms": 6,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.18,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "maxPerSecond": 6,
+      "minIntervalMs": 90,
+      "note": "GameSim 'fire' (one tack thrown while 압정 is held): a light click per shot",
+      "web": []
+    },
+    "hit": {
+      "android": [
+        {
+          "amp": 0.3,
+          "ms": 10,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.32,
+          "sharpness": 0.85,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "maxPerSecond": 5,
+      "minIntervalMs": 110,
+      "note": "GameSim 'hit' (tack landed); signature-window hits use crit",
+      "web": []
+    },
     "horn": {
       "android": [
         {
@@ -58,6 +156,34 @@
       "minIntervalMs": null,
       "web": ["main.js:1078 'horn'"]
     },
+    "kill": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 140,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 1,
+          "sharpness": 0.7,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.7,
+          "intensity": 0.7,
+          "sharpness": 0.2,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": null,
+      "note": "GameSim 'kill' (slow-mo explosion)",
+      "web": []
+    },
     "laneChange": {
       "android": [
         {
@@ -73,6 +199,37 @@
       ],
       "minIntervalMs": null,
       "web": ["main.js:1066 'laneChange'"]
+    },
+    "lock": {
+      "android": [
+        {
+          "amp": 0.4,
+          "ms": 12,
+          "t": 0
+        },
+        {
+          "amp": 0.6,
+          "ms": 14,
+          "t": 0.07
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.4,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.6,
+          "sharpness": 0.9,
+          "t": 0.07,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 300,
+      "note": "N4 reticle acquires the target (lock.in_range false → true): double tick",
+      "web": []
     },
     "miniCaught": {
       "android": [
@@ -103,6 +260,26 @@
       ],
       "minIntervalMs": null,
       "web": ["main.js:233 fx.shake(0.3, 0.2)"]
+    },
+    "miss": {
+      "android": [
+        {
+          "amp": 0.25,
+          "ms": 30,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.35,
+          "sharpness": 0.05,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 400,
+      "note": "P0#2 '빗나감!' — dull, low-sharpness thud (GameSim 'miss', already throttled by tack.missEvery)",
+      "web": []
     },
     "playerBump": {
       "android": [
@@ -250,6 +427,48 @@
       ],
       "minIntervalMs": null,
       "web": ["main.js:606 fx.shake(0.8, 0.35)"]
+    },
+    "release": {
+      "android": [
+        {
+          "amp": 0.6,
+          "ms": 20,
+          "t": 0
+        },
+        {
+          "amp": 0.45,
+          "ms": 20,
+          "t": 0.12
+        },
+        {
+          "amp": 0.3,
+          "ms": 20,
+          "t": 0.24
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.6,
+          "sharpness": 0.4,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.45,
+          "sharpness": 0.4,
+          "t": 0.12,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.4,
+          "t": 0.24,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": null,
+      "note": "GameSim 'release' (wave starts); per-beat haptics stay releaseWave",
+      "web": []
     },
     "releaseWave": {
       "android": [

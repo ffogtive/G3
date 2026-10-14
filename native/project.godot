@@ -8,8 +8,8 @@
 ;
 ; 1차선 참교육 — native port (docs/NATIVE_PORT.md 3-1). Engine pin: Godot 4.7.2-stable (1-2).
 ; Planned autoload order (3-1): DB SaveGame InputBuffer Audio Haptics Fx UI.
-; Registered so far: DB, SaveGame, Haptics (the others are added here, in this order, when their scripts land;
-; InputBuffer/Audio/Fx/UI are still per-scene nodes of view/game.gd in M1a). Cfg (core/cfg.gd) is a `class_name` constants holder, not an autoload.
+; Registered so far: DB, SaveGame, Audio, Haptics (the others are added here, in this order, when their scripts land;
+; InputBuffer/Fx/UI are still per-scene nodes of view/game.gd in M1a). Cfg (core/cfg.gd) is a `class_name` constants holder, not an autoload.
 
 config_version=5
 
@@ -24,7 +24,15 @@ run/main_scene="res://view/game.tscn"
 
 DB="*res://core/db.gd"
 SaveGame="*res://core/save_game.gd"
+Progress="*res://meta/progress.gd"
+Audio="*res://autoload/audio.gd"
 Haptics="*res://autoload/haptics.gd"
+
+[audio]
+
+; iOS: Playback (3) plays through the silent switch; mix_with_others off = the game owns the output (autoload/audio.gd header).
+general/ios/session_category=3
+general/ios/mix_with_others=false
 
 [debug]
 

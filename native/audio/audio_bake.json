@@ -1,0 +1,715 @@
+{
+ "generator": "tools/bake-audio.mjs",
+ "source": "game/js/audio.js (web-frozen 753549a), module imported unmodified",
+ "tap": "pre-compressor: bus gains (sfx 0.9 / amb 0.6 / music 0.8 x song gain) included, no compressor, no clipper",
+ "rate": 44100,
+ "master": {
+  "compressor": {
+   "threshold_db": -10,
+   "knee_db": 6,
+   "ratio": 6,
+   "attack_s": 0.003,
+   "release_s": 0.22
+  },
+  "clip_ceiling": 0.93
+ },
+ "sfx": {
+  "blink": {
+   "g": 0.7,
+   "dur": 0.35,
+   "max": 3,
+   "gap": 0.04,
+   "stagger": 0,
+   "pri": 0,
+   "files": [
+    "blink.wav"
+   ],
+   "seconds": 0.3434,
+   "channels": 1,
+   "peak": 0.2684,
+   "rms": 0.01188,
+   "gain_db": -10.509
+  },
+  "brakeScreech": {
+   "g": 0.32,
+   "dur": 0.8,
+   "max": 2,
+   "gap": 0.15,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "brakeScreech.wav"
+   ],
+   "seconds": 1.0363,
+   "channels": 1,
+   "peak": 0.2614,
+   "rms": 0.05459,
+   "gain_db": -10.739
+  },
+  "bump": {
+   "g": 0.55,
+   "dur": 0.25,
+   "max": 2,
+   "gap": 0.08,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "bump.wav"
+   ],
+   "seconds": 0.315,
+   "channels": 1,
+   "peak": 0.4514,
+   "rms": 0.09163,
+   "gain_db": -5.994
+  },
+  "cheer": {
+   "g": 1,
+   "dur": 4.6,
+   "max": 1,
+   "gap": 1,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "cheer.wav"
+   ],
+   "seconds": 4.2727,
+   "channels": 2,
+   "peak": 3.4058,
+   "rms": 0.48301,
+   "gain_db": 11.56,
+   "beat0": 0.04,
+   "bpm": 130,
+   "note": "cheerHorns(): 2x \"대~한민국\" + 짝짝 짝짝짝 + final 빠앙 on the release grid; release music enters 1 bar after beat0"
+  },
+  "chicken": {
+   "g": 0.2,
+   "dur": 0.35,
+   "max": 2,
+   "gap": 0.1,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "chicken.wav"
+   ],
+   "seconds": 0.29,
+   "channels": 1,
+   "peak": 0.4681,
+   "rms": 0.12904,
+   "gain_db": -5.678
+  },
+  "crit": {
+   "g": 0.7,
+   "dur": 0.4,
+   "max": 2,
+   "gap": 0.08,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "crit.wav"
+   ],
+   "seconds": 0.537,
+   "channels": 1,
+   "peak": 0.8612,
+   "rms": 0.07019,
+   "gain_db": -0.383
+  },
+  "cutin": {
+   "g": 0.36,
+   "dur": 0.7,
+   "max": 2,
+   "gap": 0.2,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "cutin.wav"
+   ],
+   "seconds": 0.7338,
+   "channels": 1,
+   "peak": 0.8325,
+   "rms": 0.16936,
+   "gain_db": -0.677
+  },
+  "explosion": {
+   "g": 0.95,
+   "dur": 1.6,
+   "max": 2,
+   "gap": 0.12,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "explosion.wav"
+   ],
+   "seconds": 1.6204,
+   "channels": 1,
+   "peak": 1.5099,
+   "rms": 0.20906,
+   "gain_db": 4.494
+  },
+  "go": {
+   "g": 0.7,
+   "dur": 0.9,
+   "max": 1,
+   "gap": 0.3,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "go.wav"
+   ],
+   "seconds": 1.5951,
+   "channels": 1,
+   "peak": 0.8944,
+   "rms": 0.0939,
+   "gain_db": -0.054
+  },
+  "hit": {
+   "g": 0.5,
+   "dur": 0.14,
+   "max": 3,
+   "gap": 0.06,
+   "stagger": 0,
+   "pri": 0,
+   "files": [
+    "hit.wav"
+   ],
+   "seconds": 0.1579,
+   "channels": 1,
+   "peak": 0.4183,
+   "rms": 0.0385,
+   "gain_db": -6.655
+  },
+  "horn": {
+   "g": 0.36,
+   "dur": 0.5,
+   "max": 3,
+   "gap": 0.05,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "horn.wav"
+   ],
+   "seconds": 0.5128,
+   "channels": 1,
+   "peak": 0.8828,
+   "rms": 0.19213,
+   "gain_db": -0.168
+  },
+  "hornAngry": {
+   "g": 0.36,
+   "dur": 0.6,
+   "max": 2,
+   "gap": 0.12,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "hornAngry.wav"
+   ],
+   "seconds": 0.6248,
+   "channels": 1,
+   "peak": 0.8811,
+   "rms": 0.19041,
+   "gain_db": -0.184
+  },
+  "hornShort": {
+   "g": 0.4,
+   "dur": 0.27,
+   "max": 3,
+   "gap": 0.05,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "hornShort.wav"
+   ],
+   "seconds": 0.2851,
+   "channels": 1,
+   "peak": 0.9883,
+   "rms": 0.17869,
+   "gain_db": 0.813
+  },
+  "hornTruck": {
+   "g": 0.4,
+   "dur": 1,
+   "max": 2,
+   "gap": 0.1,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "hornTruck.wav"
+   ],
+   "seconds": 1.0149,
+   "channels": 1,
+   "peak": 0.9909,
+   "rms": 0.18865,
+   "gain_db": 0.836
+  },
+  "laneChange": {
+   "g": 0.35,
+   "dur": 0.2,
+   "max": 2,
+   "gap": 0.05,
+   "stagger": 0,
+   "pri": 0,
+   "files": [
+    "laneChange.wav"
+   ],
+   "seconds": 0.2156,
+   "channels": 1,
+   "peak": 0.2431,
+   "rms": 0.03152,
+   "gain_db": -11.369
+  },
+  "launch": {
+   "g": 0.4,
+   "dur": 1.15,
+   "max": 2,
+   "gap": 0.2,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "launch.wav"
+   ],
+   "seconds": 1.3991,
+   "channels": 1,
+   "peak": 0.1883,
+   "rms": 0.08382,
+   "gain_db": -13.588
+  },
+  "pop": {
+   "g": 1.2,
+   "dur": 0.9,
+   "max": 4,
+   "gap": 0.06,
+   "stagger": 0.085,
+   "pri": 2,
+   "files": [
+    "pop.wav"
+   ],
+   "seconds": 0.9656,
+   "channels": 1,
+   "peak": 1.6866,
+   "rms": 0.14171,
+   "gain_db": 5.455
+  },
+  "rageFull": {
+   "g": 0.7,
+   "dur": 0.8,
+   "max": 1,
+   "gap": 0.2,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "rageFull.wav"
+   ],
+   "seconds": 1.0661,
+   "channels": 1,
+   "peak": 0.2737,
+   "rms": 0.04999,
+   "gain_db": -10.339
+  },
+  "splat": {
+   "g": 0.85,
+   "dur": 0.4,
+   "max": 3,
+   "gap": 0.05,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "splat.wav"
+   ],
+   "seconds": 0.3662,
+   "channels": 1,
+   "peak": 1.0014,
+   "rms": 0.11031,
+   "gain_db": 0.927
+  },
+  "stageClear": {
+   "g": 0.6,
+   "dur": 1.6,
+   "max": 1,
+   "gap": 0.5,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "stageClear.wav"
+   ],
+   "seconds": 2.1151,
+   "channels": 1,
+   "peak": 0.8427,
+   "rms": 0.1023,
+   "gain_db": -0.571
+  },
+  "star": {
+   "g": 1,
+   "dur": 0.6,
+   "max": 3,
+   "gap": 0.05,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "star.wav"
+   ],
+   "seconds": 0.6331,
+   "channels": 1,
+   "peak": 0.3285,
+   "rms": 0.04537,
+   "gain_db": -8.754
+  },
+  "super": {
+   "g": 0.6,
+   "dur": 1.2,
+   "max": 2,
+   "gap": 0.15,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "super.wav"
+   ],
+   "seconds": 1.6152,
+   "channels": 1,
+   "peak": 0.451,
+   "rms": 0.08,
+   "gain_db": -6.001
+  },
+  "superHit": {
+   "g": 1,
+   "dur": 2.4,
+   "max": 2,
+   "gap": 0.15,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "superHit.wav"
+   ],
+   "seconds": 2.4202,
+   "channels": 1,
+   "peak": 2.326,
+   "rms": 0.28023,
+   "gain_db": 8.247
+  },
+  "tack": {
+   "g": 0.42,
+   "dur": 0.07,
+   "max": 2,
+   "gap": 0.045,
+   "stagger": 0,
+   "pri": 0,
+   "files": [
+    "tack.wav"
+   ],
+   "seconds": 0.0849,
+   "channels": 1,
+   "peak": 0.2176,
+   "rms": 0.03094,
+   "gain_db": -12.332
+  },
+  "tauntBlip": {
+   "g": 0.22,
+   "dur": 0.4,
+   "max": 2,
+   "gap": 0.1,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "tauntBlip.wav",
+    "tauntBlip_2.wav",
+    "tauntBlip_3.wav"
+   ],
+   "seconds": 0.44,
+   "channels": 1,
+   "peak": 0.3561,
+   "rms": 0.08168,
+   "gain_db": -8.053
+  },
+  "throw": {
+   "g": 0.45,
+   "dur": 0.25,
+   "max": 2,
+   "gap": 0.08,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "throw.wav"
+   ],
+   "seconds": 0.2348,
+   "channels": 1,
+   "peak": 0.2582,
+   "rms": 0.05174,
+   "gain_db": -10.846
+  },
+  "twinkle": {
+   "g": 1.25,
+   "dur": 1.1,
+   "max": 2,
+   "gap": 0.15,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "twinkle.wav"
+   ],
+   "seconds": 1.3149,
+   "channels": 2,
+   "peak": 0.3999,
+   "rms": 0.05411,
+   "gain_db": -7.046
+  },
+  "ui": {
+   "g": 1.2,
+   "dur": 0.08,
+   "max": 2,
+   "gap": 0.03,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "ui.wav"
+   ],
+   "seconds": 0.095,
+   "channels": 1,
+   "peak": 0.2976,
+   "rms": 0.04095,
+   "gain_db": -9.612
+  },
+  "uiConfirm": {
+   "g": 0.6,
+   "dur": 0.25,
+   "max": 2,
+   "gap": 0.05,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "uiConfirm.wav"
+   ],
+   "seconds": 0.3195,
+   "channels": 1,
+   "peak": 0.208,
+   "rms": 0.04631,
+   "gain_db": -12.724
+  },
+  "warn": {
+   "g": 0.65,
+   "dur": 0.5,
+   "max": 1,
+   "gap": 0.3,
+   "stagger": 0,
+   "pri": 2,
+   "files": [
+    "warn.wav"
+   ],
+   "seconds": 0.505,
+   "channels": 1,
+   "peak": 0.1391,
+   "rms": 0.09041,
+   "gain_db": -16.218
+  },
+  "whoosh": {
+   "g": 0.45,
+   "dur": 0.5,
+   "max": 3,
+   "gap": 0.06,
+   "stagger": 0,
+   "pri": 1,
+   "files": [
+    "whoosh.wav"
+   ],
+   "seconds": 0.5146,
+   "channels": 1,
+   "peak": 0.362,
+   "rms": 0.0635,
+   "gain_db": -7.911
+  }
+ },
+ "music": {
+  "boss": {
+   "file": "mus_boss.ogg",
+   "seconds": 25.6,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.5673,
+   "rms": 0.08638,
+   "seam": 0.00115,
+   "seam_ref": 0.20697,
+   "seam_decoded": 0.00787,
+   "bpm": 150,
+   "bars": 16,
+   "loop_bar": 0,
+   "loop_s": 25.6,
+   "gain": 0.44,
+   "gain_db": -4.009
+  },
+  "jam": {
+   "file": "mus_jam.ogg",
+   "seconds": 24,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.3127,
+   "rms": 0.05123,
+   "seam": 0.00001,
+   "seam_ref": 0.05802,
+   "seam_decoded": 0.00475,
+   "bpm": 80,
+   "bars": 8,
+   "loop_bar": 0,
+   "loop_s": 24,
+   "gain": 0.34,
+   "gain_db": -9.182
+  },
+  "menu": {
+   "file": "mus_menu.ogg",
+   "seconds": 14.5455,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.463,
+   "rms": 0.07089,
+   "seam": 0.00027,
+   "seam_ref": 0.10143,
+   "seam_decoded": 0.00395,
+   "bpm": 132,
+   "bars": 8,
+   "loop_bar": 0,
+   "loop_s": 14.5455,
+   "gain": 0.52,
+   "gain_db": -5.773
+  },
+  "release": {
+   "file": "mus_release.ogg",
+   "seconds": 33.2308,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 3.692313,
+   "peak": 0.6644,
+   "rms": 0.08452,
+   "seam": 0.00003,
+   "seam_ref": 0.25229,
+   "seam_decoded": 0.0013,
+   "bpm": 130,
+   "bars": 18,
+   "loop_bar": 2,
+   "loop_s": 29.5385,
+   "gain": 0.5,
+   "gain_db": -2.636
+  }
+ },
+ "amb": {
+  "free": {
+   "file": "amb_free.ogg",
+   "seconds": 18.75,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.3251,
+   "rms": 0.05758,
+   "seam": 0.0008,
+   "seam_ref": 0.02254,
+   "seam_decoded": 0.00882,
+   "loop_s": 18.75,
+   "cut_at_s": 5,
+   "xfade_s": 0.4,
+   "gain_db": -8.845
+  },
+  "jam": {
+   "file": "amb_jam.ogg",
+   "seconds": 28.5714,
+   "channels": 2,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.4789,
+   "rms": 0.057,
+   "seam": 0.00047,
+   "seam_ref": 0.00547,
+   "seam_decoded": 0.00723,
+   "loop_s": 28.5714,
+   "cut_at_s": 8.9,
+   "xfade_s": 0.25,
+   "gain_db": -5.48
+  }
+ },
+ "engine": {
+  "model": {
+   "gears": [
+    0,
+    7,
+    15,
+    24,
+    33,
+    46
+   ],
+   "rpm": [
+    0.12,
+    0.88,
+    0.38,
+    0.62
+   ],
+   "f": [
+    30,
+    105
+   ],
+   "lvl": [
+    0.022,
+    0.026,
+    0.018
+   ],
+   "road": [
+    0.2,
+    40,
+    1.5
+   ],
+   "vmax": 45,
+   "throttle": [
+    1,
+    0.4
+   ],
+   "f_ref": 60,
+   "loop_s": 3.2,
+   "rpm_ref": 0.28571,
+   "v_ref": 1.31818
+  },
+  "lo": {
+   "file": "eng_lo.wav",
+   "seconds": 3.2,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.0456,
+   "rms": 0.02615,
+   "seam": 0.00006,
+   "seam_ref": 0.001,
+   "th": 0.4,
+   "f_ref": 60,
+   "rpm_ref": 0.28571,
+   "lvl_ref": 0.03754,
+   "gain_db": -25.906
+  },
+  "hi": {
+   "file": "eng_hi.wav",
+   "seconds": 3.2,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.0646,
+   "rms": 0.03697,
+   "seam": 0.00007,
+   "seam_ref": 0.00371,
+   "th": 1,
+   "f_ref": 60,
+   "rpm_ref": 0.28571,
+   "lvl_ref": 0.05314,
+   "gain_db": -22.88
+  },
+  "road": {
+   "file": "eng_road.wav",
+   "seconds": 2,
+   "channels": 1,
+   "loop": true,
+   "loop_offset": 0,
+   "peak": 0.1153,
+   "rms": 0.02651,
+   "seam": 0.00175,
+   "seam_ref": 0.00312,
+   "v_ref": 40,
+   "gain_ref": 0.2,
+   "gain_db": -17.848
+  }
+ },
+ "total_bytes": 5109930
+}

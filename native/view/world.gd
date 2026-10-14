@@ -342,12 +342,14 @@ func _overhead(path: String, x: float, s: float) -> void:
 	add_child(mi)
 	# GeometryInstance3D.transparency is Forward+ only (ignored on Mobile), so fading swaps in alpha materials:
 	# the frame as vertex-colour StandardMaterial3D (COLOR is sRGB8), the plate as the sign green, both with alpha f.
+	# Depth pre-pass: only the nearest surface is blended. Plain alpha drew every inner voxel face of the truss, a big
+	# translucent lattice over the bottom of the screen when the camera passed under it (device feedback).
 	var frame_fade := StandardMaterial3D.new()
 	frame_fade.vertex_color_use_as_albedo = true
 	frame_fade.vertex_color_is_srgb = true
-	frame_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	frame_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 	var plate_fade: StandardMaterial3D = _blank_sign_material().duplicate() as StandardMaterial3D
-	plate_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	plate_fade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 	overheads.append({"node": mi, "s": s, "f": 1.0, "frame_fade": frame_fade, "plate_fade": plate_fade})
 	stats["gantry"] = int(stats.get("gantry", 0)) + 1
 
@@ -364,8 +366,9 @@ func _blank_sign_material() -> StandardMaterial3D:
 	return _blank_sign
 
 
-## world.js update(): an overhead structure 12–30 m ahead of a raised camera fades to 0.22 opacity (it would cover
-## the player in the chase view), 1.0 elsewhere.
+## world.js update() fades an overhead structure 12–30 m ahead of a raised camera to 0.22 opacity (it would cover the
+## player in the chase view). Here it dissolves completely instead (smoothstep 30 → 14 m, hidden below 0.02): a 22 %
+## ghost of the truss still read as a lattice across the controls on the phone. Ahead of 30 m / behind: opaque.
 func update_overheads(cam_pos: Vector3) -> void:
 	if overheads.is_empty():
 		return
@@ -373,12 +376,13 @@ func update_overheads(cam_pos: Vector3) -> void:
 	for o: Dictionary in overheads:
 		var d: float = float(o["s"]) - cs
 		var f: float = 1.0
-		if cam_pos.y > 5.0 and d > -2.0 and d < 30.0:
-			f = 0.22 + 0.78 * clampf((d - 12.0) / 18.0, 0.0, 1.0)
+		if cam_pos.y > 5.0 and d > -6.0 and d < 30.0:
+			f = smoothstep(14.0, 30.0, d)
 		if absf(float(o["f"]) - f) <= 0.01:
 			continue
 		o["f"] = f
 		var mi: MeshInstance3D = o["node"]
+		mi.visible = f > 0.02
 		var ff: StandardMaterial3D = o["frame_fade"]
 		var pf: StandardMaterial3D = o["plate_fade"]
 		ff.albedo_color.a = f

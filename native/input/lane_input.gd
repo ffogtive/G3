@@ -1,20 +1,29 @@
 class_name LaneInput
 extends Node
-## Touch + keyboard input for the jam (NATIVE_PORT 3-8 입력, M1a): swipe left/right = lane change, swipe up = rage,
-## on-screen ◀ ▶ buttons, horn button (tap or hold). All touches go through _input() here, one tracker per finger
-## index, so holding the horn while swiping works (multi-touch); HUD controls are visual only and register their
-## rects with set_zone(). Edges are latched until the sim tick consumes them (InputBuffer semantics: consume /
-## peek / is_down), and inject() feeds the same path from tests. Keyboard: ← → lane, Space horn, ↑ rage.
+## Touch + keyboard input (NATIVE_PORT 3-8 입력, M1b): swipe left/right = lane change, swipe up = rage, swipe down and
+## hold = brake (DESIGN_REVIEW P0#1), on-screen ◀ ▶, 경적 (tap or hold), 압정 = fire (hold), 분노 = rage (tap).
+## All touches go through _input() here, one tracker per finger index, so holding 압정 while swiping lanes works
+## (multi-touch); HUD controls are visual only and register their rects with set_zone(). Edges are latched until the
+## sim tick consumes them (InputBuffer semantics: consume / peek / is_down), and inject() feeds the same path from
+## tests. Keyboard: ← → lane, Space / J fire (hold), H horn, ↑ / R rage, ↓ / S brake (hold). Three fingers down at
+## once = debug_requested (the dev panel has no on-screen tab over the HUD any more).
 ##
-## Thresholds are in points, not pixels (3-4 함정): 34 pt with |dx| > 1.2|dy| → lane; 60 pt up with |dy| > 1.5|dx| → rage.
+## Thresholds are in points, not pixels (3-4 함정): 34 pt with |dx| > 1.2|dy| → lane; 60 pt up with |dy| > 1.5|dx| → rage;
+## 40 pt down with |dy| > 1.5|dx| → brake until that finger lifts.
+## GameSim wiring (game.gd): consume_lane() → input(&"lane", d); consume_horn() → &"honk"; consume_rage() → &"rage";
+## is_fire_down() → input(&"fire", held); is_brake_down() → input(&"brake", held), every tick.
 
 signal lane_requested(dir: int)
 signal horn_changed(down: bool)
 signal rage_requested
 signal pause_requested
+signal fire_changed(down: bool)
+signal brake_changed(down: bool)
+signal debug_requested
 
 const SWIPE_PT: float = 34.0
 const RAGE_PT: float = 60.0
+const BRAKE_PT: float = 40.0
 
 var enabled: bool = true
 var _zones: Dictionary = {}          # name → Rect2 (viewport coordinates)
@@ -24,6 +33,13 @@ var _horn_edges: int = 0
 var _rage_edges: int = 0
 var _horn_fingers: Dictionary = {}
 var _horn_key: bool = false
+var _fire_fingers: Dictionary = {}
+var _fire_key: bool = false
+var _fire_down: bool = false
+var _fire_edges: int = 0
+var _brake_fingers: Dictionary = {}
+var _brake_key: bool = false
+var _brake_down: bool = false
 var pt_override: float = 0.0         # tests: force px-per-pt
 
 
@@ -80,11 +96,17 @@ func _input(event: InputEvent) -> void:
 			KEY_RIGHT, KEY_D:
 				if k.pressed:
 					_push_lane(1)
-			KEY_UP, KEY_W:
+			KEY_UP, KEY_W, KEY_R:
 				if k.pressed:
 					_push_rage()
-			KEY_SPACE, KEY_H:
+			KEY_H:
 				_set_horn_key(k.pressed)
+			KEY_SPACE, KEY_J:
+				_fire_key = k.pressed
+				_fire_changed()
+			KEY_DOWN, KEY_S:
+				_brake_key = k.pressed
+				_brake_changed()
 
 
 func _zone_at(p: Vector2) -> String:
@@ -100,10 +122,15 @@ func _on_touch(index: int, pos: Vector2, pressed: bool) -> void:
 		if zone != "pause" and is_inside_tree() and get_tree().paused:
 			return  # while paused only the pause button works (no queued lane edges on resume)
 		_touch[index] = {"start": pos, "zone": zone, "done": false}
+		if index >= 0 and _touch.size() >= 3:
+			debug_requested.emit()
 		match zone:
 			"horn":
 				_horn_fingers[index] = true
 				_horn_changed()
+			"fire":
+				_fire_fingers[index] = true
+				_fire_changed()
 			"left":
 				_push_lane(-1)
 			"right":
@@ -115,6 +142,10 @@ func _on_touch(index: int, pos: Vector2, pressed: bool) -> void:
 	else:
 		if _horn_fingers.erase(index):
 			_horn_changed()
+		if _fire_fingers.erase(index):
+			_fire_changed()
+		if _brake_fingers.erase(index):
+			_brake_changed()
 		_touch.erase(index)
 
 
@@ -128,6 +159,10 @@ func _on_drag(index: int, pos: Vector2) -> void:
 		t["done"] = true
 	elif -d.y > RAGE_PT and absf(d.y) > 1.5 * absf(d.x):
 		_push_rage()
+		t["done"] = true
+	elif d.y > BRAKE_PT and absf(d.y) > 1.5 * absf(d.x):
+		_brake_fingers[index] = true  # held until this finger lifts
+		_brake_changed()
 		t["done"] = true
 
 
@@ -166,12 +201,36 @@ func _notification(what: int) -> void:
 		release_all()
 
 
+func _fire_changed() -> void:
+	var down: bool = _fire_key or not _fire_fingers.is_empty()
+	if down == _fire_down:
+		return
+	_fire_down = down
+	if down:
+		_fire_edges += 1
+	fire_changed.emit(down)
+
+
+func _brake_changed() -> void:
+	var down: bool = _brake_key or not _brake_fingers.is_empty()
+	if down == _brake_down:
+		return
+	_brake_down = down
+	brake_changed.emit(down)
+
+
 ## Focus loss releases everything (3-8).
 func release_all() -> void:
 	_touch.clear()
 	_horn_fingers.clear()
 	_horn_key = false
 	_horn_changed()
+	_fire_fingers.clear()
+	_fire_key = false
+	_fire_changed()
+	_brake_fingers.clear()
+	_brake_key = false
+	_brake_changed()
 
 
 # ── InputBuffer-style consumption (sim tick side) ──
@@ -210,8 +269,26 @@ func is_horn_down() -> bool:
 	return _horn_down
 
 
-## Tests: feed a synthetic event through the same path ("lane:-1", "lane:1", "horn:down", "horn:up", "rage", or an
-## InputEvent).
+## 압정 held (finger on the fire zone or Space / J). GameSim takes the level every tick: input(&"fire", held).
+func is_fire_down() -> bool:
+	return _fire_down
+
+
+## Presses of 압정 since the last call (a tap shorter than one tick still fires once).
+func consume_fire() -> bool:
+	if _fire_edges > 0:
+		_fire_edges -= 1
+		return true
+	return false
+
+
+## Brake held (swipe down and keep the finger down, or ↓ / S).
+func is_brake_down() -> bool:
+	return _brake_down
+
+
+## Tests: feed a synthetic event through the same path ("lane:-1", "lane:1", "horn:down", "horn:up", "rage",
+## "fire:down", "fire:up", "brake:down", "brake:up", or an InputEvent).
 func inject(what: Variant) -> void:
 	if what is InputEvent:
 		_input(what as InputEvent)
@@ -227,3 +304,9 @@ func inject(what: Variant) -> void:
 			_set_horn_key(false)
 		"rage":
 			_push_rage()
+		"fire:down", "fire:up":
+			_fire_key = str(what) == "fire:down"
+			_fire_changed()
+		"brake:down", "brake:up":
+			_brake_key = str(what) == "brake:down"
+			_brake_changed()

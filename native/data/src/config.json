@@ -1,7 +1,55 @@
 {
+  "boss": {
+    "_doc": "GameSim boss loop (native/sim/game_sim.gd, boss_sim.gd). Web oracle main.js/boss.js values unless a DESIGN_REVIEW_2026-10-13 P0 item says otherwise.",
+    "attackInterval": [2.5, 3.5],
+    "discoverDist": 35,
+    "fightGap": 11,
+    "finish": "rocket",
+    "firstAttack": 2,
+    "hintJam": 3.4,
+    "immuneBelow": 0.3,
+    "introTime": 2.05,
+    "kill": {
+      "hitstop": 0.16,
+      "releaseDelay": 0.95,
+      "slow": 0.28,
+      "slowFor": 1.25
+    },
+    "leash": {
+      "_doc": "P0#1: before the front lock the player may not run away from the villain: speed cap = villain v + dv * clamp((far - ahead)/far, 0, 1); 'passed' hint past passedHint m",
+      "dv": 4,
+      "far": 14,
+      "passedHint": 15
+    },
+    "lockAt": 2.5,
+    "release": {
+      "cruiseAfter": 0.8,
+      "cruiseV": 27,
+      "minTime": 4.2,
+      "waveExtra": 1.4
+    },
+    "retry": {
+      "back": 33,
+      "obstaclePad": 4,
+      "v": 10
+    },
+    "stuckHint": 2.2,
+    "vulnMul": 4,
+    "wreck": {
+      "failAfter": 1.6,
+      "slow": 0.3,
+      "slowFor": 1.4
+    }
+  },
   "fonts": {
     "display": "\"Black Han Sans\", \"Jua\", \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif",
     "ui": "\"Jua\", \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif"
+  },
+  "hp": {
+    "_doc": "Native overrides of tune.hp (P0#5/#6): jam floor 60 (the jam costs at most 2 bumper segments), boost bumps push without damage, star 2 needs hp >= star2 and 0 tows.",
+    "boostPush": true,
+    "jamFloor": 60,
+    "star2": 60
   },
   "npc": {
     "_doc": "ORDER MATTERS: pickWeighted walks kinds in this order; colors are indexed by floor(rng*len)",
@@ -839,5 +887,25 @@
   },
   "units": {
     "kmh": 0.2777777777777778
+  },
+  "weapons": {
+    "_doc": "P0#2/#7: tacks lock on to the villain (front: player lane within villain lanes +-laneRange; behind: ds < behindRange). Damage dmg outside the signature window, dmg*boss.vulnMul inside. Rage bomb dmgOut outside, dmg inside. Rate 5/s (web 7) and bomb 16 in the window (web 28) keep the 1-1 autopilot boss at 10-20 s (P0#7 target: 2-3 signature cycles).",
+    "bomb": {
+      "cool": 0.45,
+      "dmg": 16,
+      "dmgOut": 8,
+      "dur": 0.62
+    },
+    "tack": {
+      "behindRange": 42,
+      "dmg": 1,
+      "dur": 0.32,
+      "hitPad": 0.9,
+      "laneRange": 1,
+      "lobDur": 0.46,
+      "missBack": 9,
+      "missEvery": 0.4,
+      "rate": 5
+    }
   }
 }

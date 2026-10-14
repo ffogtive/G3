@@ -1,8 +1,48 @@
 {
+  "_effect_doc": "item.effect (move/passive): Progress.loadout() keys this item sets while owned (pay_mul multiplies). Web hardcodes these in main.js; values are the web ones.",
   "defaults": {
     "car": "car_hatch",
     "finish": "fin_rocket",
     "weapon": "wpn_tack"
+  },
+  "economy": {
+    "_cheaterBonus_src": "rewards.js:38",
+    "_commentSeedMul_src": "rewards.js:43 pick(COMMENTS, 3, seed + stage.id * 31)",
+    "_defaultFine_src": "rewards.js:35 stage.fine ?? 30000",
+    "_doc": "Payout / channel constants of rewards.js computeReward + main.js:showResult, and DESIGN_REVIEW_2026-10-13 P0 #6/#9 switches. Defaults = web values (switch off). Read by native/meta (Progress, Rewards).",
+    "_milestones_src": "rewards.js:11-13 (labels: lines.json rewards.js:12#1..4)",
+    "_payRound_src": "rewards.js:39",
+    "_replayMul_doc": "P0 #9: payout multiplier for a replay of a cleared stage that earns no new star. Web: 1 (design review proposes 0.25)",
+    "_seedTimeMod_src": "main.js:567 floor(G.time*1000) % 997 + 1 (used only when the result has no seed)",
+    "_star2HpSource_doc": "'end' = HP at clear (web main.js:559) | 'min' = lowest HP over the stage incl. retries (P0 #6)",
+    "_star2Hp_src": "main.js:545/559 hp >= 60 at clear",
+    "_star2NoTow_doc": "P0 #6: a tow (wreck + retry) fails star 2. Web: false",
+    "_starMult_src": "rewards.js:37",
+    "cheaterBonus": 10000,
+    "commentSeedMul": 31,
+    "defaultFine": 30000,
+    "milestones": [1000, 10000, 100000, 1000000],
+    "payRound": 100,
+    "replayMul": 1,
+    "seedTimeMod": 997,
+    "star2Hp": 60,
+    "star2HpSource": "end",
+    "star2NoTow": false,
+    "starMult": [1, 1, 1.5, 2],
+    "subs": {
+      "_src": "rewards.js:41",
+      "min": 12,
+      "perView": 0.011
+    },
+    "views": {
+      "_src": "rewards.js:40",
+      "base": 0.85,
+      "cath": 950,
+      "freed": 38,
+      "seedDiv": 300,
+      "seedMod": 100,
+      "seedMul": 7919
+    }
   },
   "items": [
     {
@@ -103,6 +143,11 @@
     {
       "cat": "move",
       "desc": "↑(점프 버튼): 앞차를 훌쩍 뛰어넘기. 쿨 4초.",
+      "effect": {
+        "_src": "main.js:449 hasJump, main.js:1107 jumpCool = 4",
+        "jump": true,
+        "jump_cool": 4
+      },
       "id": "mv_jump",
       "name": "참교육 점프",
       "price": 220000
@@ -110,6 +155,11 @@
     {
       "cat": "move",
       "desc": "드론이 위에서 따라오며 잔챙이 빌런·원흉에 자동 사격.",
+      "effect": {
+        "_src": "main.js:388 setDrone, main.js:770 droneT = 0.7",
+        "drone": true,
+        "drone_every": 0.7
+      },
       "id": "mv_drone",
       "name": "블박 드론",
       "price": 600000
@@ -145,6 +195,10 @@
     {
       "cat": "passive",
       "desc": "선명한 증거 → 포상금 +25%",
+      "effect": {
+        "_src": "main.js:567 payMult (owns pas_4k ? 1.25 : 1)",
+        "pay_mul": 1.25
+      },
       "id": "pas_4k",
       "name": "블박 4K 화질",
       "price": 120000
@@ -152,6 +206,10 @@
     {
       "cat": "passive",
       "desc": "스테이지마다 한 번, 견인될 피해를 내구도 1로 버팀",
+      "effect": {
+        "_src": "main.js:378 G.airbag = 1",
+        "airbag": 1
+      },
       "id": "pas_airbag",
       "name": "에어백",
       "price": 200000
@@ -159,6 +217,10 @@
     {
       "cat": "passive",
       "desc": "뽕짝 경적 → 앞차가 더 잘 비켜준다",
+      "effect": {
+        "_src": "main.js:1086 traffic.honk({trot}), traffic.js:656 range 24",
+        "trot": true
+      },
       "id": "pas_trot",
       "name": "트로트 경적",
       "price": 140000
@@ -166,6 +228,11 @@
     {
       "cat": "passive",
       "desc": "분노 게이지 1칸 채우고 시작",
+      "effect": {
+        "_src": "main.js:387 G.rage = TUNE.superCost (1 of rageSegs)",
+        "coffee": true,
+        "rage_start_segs": 1
+      },
       "id": "pas_coffee",
       "name": "졸음쉼터 커피",
       "price": 240000

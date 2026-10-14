@@ -1,9 +1,9 @@
 class_name Sfx
 extends Node
-## Minimal SFX player for M1a (NATIVE_PORT 3-8 오디오): baked one-shots from res://audio/*.wav (tools/bake-audio.mjs,
-## tapped BEFORE the web compressor), played on an "SFX" bus → Master, where Master carries the web chain's
-## dynamics once: Compressor (−10 dB, 6:1, 3 / 220 ms) + HardLimiter (−0.6 dB ceiling). Voice cap per name like the
-## web sfx table (horn: max 3, gap 50 ms); global cap 40.
+## M1a SFX shim (NATIVE_PORT 3-8 오디오). Since M1c it forwards to the Audio autoload (autoload/audio.gd: every baked
+## SFX, the web voice-limit table, buses from default_bus_layout.tres). The local pool below is only the fallback
+## when the autoload is absent (stand-alone scenes): baked one-shots on an "SFX" bus → Master, where Master carries
+## the web chain's dynamics once: Compressor (−10 dB, 6:1, 3 / 220 ms) + HardLimiter (−0.6 dB ceiling).
 
 const SOUNDS: Dictionary = {"horn": {"file": "res://audio/horn.wav", "max": 3, "gap": 0.05, "db": 0.0},
 	"hornShort": {"file": "res://audio/hornShort.wav", "max": 3, "gap": 0.05, "db": 0.0}}
@@ -18,6 +18,8 @@ var muted: bool = false
 
 
 func _ready() -> void:
+	if _audio() != null:
+		return
 	_ensure_buses()
 	for n: String in SOUNDS:
 		var spec: Dictionary = SOUNDS[n]
@@ -68,11 +70,29 @@ static func _ensure_buses() -> void:
 		AudioServer.add_bus_effect(master, lim)
 
 
+func _audio() -> Node:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null(^"Audio") if tree != null else null
+
+
 func has_sound(n: String) -> bool:
+	var a: Node = _audio()
+	if a != null:
+		return bool(a.call(&"has_sfx", StringName(n)))
 	return _streams.has(n)
 
 
 func play(n: String, pitch: float = 1.0) -> bool:
+	var a: Node = _audio()
+	if a != null:
+		if muted:
+			return false
+		var ok: bool = bool(a.call(&"sfx", StringName(n), {"pitch": pitch}))
+		if ok:
+			played += 1
+		else:
+			dropped += 1
+		return ok
 	if muted or not _pools.has(n):
 		return false
 	var now: float = float(Time.get_ticks_msec()) / 1000.0

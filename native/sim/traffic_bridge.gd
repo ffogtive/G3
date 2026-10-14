@@ -46,6 +46,10 @@ var _events: Array[Dictionary] = []
 var _player: Dictionary = {"lane": 3.0, "s": 0.0, "v": 0.0, "x": 5.4, "len": 4.2, "w": 1.92, "mode": "jam"}
 var _kind_names: PackedStringArray = []
 var _specs: Array[Dictionary] = []
+var _tick: int = 0
+var _state_tick: int = -1
+var _state_cache: Dictionary = {}
+var _obstacle_smash: Dictionary = {}  # obstacle id -> smash (cones / debris fly away)
 
 
 static var _load_tried: bool = false
@@ -169,10 +173,13 @@ func setup(stage: Dictionary, cfg: Dictionary, seed: int = -1, force_fallback: b
 		_creep.spawn(stage, _tables, _setup_info, use_seed, night)
 		_kind_names = _creep.kind_names
 	_specs.clear()
+	_obstacle_smash.clear()
+	_state_tick = -1
 
 
 ## Fixed tick (Cfg.TICK). player_state: {lane, s, v, x} (+ len, w, mode, time).
 func step(dt: float, player_state: Dictionary) -> void:
+	_tick += 1
 	for k: String in ["lane", "s", "v", "x", "len", "w", "mode"]:
 		if player_state.has(k):
 			_player[k] = player_state[k]
@@ -333,6 +340,156 @@ func obstacles() -> Array:
 	if _core != null:
 		return _core.call(&"get_obstacles")
 	return _creep.obstacles if _creep != null else []
+
+
+# --- GameSim queries (M1b; res://sim/game_sim.gd). Same buckets as the last step(), like player.js. --------------
+
+## Pushes the player record to the core without stepping (lane changes / leader queries between steps).
+func sync_player(p: Dictionary) -> void:
+	for k: String in ["lane", "s", "v", "x", "len", "w", "mode"]:
+		if p.has(k):
+			_player[k] = p[k]
+	if _core != null:
+		_core.call(&"set_player", float(_player["s"]), float(_player["x"]), float(_player["v"]), roundi(float(_player["lane"])),
+				str(_player["mode"]) == "jam")
+		_core.call(&"set_player_dims", float(_player["len"]), float(_player["w"]))
+
+
+## {id, gap, type: car|obstacle|villain|extra|"", v, smash, lane}; gap = INF without a leader. Villain v is filled by GameSim.
+func leader_of_player() -> Dictionary:
+	var out: Dictionary = {"id": 0, "gap": INF, "type": "", "v": 0.0, "smash": false}
+	if _core != null:
+		var d: Dictionary = _core.call(&"leader_of_player")
+		out["id"] = int(d.get("id", 0))
+		out["gap"] = float(d.get("gap", INF))
+		out["type"] = str(d.get("type", ""))
+	elif _creep != null:
+		out = _creep.leader(_player)
+	if str(out["type"]) == "car":
+		out["v"] = float(car_info(int(out["id"])).get("v", 0.0))
+	elif str(out["type"]) == "obstacle":
+		out["smash"] = bool(_obstacle_info().get(int(out["id"]), false))
+	return out
+
+
+## traffic.js gapAhead(lane, s, player): {gap, id, type}.
+func gap_ahead(lane: int, s: float) -> Dictionary:
+	if _core != null:
+		var d: Dictionary = _core.call(&"gap_ahead", lane, s)
+		return {"gap": float(d.get("gap", INF)), "id": int(d.get("id", 0)), "type": str(d.get("type", ""))}
+	if _creep != null:
+		return _creep.gap_ahead(lane, s)
+	return {"gap": INF, "id": 0, "type": ""}
+
+
+## 0 = the player may merge into lane (traffic.js canMergeInto), else the blocker id (-9999 = a villain/extra).
+func can_merge(lane: int, margin: float = 0.35) -> int:
+	if lane < 0 or lane > Cfg.SHOULDER_LANE:
+		return -1
+	if _core != null:
+		return int(_core.call(&"can_merge_into", lane, margin))
+	return 0 if _creep == null or _creep.lane_free(lane, float(_player["s"]), float(_player["len"]) + margin * 2.0 - 0.7) else -1
+
+
+## traffic.js laneBlocked(lane, sMin, sMax, player) -> blocker id or 0.
+func lane_blocked(lane: int, s_min: float, s_max: float) -> int:
+	if _core != null:
+		return int(_core.call(&"lane_blocked", lane, s_min, s_max, -1))
+	return 0 if _creep == null or _creep.lane_free(lane, (s_min + s_max) * 0.5, s_max - s_min - 0.7) else -1
+
+
+## {s, x, v, lane} of an NPC car by id (empty when unknown).
+func car_info(id: int) -> Dictionary:
+	if _core != null:
+		if _state_tick != _tick:
+			_state_cache = _core.call(&"get_state")
+			_state_tick = _tick
+		var ids: PackedInt32Array = _state_cache.get("ids", PackedInt32Array())
+		var i: int = ids.find(id)
+		if i < 0:
+			return {}
+		return {"s": (_state_cache["s"] as PackedFloat64Array)[i], "x": (_state_cache["x"] as PackedFloat64Array)[i],
+			"v": (_state_cache["v"] as PackedFloat64Array)[i], "lane": (_state_cache["lane"] as PackedInt32Array)[i]}
+	if _creep != null and id >= 1 and id <= _creep.n:
+		var k: int = id - 1
+		return {"s": _creep.s[k], "x": _creep.x[k], "v": _creep.v[k], "lane": _creep.lane[k]}
+	return {}
+
+
+## NPC ids in a lane with s in (s_min, s_max), sorted by s ascending (occupy relay: far to near).
+func cars_in_lane(lane: int, s_min: float, s_max: float) -> PackedInt32Array:
+	var pairs: Array = []
+	if _core != null:
+		car_info(0)  # refresh the per-tick cache
+		var ids: PackedInt32Array = _state_cache.get("ids", PackedInt32Array())
+		var ln: PackedInt32Array = _state_cache.get("lane", PackedInt32Array())
+		var ss: PackedFloat64Array = _state_cache.get("s", PackedFloat64Array())
+		for i: int in ids.size():
+			if ln[i] == lane and ss[i] > s_min and ss[i] < s_max:
+				pairs.append([ss[i], ids[i]])
+	elif _creep != null:
+		for i: int in _creep.n:
+			if _creep.lane[i] == lane and _creep.s[i] > s_min and _creep.s[i] < s_max:
+				pairs.append([_creep.s[i], _creep.ids[i]])
+	pairs.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	var out := PackedInt32Array()
+	for p: Array in pairs:
+		out.append(int(p[1]))
+	return out
+
+
+## traffic.js rageHorn(player, range): {smashed, towed, cheaters, startled} id arrays.
+func rage_horn(range_m: float) -> Dictionary:
+	if _core != null:
+		return _core.call(&"rage_horn", range_m)
+	return {"smashed": PackedInt32Array(), "towed": PackedInt32Array(), "cheaters": PackedInt32Array(), "startled": PackedInt32Array()}
+
+
+func smash(obstacle_id: int) -> bool:
+	return bool(_core.call(&"smash", obstacle_id)) if _core != null else false
+
+
+func remove_obstacle(obstacle_id: int) -> bool:
+	return bool(_core.call(&"remove_obstacle", obstacle_id)) if _core != null else false
+
+
+func jolt(id: int) -> void:
+	if _core != null:
+		_core.call(&"jolt", id)
+
+
+func mini_target() -> int:
+	return int(_core.call(&"mini_target")) if _core != null else 0
+
+
+## "" (no effect) | "hit" | "down"
+func mini_hit(car_id: int, dmg: float) -> String:
+	return str(_core.call(&"mini_hit", car_id, dmg)) if _core != null else ""
+
+
+func drop_walls(lanes: PackedInt32Array, meters: float) -> void:
+	if _core != null:
+		_core.call(&"drop_walls", lanes, meters)
+
+
+func cars_behind_front(n: int, range_m: float) -> PackedInt32Array:
+	return _core.call(&"cars_behind_front", n, range_m) if _core != null else PackedInt32Array()
+
+
+## {front_line, s_tail, released, released_count, shoulder_closed, ...} (Traffic.get_info; a subset on the fallback).
+func info() -> Dictionary:
+	if _core != null:
+		return _core.call(&"get_info")
+	var rel: int = _creep.n if _creep != null and _creep.released else 0
+	return {"front_line": _creep.front_line if _creep != null else 0.0, "s_tail": float(_setup_info.get("start_s", 0.0)) - 45.0,
+		"released": rel > 0, "released_count": rel, "shoulder_closed": bool(_setup_info.get("no_shoulder", false)), "assists": 0}
+
+
+func _obstacle_info() -> Dictionary:
+	if _obstacle_smash.is_empty():
+		for o: Variant in obstacles():
+			_obstacle_smash[int((o as Dictionary)["id"])] = bool((o as Dictionary).get("smash", false))
+	return _obstacle_smash
 
 
 # ================================================================================================
@@ -594,6 +751,25 @@ class _Creep:
 					_order_dirty = true
 					return {"kind": "yield", "id": ids[who]}
 		return {"kind": "noway", "id": ids[who]}
+
+	func leader(p: Dictionary) -> Dictionary:
+		var g: Dictionary = gap_ahead(roundi(float(p["lane"])), float(p["s"]) + float(p.get("len", 4.2)) / 2.0)
+		g["v"] = v[int(g["id"]) - 1] if int(g["id"]) > 0 else 0.0
+		g["smash"] = false
+		return g
+
+	func gap_ahead(l: int, front: float) -> Dictionary:
+		if _order_dirty:
+			_rebuild_order()
+		var best: float = INF
+		var who: int = 0
+		if l >= 0 and l < _order.size():
+			for i: int in _order[l]:
+				var g: float = s[i] - ln[i] / 2.0 - front
+				if s[i] > front - ln[i] / 2.0 and g < best:
+					best = g
+					who = ids[i]
+		return {"gap": best, "id": who, "type": "car" if who > 0 else ""}
 
 	func lane_free(l: int, p_s: float, p_len: float) -> bool:
 		if _order_dirty:
