@@ -504,6 +504,9 @@ func step(dt: float) -> void:
 		match str(e["type"]):
 			"player_hit":
 				_on_player_hit(e)
+			"dodge":
+				skills.on_dodge(self)
+				_emit(e)
 			"boss_phase":
 				_heal(int(hpc.get("healPhase", 10)), "숨 돌리기 +")
 				hitstop = maxf(hitstop, 0.12)
@@ -557,6 +560,7 @@ func step(dt: float) -> void:
 		if boss.beh != null and boss.beh.has_method(&"on_lock"):
 			boss.beh.call(&"on_lock", boss)
 		_emit({"type": "lock"})
+		skills.on_lock(self)
 	elif ph == &"release":
 		var wave_done: bool = phase_t > (front_s - tail_s) / float(tune.get("releaseWaveSpeed", 70.0)) + float(rc.get("waveExtra", 1.4))
 		if wave_done and phase_t > float(rc.get("minTime", 4.2)):

@@ -446,9 +446,7 @@ func affordable_count() -> int:
 
 ## What the game applies at setupStage (main.js:374-388, NATIVE_PARITY D8/G3). The game reads only this dict:
 ## {car, car_kind, speed, armor, hp_max, tow, siren, weapon_id, weapon{id, proj, dmg, rate, spread, slow}, finish_id,
-##  finish (style: rocket|balloon|heli|ufo), pay_mul, airbag, trot, coffee, rage_start_segs, jump, jump_cool, drone, drone_every,
-##  items: Array[String] (owned items with a shop.json `skill` field, shop order, ≤ 2 → GameSim item1 / item2 buttons,
-##  docs/SKILLS.md §3-2; jump / drone stay for compatibility)}.
+##  finish (style: rocket|balloon|heli|ufo), pay_mul, airbag, trot, coffee, rage_start_segs, jump, jump_cool, drone, drone_every}.
 func loadout() -> Dictionary:
 	var car: Dictionary = item(equipped("car"))
 	var wpn: Dictionary = item(equipped("weapon"))
@@ -472,12 +470,6 @@ func loadout() -> Dictionary:
 		for k: Variant in (d["effect"] as Dictionary):
 			var v: Variant = d["effect"][k]
 			out[k] = float(out[k]) * float(v) if k == "pay_mul" else v
-	var skill_items: Array[String] = []
-	for it: Variant in _items:
-		var d2: Dictionary = it
-		if str(d2.get("skill", "")) != "" and owns(str(d2.get("id", ""))) and skill_items.size() < 2:
-			skill_items.append(str(d2["skill"]))
-	out["items"] = skill_items
 	for k: String in ["airbag", "rage_start_segs"]:
 		out[k] = int(out[k])
 	for k: String in ["jump_cool", "drone_every", "pay_mul"]:

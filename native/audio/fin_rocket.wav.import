@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://cljrkrlofu0ho"
+path="res://.godot/imported/fin_rocket.wav-d6f1cd17f6104d6eca896997a9ac33de.sample"
+
+[deps]
+
+source_file="res://audio/fin_rocket.wav"
+dest_files=["res://.godot/imported/fin_rocket.wav-d6f1cd17f6104d6eca896997a9ac33de.sample"]
 
 [params]
 

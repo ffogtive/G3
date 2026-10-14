@@ -204,7 +204,7 @@
         ]
       }
     },
-    "hpMul": 1.25,
+    "hpMul": 1.45,
     "invulnPad": 0.2,
     "items": {
       "mv_drone": {
@@ -258,7 +258,8 @@
     "rageGain": {
       "dodge": 0.04,
       "fightCap": 0.6,
-      "windowHit": 0.01
+      "lock": 0.2,
+      "windowHit": 0.03
     },
     "select": "highest",
     "skipAfter": 0.5,

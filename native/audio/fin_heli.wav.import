@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://dfvjw2khyngos"
+path="res://.godot/imported/fin_heli.wav-fade75eb889dd1f35ee18c9e0e110f5f.sample"
+
+[deps]
+
+source_file="res://audio/fin_heli.wav"
+dest_files=["res://.godot/imported/fin_heli.wav-fade75eb889dd1f35ee18c9e0e110f5f.sample"]
 
 [params]
 

@@ -5,6 +5,9 @@ extends Control
 ## kill / release (gold with a turning sunburst behind), warn (red), go (green). A sub line (villain's defeat line,
 ## counter) sits under it in the body font. Long text shrinks to fit 92 % of the width (no Korean mid-word wraps).
 ## Real time via advance(); a new banner replaces the current one.
+## Skill banners (docs/SKILLS.md 2-3): show_banner(text, kind, dur, sub, y_frac, scale) — skills sit higher (0.26, under
+## the villain plate) and smaller so the framed cars stay readable; kind "stamp" = the t5 "참교육!!" seal: red ink box,
+## −8° tilt, slams 2.6× → 1× with an overshoot, ink dots splash out.
 
 const KIND: Dictionary = {
 	"boss": [Color8(0xff, 0x5a, 0x4a), Color8(0xff, 0xd0, 0xc8)],
@@ -14,7 +17,11 @@ const KIND: Dictionary = {
 	"release": [Color8(0xff, 0xd2, 0x3f), Color8(0xff, 0xf6, 0xc8)],
 	"warn": [Color8(0xff, 0x3b, 0x30), Color8(0xff, 0xc0, 0xb8)],
 	"go": [Color8(0x3c, 0xe0, 0x8e), Color8(0xc8, 0xff, 0xdc)],
+	"stamp": [Color8(0xe8, 0x24, 0x2a), Color8(0xff, 0xc0, 0xb8)],
+	"skill": [Color8(0xff, 0xd2, 0x3f), Color8(0xff, 0xf3, 0xb8)],
+	"skill3": [Color8(0xff, 0x7a, 0x1a), Color8(0xff, 0xe0, 0xb0)],
 }
+const Y_DEFAULT: float = 0.36
 const IN_S: float = 0.24
 const OUT_S: float = 0.26
 
@@ -26,6 +33,7 @@ var _sub: String = ""
 var _kind: String = "phase"
 var _born: float = -99.0
 var _until: float = -99.0
+var _scale: float = 1.0
 
 
 func _ready() -> void:
@@ -33,10 +41,13 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
-func show_banner(text: String, kind: String = "phase", dur: float = 1.5, sub: String = "") -> void:
+func show_banner(text: String, kind: String = "phase", dur: float = 1.5, sub: String = "", p_y_frac: float = Y_DEFAULT,
+		p_scale: float = 1.0) -> void:
 	_text = text
 	_sub = sub
 	_kind = kind if KIND.has(kind) else "phase"
+	y_frac = p_y_frac
+	_scale = p_scale
 	_born = now
 	_until = now + dur
 	queue_redraw()
@@ -44,6 +55,10 @@ func show_banner(text: String, kind: String = "phase", dur: float = 1.5, sub: St
 
 func current() -> String:
 	return _text if now < _until + OUT_S else ""
+
+
+func kind() -> String:
+	return _kind if not current().is_empty() else ""
 
 
 func clear() -> void:
@@ -67,8 +82,12 @@ func _draw() -> void:
 	var a: float = clampf(t / 0.08, 0.0, 1.0) * (1.0 - out_t)
 	var c := Vector2(size.x * 0.5, size.y * y_frac)
 	var cols: Array = KIND[_kind]
+	if _kind == "stamp":
+		_stamp(c, t, a, out_t)
+		return
 	if _kind == "kill" or _kind == "release":
 		_rays(c, a, t)
+	sc *= _scale
 	var fs: int = 76
 	while fs > 34 and UiDraw.rich_w(_text, fs) > size.x * 0.92:
 		fs -= 4
@@ -85,6 +104,37 @@ func _draw() -> void:
 		while ss > 18 and UiDraw.rich_w(_sub, ss, false) > size.x * 0.9:
 			ss -= 2
 		UiDraw.rich_c(self, c + Vector2(0, fs * 0.72 + 8.0 + (1.0 - st) * 14.0), _sub, ss, Color(1, 1, 1, a * st), 7, false, 3.0)
+
+
+## t5 seal: red rounded ink box with a double border, the text in white, −8° tilt; slams in from 2.6× with an overshoot
+## (elastic), shakes once on landing, ink dots fly out; fades with the usual out.
+func _stamp(c: Vector2, t: float, a: float, out_t: float) -> void:
+	var land: float = clampf(t / 0.16, 0.0, 1.0)
+	var sc: float = lerpf(2.6, 1.0, land * land) if land < 1.0 else 1.0 + 0.1 * sin(minf(1.0, (t - 0.16) / 0.18) * PI) * (1.0 - minf(1.0, (t - 0.16) / 0.18))
+	sc *= _scale * (1.0 + 0.06 * out_t)
+	var jit: Vector2 = Vector2(sin(t * 90.0), cos(t * 77.0)) * 6.0 * maxf(0.0, 1.0 - (t - 0.16) / 0.12) if t > 0.16 else Vector2.ZERO
+	var fs: int = 84
+	while fs > 40 and UiDraw.rich_w(_text, fs) > size.x * 0.7:
+		fs -= 4
+	var w: float = UiDraw.rich_w(_text, fs) + 70.0
+	var h: float = float(fs) * 1.35
+	var red: Color = KIND["stamp"][0]
+	if t > 0.16:  # ink splash: 14 dots flying out once the seal lands
+		var k: float = clampf((t - 0.16) / 0.35, 0.0, 1.0)
+		for i: int in 14:
+			var ang: float = TAU * float(i) / 14.0 + 0.3 * sin(float(i) * 7.1)
+			var dist: float = (w * 0.45 + 40.0 * sin(float(i) * 3.3) + 30.0) * (0.6 + 0.6 * k)
+			draw_circle(c + Vector2(cos(ang) * dist, sin(ang) * dist * 0.55), (7.0 + 4.0 * sin(float(i))) * (1.0 - k * 0.6), Color(red, a * (1.0 - k)))
+	draw_set_transform(c + jit, deg_to_rad(-8.0), Vector2(sc, sc))
+	var r := Rect2(Vector2(-w * 0.5, -h * 0.5), Vector2(w, h))
+	draw_style_box(UiDraw.box(Color(UiDraw.INK, a * 0.6), 18), Rect2(r.position + Vector2(0, 8), r.size))
+	draw_style_box(UiDraw.box(Color(red, a), 18, 6.0, Color(1, 1, 1, a)), r)
+	draw_style_box(UiDraw.box(Color(0, 0, 0, 0), 12, 3.0, Color(1, 1, 1, a * 0.85)), r.grow(-11.0))
+	UiDraw.rich_c(self, Vector2(0, 4), _text, fs, Color(UiDraw.INK, a * 0.5), 0, true, 0.0)
+	UiDraw.rich_c(self, Vector2.ZERO, _text, fs, Color(1, 1, 1, a), 10, true, 0.0)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if not _sub.is_empty():
+		UiDraw.rich_c(self, c + Vector2(0, h * 0.5 + 34.0), _sub, 28, Color(1, 1, 1, a), 7, false, 3.0)
 
 
 ## Turning sunburst (web .ui-rays) behind kill / release banners.

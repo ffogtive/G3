@@ -1,5 +1,4 @@
 {
-  "_skill_doc": "item.skill: the config.skills.items key this owned item arms as an active skill button (Progress.loadout().items, slot order; docs/SKILLS.md §3).",
   "_effect_doc": "item.effect (move/passive): Progress.loadout() keys this item sets while owned (pay_mul multiplies). Web hardcodes these in main.js; values are the web ones.",
   "defaults": {
     "car": "car_hatch",
@@ -151,8 +150,7 @@
       },
       "id": "mv_jump",
       "name": "참교육 점프",
-      "price": 220000,
-      "skill": "mv_jump"
+      "price": 220000
     },
     {
       "cat": "move",
@@ -164,8 +162,7 @@
       },
       "id": "mv_drone",
       "name": "블박 드론",
-      "price": 600000,
-      "skill": "mv_drone"
+      "price": 600000
     },
     {
       "cat": "finish",

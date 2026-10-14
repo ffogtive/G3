@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://c0io8giv2gnqc"
+path="res://.godot/imported/sk_carpet.wav-133de9fc1f29a237ffff3c6d68c05258.sample"
+
+[deps]
+
+source_file="res://audio/sk_carpet.wav"
+dest_files=["res://.godot/imported/sk_carpet.wav-133de9fc1f29a237ffff3c6d68c05258.sample"]
 
 [params]
 

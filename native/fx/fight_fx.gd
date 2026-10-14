@@ -10,6 +10,10 @@ extends Node3D
 ## Deterministic: one RandomNumberGenerator seeded in setup(seed); time is advance(dt) (real dt from game.gd, or
 ## fixed steps from shots); nothing reads Engine time or randf(). Shakes / FOV punches go to `camera_rig` if set.
 ## Wiring: setup(road, seed); on_event(e, state) per drained sim event; sync(state, npc_buffer) + advance(dt) per frame.
+## Skills (docs/SKILLS.md): `skill` (SkillFx child) draws the rage ladder / item / finisher shapes, `cues` (SkillCues
+## child) plays their audio + haptics on the same ticks. Time: advance(dt) is SIM-scaled — in _process the real delta
+## is multiplied by the sim's time scale of the last state (state.skills.time_scale, else Δt / Δreal_t of two states),
+## so hit-stop freezes the burst and slow-mo slows it (SKILLS.md 1-6); `cues` keeps real time for haptics.
 
 const MAX_LIT: int = 700
 const MAX_GLOW: int = 700
@@ -57,6 +61,12 @@ var _glow_mm: MultiMeshInstance3D             # green under-glow of each freed c
 var _delayed: Array[Dictionary] = []          # {at, fn: Callable}
 var _bomb_trail_t: float = 0.0
 var _state: Dictionary = {}
+var skill: SkillFx
+var cues: SkillCues
+## Sim time scale applied to _process's real delta (1 = real time; 0 during hit-stop).
+var time_scale: float = 1.0
+var use_sim_time: bool = true
+var _ts_last := Vector2(NAN, NAN)       # (t, real_t) of the last state
 
 
 func setup(p_road: RoadGraph, seed: int, tune: Dictionary = {}, p_front_s: float = NAN, p_tail_s: float = NAN) -> void:
@@ -193,6 +203,14 @@ func _ready() -> void:
 		l.visible = false
 		add_child(l)
 		_lights.append({"light": l, "born": -99.0, "dur": 0.3, "e": 0.0})
+	skill = SkillFx.new()
+	skill.name = "SkillFx"
+	skill.fx = self
+	add_child(skill)
+	cues = SkillCues.new()
+	cues.name = "SkillCues"
+	cues.process_mode = Node.PROCESS_MODE_DISABLED if manual else Node.PROCESS_MODE_INHERIT
+	add_child(cues)
 
 
 const WAVE_SHADER: String = """
@@ -463,7 +481,11 @@ func on_event(e: Dictionary, st: Dictionary = {}) -> void:
 	if not st.is_empty():
 		_state = st
 	st = _state
-	match str(e.get("type", "")):
+	var ety: String = str(e.get("type", ""))
+	if ety in SKILL_EVENTS:
+		skill.on_event(e, st)
+		cues.on_event(e)
+	match ety:
 		"fire":
 			var mp: Vector3 = _w(float(e.get("from_s", 0.0)), float(e.get("from_x", 0.0)), 1.4)
 			sparks(mp, 4, 4.0, Color8(0xff, 0xe6, 0x80), 0.12)
@@ -536,6 +558,10 @@ func on_event(e: Dictionary, st: Dictionary = {}) -> void:
 			explosion(_player_pos(st, 0.6), 0.9, Color8(0xff, 0xcc, 0x28))
 
 
+const SKILL_EVENTS: PackedStringArray = ["skill_start", "skill_hit", "skill_end", "skill_denied", "tier_ready",
+	"item_ready", "finisher", "kill", "gone"]
+
+
 func _vcol(v: Dictionary) -> Color:
 	var c: int = int(v.get("color", 0xd9c9a3))
 	return Color8((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff)
@@ -556,6 +582,9 @@ func start_wave(front_s: float, tail_s: float) -> void:
 ## Frame sync: range band + projectiles from the state, ✓ pops from the NPC buffer as the release wave passes.
 func sync(st: Dictionary, npc_buf: PackedFloat32Array = PackedFloat32Array()) -> void:
 	_state = st
+	_track_time_scale(st)
+	skill.sync(st)
+	cues.sync(st)
 	band.apply_state(st)
 	var pr: Array = st.get("projectiles", [])
 	var tk: int = 0
@@ -600,9 +629,26 @@ func sync(st: Dictionary, npc_buf: PackedFloat32Array = PackedFloat32Array()) ->
 				sparks(cp - Vector3(0, 1.4, 0), 2, 4.0, Color8(0x5a, 0xff, 0x9c), 0.12)
 
 
+## Sim time scale of this state: skills.time_scale when the sim publishes it, else the ratio of sim to real time
+## between two states (GameSim.state() t / real_t; hit-stop → 0, kill slow-mo → 0.28).
+func _track_time_scale(st: Dictionary) -> void:
+	var sk: Variant = st.get("skills")
+	if sk is Dictionary and (sk as Dictionary).has("time_scale"):
+		time_scale = clampf(float((sk as Dictionary)["time_scale"]), 0.0, 1.0)
+		return
+	if not st.has("real_t"):
+		return
+	var cur := Vector2(float(st.get("t", 0.0)), float(st.get("real_t", 0.0)))
+	if is_finite(_ts_last.y) and cur.y > _ts_last.y + 1e-5:
+		time_scale = clampf((cur.x - _ts_last.x) / (cur.y - _ts_last.y), 0.0, 1.0)
+	if not is_finite(_ts_last.y) or cur.y > _ts_last.y + 1e-5 or cur.y < _ts_last.y:
+		_ts_last = cur
+
+
 func advance(dt: float) -> void:
 	now += dt
 	band.advance(dt)
+	skill.advance(dt)
 	var keep: Array[Dictionary] = []
 	for d: Dictionary in _delayed:
 		if now >= float(d["at"]):
@@ -803,10 +849,13 @@ func _step_checks() -> void:
 
 func _process(delta: float) -> void:
 	if not manual:
-		advance(delta)
+		advance(delta * (time_scale if use_sim_time else 1.0))
 
 
 ## Live particle count per system (tests / shot RESULT lines).
 func counts() -> Dictionary:
-	return {"lit": (_parts[0] as Array).size(), "glow": (_parts[1] as Array).size(), "smoke": (_parts[2] as Array).size(),
+	var out: Dictionary = {"lit": (_parts[0] as Array).size(), "glow": (_parts[1] as Array).size(), "smoke": (_parts[2] as Array).size(),
 		"checks": _checks.size(), "wave": is_finite(wave_s)}
+	if skill != null:
+		out.merge(skill.counts())
+	return out

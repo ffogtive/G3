@@ -5,8 +5,9 @@ extends RefCounted
 ## lunges), keeps the lock-on band (villain lane ±1), and spends rage bombs inside the signature window.
 ## Decisions are throttled like the web (`autoNext`, real time); its own seeded RNG keeps runs deterministic.
 ## With config.skills (docs/SKILLS.md §6): &"rage" when the window has > 0.45 s left or the villain is under the t5
-## execute line; at 3–4 segments with hp_frac > 0.55 it waits for MAX half the time; item1 (jump) when a telegraph
-## covers its lane; item2 (drone) inside a window > 0.8 s; in the jam the drone clears a shoulder obstacle ahead.
+## execute line; while hp_frac > 0.55 it saves 1–2 segments for t3 (bigger tiers pay more per segment, §2-1) and at
+## 3–4 segments waits for MAX half the time; item1 (jump) when a telegraph covers its lane; item2 (drone) inside a
+## window > 0.8 s; in the jam the drone clears a shoulder obstacle ahead.
 ##
 ## 가설: ✅ the web route (shoulder → honk when blocked → slip into lane 4 → shoulder again; in the fight: stay
 ##       beside the villain, dodge telegraphed lanes) completes 1-1; ❓ its boss time is a fair proxy for a
@@ -160,6 +161,8 @@ func _skills(sim: GameSim, p: PlayerSim, danger: Dictionary) -> void:
 	var sg: int = sk.segs(sim)
 	var hf: float = sim.boss.hp_frac()
 	var ex: float = float((sk.cfg.get("t5", {}) as Dictionary).get("execute", 0.4))
+	if sg < 3 and hf > 0.55:
+		return
 	if sg >= 3 and sg < 5 and hf > 0.55:
 		if _hold_max < 0:
 			_hold_max = 1 if rng.randf() < 0.5 else 0

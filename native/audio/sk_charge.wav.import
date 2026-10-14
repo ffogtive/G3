@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://358yonf0e7av"
+path="res://.godot/imported/sk_charge.wav-4e85f2b9dda6ee5d113685eac1f8580f.sample"
+
+[deps]
+
+source_file="res://audio/sk_charge.wav"
+dest_files=["res://.godot/imported/sk_charge.wav-4e85f2b9dda6ee5d113685eac1f8580f.sample"]
 
 [params]
 

@@ -74,7 +74,7 @@ func _build_slots() -> void:
 	var ids: Array = []
 	if _loadout.get("items") is Array:
 		ids = (_loadout["items"] as Array).duplicate()
-	else:  # older loadouts: the jump / drone flags
+	else:  # Progress.loadout() today: the owned move items as the jump / drone flags
 		if bool(_loadout.get("jump", false)):
 			ids.append("mv_jump")
 		if bool(_loadout.get("drone", false)):
@@ -512,7 +512,7 @@ func _jam_clear(sim: GameSim, id: String, rec: Dictionary, range_m: float) -> vo
 			var r: String = sim.bridge.mini_hit(mid, 999.0)
 			if r != "":
 				sim._mini_result(mid, r, float(ci.get("s", sim.player.s)), float(ci.get("x", sim.player.x)))
-				_emit_hit(sim, rec, {}, 0, 1, {"dmg": 999.0}, {"mini_id": mid, "s": float(ci.get("s", sim.player.s)),
+				_emit_hit(sim, rec, {}, 0, 1, {}, {"mini_id": mid, "caught": r == "down", "s": float(ci.get("s", sim.player.s)),
 					"x": float(ci.get("x", sim.player.x))})
 				return
 	var od: Dictionary = _jam_obstacle(sim, range_m, id == "mv_tow")
@@ -617,12 +617,27 @@ func tick(sim: GameSim, sdt: float, dt: float) -> void:
 				sim._emit(e)
 
 
-## SKILLS rageGain.windowHit: a tack hit inside the window refills rage (fight only, ≤ fightCap per fight).
+## SKILLS rageGain: a tack hit inside the window (windowHit) or a dodged attack (dodge, BossSim "dodge" event) refills
+## rage in the fight, ≤ fightCap per fight in total.
 func on_window_hit(sim: GameSim) -> void:
+	_gain(sim, "windowHit")
+
+
+func on_dodge(sim: GameSim) -> void:
+	_gain(sim, "dodge")
+
+
+## rageGain.lock: once at the front lock (GameSim "lock"), outside the fightCap budget.
+func on_lock(sim: GameSim) -> void:
+	if enabled:
+		sim.add_rage(float((cfg.get("rageGain", {}) as Dictionary).get("lock", 0.0)))
+
+
+func _gain(sim: GameSim, key: String) -> void:
 	if not enabled or mode(sim) != "fight":
 		return
 	var g: Dictionary = cfg.get("rageGain", {})
-	var a: float = minf(float(g.get("windowHit", 0.0)), float(g.get("fightCap", 1.0)) - _fight_gain)
+	var a: float = minf(float(g.get(key, 0.0)), float(g.get("fightCap", 1.0)) - _fight_gain)
 	if a > 0.0:
 		_fight_gain += a
 		sim.add_rage(a)

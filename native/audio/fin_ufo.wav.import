@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://dpady5nikcn8"
+path="res://.godot/imported/fin_ufo.wav-c4c1802fb73aec015cf4d36d8e00d139.sample"
+
+[deps]
+
+source_file="res://audio/fin_ufo.wav"
+dest_files=["res://.godot/imported/fin_ufo.wav-c4c1802fb73aec015cf4d36d8e00d139.sample"]
 
 [params]
 

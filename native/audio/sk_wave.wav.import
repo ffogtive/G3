@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://ytxwyv06amff"
+path="res://.godot/imported/sk_wave.wav-2a4e2bb2faf25cc77a8cbc42562d8968.sample"
+
+[deps]
+
+source_file="res://audio/sk_wave.wav"
+dest_files=["res://.godot/imported/sk_wave.wav-2a4e2bb2faf25cc77a8cbc42562d8968.sample"]
 
 [params]
 

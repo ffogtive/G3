@@ -2,6 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
+uid="uid://bvfitteo5mbkd"
+path="res://.godot/imported/sk_tier3.wav-43d1b29850063180841609ecdabd0731.sample"
+
+[deps]
+
+source_file="res://audio/sk_tier3.wav"
+dest_files=["res://.godot/imported/sk_tier3.wav-43d1b29850063180841609ecdabd0731.sample"]
 
 [params]
 

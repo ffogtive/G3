@@ -14,6 +14,14 @@ extends CanvasLayer
 ## back as card_choice(&"next" | &"retry" | &"menu"). set_state() is the M1a N1 path (jam slice, tests).
 ## Buttons are drawn here; touches are read by LaneInput from the rects registered via bind_input() (multi-touch).
 ## All animation runs on real time: _process(delta), or advance(dt) when `manual` (deterministic shots).
+## Skills (docs/SKILLS.md 2-4, 3-3, interface §6 ui/hud.gd): the 분노 ring is the only rage gauge — 5 segments, long
+## ticks + labels at 1 · 3 · MAX (locked in the jam: only t1 there), fill colour by level (orange → red-orange → gold
+## with a sparkle running round), the face shows state.skills.next_tier (경적 / 폭격 / 참교육 + the equipped finish).
+## Item buttons item1 (left thumb, above ▶) / item2 (above 경적) appear when the loadout has items: cooldown pie +
+## seconds, charge pips, grey + reason when unusable. Boss bar: gold 처형선 at execute_frac. Events: skill_start →
+## banner (stamp for t5) + focus lines (t5), skill_hit → per-hit ticks and one summed number + recipe flash,
+## "한 번 더!" for a t5 that did not finish, skill_denied → wobble + reason, tier_ready / item_ready → ring / button
+## pop. Cinematics (t5, finisher) dim the controls; "탭: 건너뛰기" shows once skipping is allowed.
 
 signal card_choice(choice: StringName)
 
@@ -37,6 +45,20 @@ const SZ_LANE: float = 96.0
 const SZ_HORN: float = 92.0
 const SZ_FIRE: float = 140.0
 const SZ_RAGE: float = 104.0
+const SZ_ITEM: float = 90.0  # ≥ 64 pt (88.6 u)
+const BTN_T3: Array = [Color8(0xff, 0x8a, 0x5a), Color8(0xf0, 0x40, 0x1a), Color8(0xa8, 0x22, 0x0a)]
+const BTN_T5: Array = [Color8(0xff, 0xf0, 0x8a), Color8(0xff, 0xc8, 0x1f), Color8(0xc8, 0x84, 0x08)]
+const BTN_JUMP: Array = [Color8(0x8a, 0xf0, 0xa8), Color8(0x2c, 0xc0, 0x5e), Color8(0x17, 0x84, 0x3c)]
+const BTN_DRONE: Array = [Color8(0x8a, 0xe4, 0xff), Color8(0x14, 0xa8, 0xd8), Color8(0x0c, 0x6a, 0x94)]
+const BTN_TOW: Array = [Color8(0xff, 0xd8, 0x8a), Color8(0xe8, 0xa0, 0x1a), Color8(0xa0, 0x66, 0x08)]
+const C_T3 := Color8(0xff, 0x4a, 0x1a)
+const C_GOLD := Color8(0xff, 0xd2, 0x3f)
+const TIER_FACE: Dictionary = {0: "분노", 1: "경적", 3: "폭격", 5: "참교육"}
+const ITEM_LABEL: Dictionary = {"mv_jump": "점프", "mv_drone": "드론", "mv_tow": "레커"}
+const DENY_TEXT: Dictionary = {"rage": "분노 부족!", "cool": "쿨타임!", "charges": "다 썼다!", "target": "대상 없음",
+	"phase": "지금은 못 써!", "busy": "시전 중!"}
+## Skill banner placement: higher and smaller than the phase banners so the framed cars stay readable.
+const SKILL_BANNER_Y: float = 0.26
 
 var font: Font
 var player_s: float = 0.0
@@ -145,6 +167,30 @@ var _villain_name: String = ""
 var _state: Dictionary = {}
 var _was_in_range: bool = false
 
+# ── skills (apply_state: state.skills, or derived from rage / phase / lock while the sim has no skills block)
+var skill_segs: int = 0
+var next_tier: int = 0
+var tiers_ready: Array[int] = []
+var skill_mode: String = "off"
+var execute_frac: float = 0.0
+var items: Array[Dictionary] = []
+var skill_active: Dictionary = {}
+## Equipped finish (loadout.finish) for the t5 face; view/game.gd sets it, default rocket.
+var finish_id: String = "rocket"
+var skip_after: float = 0.6
+var _btn_items: Array[Control] = []
+var _item_pop_t: Array[float] = [-99.0, -99.0]
+var _item_deny_t: Array[float] = [-99.0, -99.0]
+var _items_layout: bool = false
+var _tier_flash: Dictionary = {}       # tier → time
+var _deny_t: float = -99.0
+var _focus_t: float = -99.0
+var _focus_dur: float = 0.35
+var _cine_until: float = -99.0
+var _cine_mul: float = 1.0
+var _kill_real: float = -99.0
+var _skill_sum: Dictionary = {}        # "<id>:<target>" → summed damage of the current cast
+
 
 ## N1 single truth: (fraction 0..1, distance m) from the same two positions.
 static func progress_values(p_s: float, v_s: float, s0: float) -> Vector2:
@@ -244,7 +290,14 @@ func _ready() -> void:
 	_btn_rage = _custom(_draw_rage_btn)
 	_corner(_btn_rage, false, 32, 16 + SZ_FIRE + 22, SZ_RAGE)
 	_rage_ring = _custom(_draw_rage_ring)
-	_corner(_rage_ring, false, 32 - 10, 16 + SZ_FIRE + 22 - 10, SZ_RAGE + 20)
+	_corner(_rage_ring, false, 32 - 22, 16 + SZ_FIRE + 22 - 22, SZ_RAGE + 44)  # room for the 1 · 3 · MAX labels
+	for i: int in 2:
+		var slot: int = i + 1
+		var b: Control = _custom(func(c: Control) -> void: _draw_item(c, slot))
+		b.visible = false
+		_btn_items.append(b)
+	_corner(_btn_items[0], true, 14 + SZ_LANE + 16, 16 + SZ_LANE + 16, SZ_ITEM)      # left thumb: above ▶
+	_corner(_btn_items[1], false, 14 + SZ_FIRE + 16 + 2, 16 + SZ_HORN + 12, SZ_ITEM) # right thumb: above 경적
 	_btn_horn = _custom(_draw_horn)
 	_corner(_btn_horn, false, 14 + SZ_FIRE + 16, 16, SZ_HORN)
 	_btn_pause = _custom(_draw_pause)
@@ -253,10 +306,11 @@ func _ready() -> void:
 	_btn_pause.offset_right = -14
 	_btn_pause.offset_top = 52
 	_btn_pause.offset_bottom = 98
-	for b: Control in [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage]:
+	for b: Control in [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage, _btn_items[0], _btn_items[1]]:
 		_btn_alpha[b] = IDLE_ALPHA
 		b.modulate.a = IDLE_ALPHA
-	_controls = [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage, _fire_ring, _rage_ring, _hp_row, _gauge, _speed, _unit]
+	_controls = [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage, _fire_ring, _rage_ring, _hp_row, _gauge, _speed, _unit,
+		_btn_items[0], _btn_items[1]]
 	for c: Control in safe.get_children():
 		_vis[c] = 1.0
 	# ── overlays (above the widgets)
@@ -309,7 +363,7 @@ func reserved_rects() -> Array[Rect2]:
 	if not visible:
 		return out
 	for c: Control in [_bar, _pill, _boss, _chip, _hp_row, _gauge, _btn_left, _btn_right, _btn_horn, _btn_fire,
-			_btn_rage, _btn_pause]:
+			_btn_rage, _btn_pause, _btn_items[0], _btn_items[1]]:
 		if c.visible:
 			out.append(c.get_global_rect().grow(4.0))
 	return out
@@ -322,6 +376,16 @@ func button_sizes_pt() -> Dictionary:
 	for n: String in ["left", "right", "horn", "fire", "rage"]:
 		var c: Control = {"left": _btn_left, "right": _btn_right, "horn": _btn_horn, "fire": _btn_fire, "rage": _btn_rage}[n]
 		out[n] = minf(c.size.x, c.size.y) * k
+	return out
+
+
+## Item button sizes in points (shown slots only; ≥ 64 pt like every control).
+func item_sizes_pt() -> Dictionary:
+	var out: Dictionary = {}
+	for i: int in 2:
+		if _item_of(i + 1).is_empty():
+			continue
+		out["item%d" % (i + 1)] = minf(_btn_items[i].size.x, _btn_items[i].size.y) * 390.0 / 540.0
 	return out
 
 
@@ -527,11 +591,72 @@ func apply_state(st: Dictionary) -> void:
 	hint_text = str(st.get("hint", ""))
 	if ph != &"boss" and ph != &"jam":
 		hint_text = ""
+	_apply_skills(st)
+
+
+## state.skills (interface §6) → ring / face / items / execute line; derived from rage + phase + lock when the sim has
+## no skills block yet (ladder 1·3·5, jam and before the lock = t1 only).
+func _apply_skills(st: Dictionary) -> void:
+	var sk: Dictionary = st.get("skills", {}) if st.get("skills") is Dictionary else {}
+	var ladder: Array = [1, 3, 5]
+	if sk.is_empty():
+		skill_segs = rage_level()
+		skill_mode = "fight" if phase == &"boss" and lock_active else ("jam" if phase in [&"intro", &"jam", &"boss"] else "off")
+		tiers_ready.clear()
+		for t: int in ladder:
+			if skill_segs >= t and (skill_mode == "fight" or (skill_mode == "jam" and t == 1)):
+				tiers_ready.append(t)
+		next_tier = tiers_ready.max() if not tiers_ready.is_empty() else 0
+		execute_frac = 0.4 if skill_mode == "fight" and tiers_ready.has(5) else 0.0
+		skill_active = {}
+		items = []
+	else:
+		skill_segs = int(sk.get("segs", rage_level()))
+		skill_mode = str(sk.get("mode", "off"))
+		tiers_ready.clear()
+		for t: Variant in sk.get("rage_tiers_ready", []):
+			tiers_ready.append(int(t))
+		next_tier = int(sk.get("next_tier", 0))
+		execute_frac = float(sk.get("execute_frac", 0.0))
+		skill_active = sk.get("active", {}) if sk.get("active") is Dictionary else {}
+		items.clear()
+		for it: Variant in sk.get("items", []):
+			if it is Dictionary:
+				items.append(it)
+	var want_items: bool = not items.is_empty()
+	if want_items != _items_layout:
+		_items_layout = want_items
+		if want_items:  # the bumper row moves above the speedometer, the item buttons take its place
+			_bottom_left(_hp_row, 16, 250, 268, 230)
+		else:
+			_bottom_left(_hp_row, 112, 330, 198, 158)
+		_zones_size = Vector2.ZERO
+	for i: int in 2:
+		var used: bool = not _item_of(i + 1).is_empty()
+		if used != bool(_btn_items[i].get_meta(&"slot_used", false)):
+			_zones_size = Vector2.ZERO
+		_btn_items[i].set_meta(&"slot_used", used)
+
+
+func _slot_of(id: String) -> int:
+	for it: Dictionary in items:
+		if str(it.get("id", "")) == id:
+			return clampi(int(it.get("slot", 1)), 1, 2)
+	return 1 if id == "mv_jump" else 2
+
+
+func _item_of(slot: int) -> Dictionary:
+	for it: Dictionary in items:
+		if int(it.get("slot", 0)) == slot:
+			return it
+	return {}
 
 
 ## One drained GameSim event (UI side: pops, banners, flashes, counters).
 func on_event(e: Dictionary) -> void:
 	match str(e.get("type", "")):
+		"skill_start", "skill_hit", "skill_end", "skill_denied", "tier_ready", "item_ready", "finisher":
+			_on_skill_event(e)
 		"fire":
 			_fire_kick = now
 		"hit":
@@ -600,6 +725,105 @@ func on_event(e: Dictionary) -> void:
 				pops.pop(_villain_pos(int(e["id"])) + Vector3(0, 2.8, 0), "경직!", "crit")
 
 
+## Skill events (UI side): banners, focus lines, flashes, damage pops, denied wobble, ready pops.
+func _on_skill_event(e: Dictionary) -> void:
+	var key: String = SkillCues.fx_key(e)
+	var rec: Dictionary = SkillCues.recipe(key)
+	var id: String = str(e.get("id", ""))
+	match str(e.get("type", "")):
+		"skill_start":
+			if str(e.get("chan", "rage")) == "item":
+				_item_pop_t[_slot_of(id) - 1] = now
+			else:
+				_rage_ready_t = now  # the button kicks on the cast
+			match key:
+				"t1":
+					banner.show_banner(str(rec.get("banner", "분노 경적!!")), "skill", 0.75, "", SKILL_BANNER_Y, 0.78)
+					if id == "t1_horn":
+						flash(Color(1.0, 0.82, 0.23, 0.3), 0.12)  # jam: the rage_horn tick is the impact
+				"t3":
+					banner.show_banner(str(rec.get("banner", "압정 폭격!!")), "skill3", 0.9, "", SKILL_BANNER_Y, 0.85)
+				"t5":
+					banner.show_banner(str(rec.get("banner", "참교육!!")), "stamp", 1.1, "", SKILL_BANNER_Y + 0.02, 1.0)
+					_focus_t = now
+					_focus_dur = SkillCues.impact_delay("t5")
+					_cine_until = now + 1.0
+			_skill_sum.erase("%s:%d" % [id, int(e.get("target_id", -1))])
+		"skill_hit":
+			var sk: String = "%s:%d" % [id, int(e.get("target_id", -1))]
+			var dmg: float = float(e.get("dmg", 0.0))
+			var tot: float = float(_skill_sum.get(sk, 0.0)) + dmg
+			_skill_sum[sk] = tot
+			var idx: int = int(e.get("idx", 0))
+			var n: int = int(e.get("n", 1))
+			var wp: Vector3 = Vector3.INF
+			if road != null and e.has("s"):
+				wp = road.position(float(e["s"]), float(e.get("x", 0.0))) + Vector3(0, 2.4, 0)
+			if idx == 0:
+				var fl: Variant = rec.get("flash")
+				if fl is Array and (fl as Array).size() >= 3:
+					flash(Color(Color.html(str(fl[0])), float(fl[1])), float(fl[2]) / 1000.0)
+				else:
+					var dflt: Dictionary = {"t1": [Color(1, 0.82, 0.23, 0.3), 0.09], "t3": [Color(1, 0.48, 0.1, 0.25), 0.12],
+						"t5": [Color(1, 1, 1, 0.85), 0.16], "mv_jump": [Color(1, 0.95, 0.85, 0.18), 0.08]}
+					if dflt.has(key):
+						flash((dflt[key] as Array)[0] as Color, float((dflt[key] as Array)[1]))
+				if key == "mv_jump" and road != null:  # at the landing (the hit s/x is the villain's)
+					var pl: Dictionary = _state.get("player", {})
+					pops.pop(road.position(float(pl.get("s", player_s)), float(pl.get("x", 0.0))) + Vector3(0, 3.4, 0),
+						str(rec.get("banner", "쿵!")), "big")
+				if key == "t5":
+					_focus_t = -99.0
+			if not wp.is_finite():
+				return
+			var killed: bool = bool(e.get("killed", false))
+			if bool(e.get("immune", false)):
+				pops.pop(wp, "막힘!", "miss")
+			elif n > 1 and idx < n - 1:
+				if n <= 4:  # t3 ticks; the drone's 6 bomblets only show the sum (6 ticks were clutter)
+					pops.pop(wp + Vector3(0.6 * float(idx % 2 * 2 - 1), -0.4, 0), "-%d" % maxi(1, roundi(dmg)), "tick")
+			elif not killed and tot > 0.0:
+				pops.pop(wp + Vector3(0, 1.4, 0), ("-%d!" if bool(e.get("window", false)) else "-%d") % maxi(1, roundi(tot)), "big")
+			if int(e.get("popped", 0)) > 0:
+				pops.pop(wp + Vector3(0, 1.9, 0), "펑크!", "crit")
+			if key == "t5" and not killed and idx >= n - 1:
+				pops.pop(wp + Vector3(0, -0.6, 0), "한 번 더!", "again")
+		"skill_end":
+			if key == "t5" or bool(e.get("skipped", false)):
+				_cine_until = minf(_cine_until, now)
+		"skill_denied":
+			_deny_t = now
+			if str(e.get("chan", "rage")) == "item":
+				_item_deny_t[_slot_of(id) - 1] = now
+			if road != null:
+				var pp: Dictionary = _state.get("player", {})
+				pops.pop(road.position(float(pp.get("s", player_s)), float(pp.get("x", 0.0))) + Vector3(0, 3.0, 0),
+					str(DENY_TEXT.get(str(e.get("reason", "rage")), "분노 부족!")), "miss")
+		"tier_ready":
+			var tier: int = int(e.get("tier", 0))
+			_tier_flash[tier] = now
+			_rage_ready_t = now
+			if tier >= 5 and phase == &"boss":
+				banner.show_banner("분노 MAX!", "kill", 0.9, "", SKILL_BANNER_Y, 0.8)
+		"item_ready":
+			var sl3: int = int(e.get("slot", 0))
+			if sl3 >= 1 and sl3 <= 2:
+				_item_pop_t[sl3 - 1] = now
+		"finisher":
+			_kill_real = now
+
+
+## Skippable cinematic right now: the sim's active.skippable, or the kill phase past finish.skipAfter.
+func skip_hint_visible() -> bool:
+	if bool(skill_active.get("skippable", false)):
+		return true
+	var after: float = skip_after
+	var fc: Variant = SkillCues.cfg().get("finish")
+	if fc is Dictionary:
+		after = float((fc as Dictionary).get("skipAfter", skip_after))
+	return phase == &"kill" and _kill_t > -90.0 and now - _kill_t >= after
+
+
 func _haptic(event_name: String) -> void:
 	var h: Node = get_node_or_null(^"/root/Haptics")
 	if h != null and h.has_method(&"haptic"):
@@ -622,7 +846,7 @@ func _on_phase(ph: StringName, old: StringName) -> void:
 			boss_lag = boss_hp
 		&"kill":
 			var line: String = str(stage.get("defeatLine", "")) if stage.get("defeatLine") != null else ""
-			banner.show_banner("참교육 완료!", "kill", 2.0, line)
+			banner.show_banner("참교육 완료!", "kill", 2.0, line, 0.68, 0.85)  # low: the finisher plays in the upper band
 			_letterbox_want = 1.0
 		&"release":
 			_letterbox_want = 0.0
@@ -653,6 +877,9 @@ func _apply_phase_vis(instant: bool) -> void:
 	for c: Control in [_btn_left, _btn_right, _gauge, _speed, _unit]:
 		if phase in [&"release", &"cruise"]:
 			want[c] = 1.0
+	for i: int in 2:
+		if not bool(_btn_items[i].get_meta(&"slot_used", false)):
+			want[_btn_items[i]] = 0.0
 	_group_alpha = want
 	if instant:
 		for c: Control in want:
@@ -669,12 +896,20 @@ func advance(dt: float) -> void:
 		result_card.advance(dt)
 	if fail_card != null:
 		fail_card.advance(dt)
+	# cinematics (t5 cast until 1.0 s, kill) dim the controls; they come back within 0.25 s
+	var cine: bool = now < _cine_until or bool(skill_active.get("cine", false))
+	_cine_mul = move_toward(_cine_mul, 0.3 if cine else 1.0, dt / (0.12 if cine else 0.25))
+	for i: int in 2:  # a slot that just got an item fades in with the controls
+		if bool(_btn_items[i].get_meta(&"slot_used", false)) and phase in [&"intro", &"jam", &"boss"]:
+			_group_alpha[_btn_items[i]] = 1.0
+		elif not bool(_btn_items[i].get_meta(&"slot_used", false)):
+			_group_alpha[_btn_items[i]] = 0.0
 	for c: Control in _group_alpha:
 		var a: float = move_toward(float(_vis.get(c, 1.0)), float(_group_alpha[c]), dt / 0.22)
 		_vis[c] = a
 		c.visible = a > 0.01
 		if not _btn_alpha.has(c):
-			c.modulate.a = a
+			c.modulate.a = a * (_cine_mul if _controls.has(c) else 1.0)
 	# white damage lag on the villain bar (web: holds while hits keep coming, then drains)
 	if boss_lag > boss_hp:
 		var drain: float = 0.04 if now - _boss_hit_t < 0.42 else 0.25 + (boss_lag - boss_hp) * 4.0
@@ -689,6 +924,8 @@ func advance(dt: float) -> void:
 	_ghost(_btn_horn, horn_down, dt)
 	_ghost(_btn_fire, fire_down, dt)
 	_ghost(_btn_rage, _input != null and _input.is_zone_down("rage"), dt)
+	_ghost(_btn_items[0], _input != null and _input.is_zone_down("item1"), dt)
+	_ghost(_btn_items[1], _input != null and _input.is_zone_down("item2"), dt)
 	if hint_text != _hint_shown:
 		_hint_shown = hint_text
 		_hint_t = now
@@ -709,6 +946,8 @@ func _process(delta: float) -> void:
 		_input.set_zone("horn", _btn_horn.get_global_rect())
 		_input.set_zone("fire", _btn_fire.get_global_rect().grow(8.0))
 		_input.set_zone("rage", _btn_rage.get_global_rect().grow(4.0))
+		for i: int in 2:  # item zones only while the slot holds an item (an empty slot must not eat a lane swipe)
+			_input.set_zone("item%d" % (i + 1), _btn_items[i].get_global_rect().grow(4.0) if bool(_btn_items[i].get_meta(&"slot_used", false)) else Rect2())
 		_input.set_zone("pause", _btn_pause.get_global_rect().grow(6.0))
 
 
@@ -718,7 +957,7 @@ func _ghost(b: Control, down: bool, delta: float) -> void:
 	var a: float = move_toward(float(_btn_alpha.get(b, IDLE_ALPHA)), 1.0 if down else IDLE_ALPHA,
 		(1.0 - IDLE_ALPHA) * delta / 0.08)
 	_btn_alpha[b] = a
-	b.modulate.a = a * float(_vis.get(b, 1.0))
+	b.modulate.a = a * float(_vis.get(b, 1.0)) * _cine_mul
 
 
 ## Full-screen flash (hit / kill / release), real time.
@@ -873,6 +1112,18 @@ func _draw_boss(c: Control) -> void:
 	for q: float in [0.25, 0.5, 0.75]:
 		var x: float = inner.position.x + inner.size.x * q
 		c.draw_line(Vector2(x, inner.position.y), Vector2(x, inner.end.y), Color(INK, 0.7), 2.0)
+	if execute_frac > 0.0 and phase == &"boss":  # t5 처형선: under it a tap of MAX finishes the villain
+		var ex: float = inner.position.x + inner.size.x * execute_frac
+		var under: bool = boss_hp <= execute_frac
+		if under:
+			var gp: float = 0.5 + 0.5 * sin(now * 12.0)
+			c.draw_style_box(UiDraw.box(Color(1.0, 0.86, 0.25, 0.35 + 0.35 * gp), 6),
+				Rect2(inner.position, Vector2(maxf(8.0, inner.size.x * boss_hp), inner.size.y)))
+		c.draw_line(Vector2(ex, bar.position.y - 2), Vector2(ex, bar.end.y + 2), INK, 6.0)
+		c.draw_line(Vector2(ex, bar.position.y), Vector2(ex, bar.end.y), C_GOLD, 3.0)
+		c.draw_colored_polygon(PackedVector2Array([Vector2(ex - 8, bar.end.y + 10), Vector2(ex + 8, bar.end.y + 10),
+			Vector2(ex, bar.end.y + 1)]), C_GOLD)
+		UiDraw.text_c(c, Vector2(ex, bar.end.y + 20), "참교육", 15, C_GOLD if not under else Color.WHITE, 4, true, 0.0)
 	if boss_vuln and phase == &"boss":
 		var pul: float = 1.0 + 0.08 * sin(now * 14.0)
 		var tag := Rect2(Vector2(r.size.x - 92, 40), Vector2(86, 36))
@@ -1070,32 +1321,85 @@ func _draw_fire_ring(c: Control) -> void:
 			c.draw_arc(ctr, rad, a1, a1 + TAU / float(n) * 0.55, 6, C_NORANGE, 5.0, true)
 
 
-## 분노: segmented charge ring = rage fraction (one segment per cost); ready → orange face + flame wiggle; full →
-## "MAX" badge + pulsing halo; "지금!" badge in the signature window.
+## 분노 button: the face is the tier a tap casts now (state.skills.next_tier): 경적 (t1, orange), 폭격 (t3, red-orange,
+## a tack rain), 참교육 (t5, gold, the equipped finish's icon); grey 분노 when nothing is ready. Kicks on ready / cast,
+## wobbles on a denied tap.
 func _rage_pop() -> float:
 	var rt: float = now - _rage_ready_t
-	return 1.0 + 0.18 * (1.0 - UiDraw.back_out(rt / 0.25, 3.0)) if rage_frac >= rage_cost - 1e-6 and rt < 0.25 else 1.0
+	return 1.0 + 0.18 * (1.0 - UiDraw.back_out(rt / 0.25, 3.0)) if rt < 0.25 else 1.0
 
 
 func _draw_rage_btn(c: Control) -> void:
-	var ready: bool = rage_frac >= rage_cost - 1e-6
+	var tier: int = next_tier
 	var pop: float = _rage_pop()
+	var dt_: float = now - _deny_t
+	var wob: float = sin(dt_ * 50.0) * 0.1 * (1.0 - dt_ / 0.3) if dt_ < 0.3 else 0.0
 	var ctr: Vector2 = c.size * 0.5
-	c.draw_set_transform(ctr, 0.0, Vector2(pop, pop))
+	c.draw_set_transform(ctr, wob, Vector2(pop, pop))
 	var rad: float = c.size.x * 0.5
-	var o: Vector2 = UiDraw.round_button(c, Vector2.ZERO, rad - 6.0, BTN_RAGE if ready else BTN_RAGE_OFF, false)
-	var wig: float = sin(now * 9.0) * 0.12 if ready else 0.0
-	c.draw_set_transform(ctr + o - Vector2(0, 10), wig, Vector2(pop, pop))
-	if not UiDraw.draw_icon(c, "flame", Vector2.ZERO, 40, Color.WHITE if ready else Color(1, 1, 1, 0.55)):
-		c.draw_circle(Vector2.ZERO, 14, Color8(0xff, 0x5a, 0x1f))
-	c.draw_set_transform(ctr, 0.0, Vector2(pop, pop))
-	UiDraw.text_c(c, o + Vector2(0, 22), "분노", 21, Color.WHITE if ready else Color(1, 1, 1, 0.7), 5, true, 0.0)
+	var cols: Array = BTN_RAGE_OFF if tier <= 0 else (BTN_RAGE if tier == 1 else BTN_T3 if tier == 3 else BTN_T5)
+	var o: Vector2 = UiDraw.round_button(c, Vector2.ZERO, rad - 6.0, cols, _input != null and _input.is_zone_down("rage"))
+	var wig: float = sin(now * 9.0) * 0.1 if tier > 0 else 0.0
+	c.draw_set_transform(ctr + (o - Vector2(0, 11)) * pop, wig, Vector2(pop, pop))
+	var ink: Color = Color.WHITE if tier > 0 else Color(1, 1, 1, 0.55)
+	match tier:
+		1:
+			if not UiDraw.draw_icon(c, "horn", Vector2.ZERO, 42, ink):
+				c.draw_circle(Vector2.ZERO, 14, ink)
+			for k: int in 2:  # sound arcs
+				c.draw_arc(Vector2(10, -2), 14.0 + 7.0 * float(k), -0.7, 0.7, 10, Color(1, 1, 1, 0.85), 3.0, true)
+		3:
+			for k: int in 3:
+				var off := Vector2(-14.0 + 14.0 * float(k), -6.0 + (6.0 if k == 1 else 0.0))
+				if not UiDraw.draw_icon(c, "tack", off, 26, ink):
+					c.draw_circle(off, 7, ink)
+			for k: int in 3:
+				var x: float = -16.0 + 16.0 * float(k)
+				c.draw_line(Vector2(x + 4, -24), Vector2(x - 2, -14), Color(1, 1, 1, 0.8), 2.5, true)
+		5:
+			_finish_icon(c, finish_id, Vector2.ZERO, 40.0)
+		_:
+			if not UiDraw.draw_icon(c, "flame", Vector2.ZERO, 40, ink):
+				c.draw_circle(Vector2.ZERO, 14, Color8(0xff, 0x5a, 0x1f))
+	c.draw_set_transform(ctr, wob, Vector2(pop, pop))
+	var fs: int = 20 if tier == 5 else 21
+	UiDraw.text_c(c, o + Vector2(0, 23), str(TIER_FACE.get(tier, "분노")), fs, INK if tier == 5 else ink, 5 if tier != 5 else 0, true, 0.0)
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-## The 분노 charge ring (its own control so it is not ghosted with the idle button: it is the only rage gauge now).
-## One segment per rage cost with gaps as ticks, full segments yellow, the current one partial orange; full rage →
-## white-gold pulse, halo and a "MAX" tag (the "지금!" tag takes that spot in the signature window).
+## Small finisher glyphs (rocket = the svg icon; balloon / heli / ufo drawn).
+func _finish_icon(c: Control, id: String, o: Vector2, w: float) -> void:
+	var k: float = w / 40.0
+	match id:
+		"balloon":
+			for b: Array in [[Vector2(-9, -6), Color8(0xff, 0x3b, 0x30)], [Vector2(8, -9), Color8(0x2f, 0x6f, 0xd6)], [Vector2(0, -16), Color8(0x3c, 0xe0, 0x8e)]]:
+				var p: Vector2 = o + (b[0] as Vector2) * k
+				c.draw_line(p + Vector2(0, 8) * k, o + Vector2(0, 16) * k, INK, 2.0, true)
+				c.draw_circle(p, 9.5 * k, INK)
+				c.draw_circle(p, 7.5 * k, b[1] as Color)
+				c.draw_circle(p + Vector2(-2.5, -2.5) * k, 2.0 * k, Color(1, 1, 1, 0.8))
+		"heli":
+			c.draw_rect(Rect2(o + Vector2(-12, -6) * k, Vector2(20, 13) * k), INK)
+			c.draw_rect(Rect2(o + Vector2(-10, -4) * k, Vector2(16, 9) * k), Color.WHITE)
+			c.draw_rect(Rect2(o + Vector2(6, -2) * k, Vector2(12, 4) * k), INK)
+			c.draw_line(o + Vector2(-17, -11) * k, o + Vector2(15, -11) * k, INK, 3.0 * k, true)
+			c.draw_line(o + Vector2(-1, -11) * k, o + Vector2(-1, -6) * k, INK, 2.5 * k, true)
+			c.draw_line(o + Vector2(-1, 7) * k, o + Vector2(-1, 16) * k, INK, 1.5 * k, true)
+		"ufo":
+			c.draw_circle(o + Vector2(0, -5) * k, 8.0 * k, Color8(0x7a, 0xff, 0xd8))
+			c.draw_colored_polygon(PackedVector2Array([o + Vector2(-18, 2) * k, o + Vector2(-8, -4) * k, o + Vector2(8, -4) * k,
+				o + Vector2(18, 2) * k, o + Vector2(8, 7) * k, o + Vector2(-8, 7) * k]), Color(0.85, 0.88, 0.93))
+			c.draw_colored_polygon(PackedVector2Array([o + Vector2(-7, 7) * k, o + Vector2(7, 7) * k, o + Vector2(12, 19) * k,
+				o + Vector2(-12, 19) * k]), Color(0.5, 1.0, 0.8, 0.6))
+		_:
+			if not UiDraw.draw_icon(c, "rocket", o, w, Color.WHITE):
+				c.draw_colored_polygon(PackedVector2Array([o + Vector2(0, -16) * k, o + Vector2(8, 8) * k, o + Vector2(-8, 8) * k]), Color.WHITE)
+
+
+## The 분노 ring (its own control: never ghosted — it is the only rage gauge). 5 segments (6° gaps); long ticks with the
+## labels 1 · 3 · MAX at the tier boundaries (lock glyph instead of 3 / MAX while only t1 can fire: jam, before the
+## lock); fill colour by level (1–2 orange, 3–4 red-orange, 5 gold with a sparkle running round); a tier that just got
+## ready flashes white; full rage = pulsing halo + MAX tag ("지금!" in the signature window).
 func _draw_rage_ring(c: Control) -> void:
 	var pop: float = _rage_pop()
 	var ctr: Vector2 = c.size * 0.5
@@ -1105,32 +1409,139 @@ func _draw_rage_ring(c: Control) -> void:
 	var segs: PackedFloat32Array = Hud.rage_segments(rage_frac, rage_cost)
 	var n: int = segs.size()
 	var span: float = TAU / float(n)
-	var gap: float = minf(0.2, span * 0.2)
+	var gap: float = deg_to_rad(6.0)
 	var rr: float = rad - 2.0
 	var full: bool = rage_max()
-	if full:  # MAX: pulsing halo behind the ring, a short burst when it fills
+	var lvl: int = clampi(skill_segs, 0, n)
+	var fill: Color = C_RAGE if lvl <= 2 else (C_T3 if lvl < n else C_GOLD)
+	if full:
 		var burst: float = maxf(0.0, 1.0 - (now - _rage_max_t) / 0.35)
 		var pul: float = 0.5 + 0.5 * sin(now * 10.0)
 		for k: int in 3:
-			c.draw_arc(Vector2.ZERO, rr + 5.0 + 4.0 * float(k) + 8.0 * burst, 0.0, TAU, 56,
+			c.draw_arc(Vector2.ZERO, rr + 6.0 + 4.0 * float(k) + 8.0 * burst, 0.0, TAU, 56,
 				Color(1.0, 0.86, 0.3, (0.42 - 0.12 * float(k)) * (0.55 + 0.45 * pul) + 0.3 * burst), 4.0, true)
-	c.draw_arc(Vector2.ZERO, rr, 0.0, TAU, 56, Color(INK, 0.9), 12.0, true)
+	c.draw_arc(Vector2.ZERO, rr, 0.0, TAU, 64, Color(INK, 0.9), 13.0, true)
 	for i: int in n:
 		var s0: float = a0 + span * float(i) + gap * 0.5
 		var s1: float = a0 + span * float(i + 1) - gap * 0.5
-		c.draw_arc(Vector2.ZERO, rr, s0, s1, 12, C_OFF, 7.0, true)
+		c.draw_arc(Vector2.ZERO, rr, s0, s1, 12, C_OFF, 8.0, true)
 		var part: float = segs[i]
 		if part > 0.0:
-			var col: Color = Color.WHITE.lerp(Color8(0xff, 0xd2, 0x3f), 0.5 + 0.5 * sin(now * 10.0)) if full else \
-				(Color8(0xff, 0xd2, 0x3f) if part >= 1.0 else C_RAGE)
-			c.draw_arc(Vector2.ZERO, rr, s0, s0 + (s1 - s0) * part, 12, col, 7.0, true)
-	var now_tag: bool = rage_frac >= rage_cost - 1e-6 and boss_vuln and phase == &"boss"
-	if now_tag or full:
+			var col: Color = fill if part >= 1.0 else C_RAGE.lerp(Color.WHITE, 0.25)
+			if full:
+				col = Color.WHITE.lerp(C_GOLD, 0.55 + 0.45 * sin(now * 10.0 + float(i)))
+			c.draw_arc(Vector2.ZERO, rr, s0, s0 + (s1 - s0) * part, 12, col, 8.0, true)
+	# tier ticks + labels (tier t ends segment t: angle a0 + span·t)
+	var only_t1: bool = skill_mode == "jam" or skill_mode == "off"
+	for tier: int in [1, 3, 5]:
+		if tier > n:
+			continue
+		var ang: float = a0 + span * float(tier)
+		var dir := Vector2(cos(ang), sin(ang))
+		var reached: bool = skill_segs >= tier
+		var locked: bool = only_t1 and tier > 1
+		var fl: float = maxf(0.0, 1.0 - (now - float(_tier_flash.get(tier, -99.0))) / 0.35)
+		var tick_c: Color = (Color.WHITE if reached and not locked else Color(0.6, 0.64, 0.7, 0.9)).lerp(Color.WHITE, fl)
+		c.draw_line(dir * (rr - 9.0), dir * (rr + 9.0 + 4.0 * fl), Color(INK, 0.95), 6.0, true)
+		c.draw_line(dir * (rr - 8.0), dir * (rr + 8.0 + 4.0 * fl), tick_c, 3.0, true)
+		var lp: Vector2 = dir * (rr + 19.0)
+		if tier == 5:
+			lp = Vector2(0, -(rr + 18.0))
+		if locked:
+			if not UiDraw.draw_icon(c, "lock", lp, 18, Color(1, 1, 1, 0.75)):
+				c.draw_rect(Rect2(lp - Vector2(6, 5), Vector2(12, 10)), Color(1, 1, 1, 0.7))
+		else:
+			var lab: String = "MAX" if tier == 5 else str(tier)
+			var ls: int = 15 if tier == 5 else 17
+			var lc: Color = (C_GOLD if tier == 5 else Color.WHITE) if reached else Color(0.75, 0.78, 0.84, 0.9)
+			c.draw_set_transform(ctr + lp * pop, 0.0, Vector2.ONE * pop * (1.0 + 0.4 * fl))
+			UiDraw.text_c(c, Vector2.ZERO, lab, ls, lc, 4, true, 0.0)
+			c.draw_set_transform(ctr, 0.0, Vector2(pop, pop))
+	if full:  # a sparkle running round the gold ring
+		var sa: float = now * 3.2
+		var sp := Vector2(cos(sa), sin(sa)) * rr
+		c.draw_colored_polygon(UiDraw.star_points(sp, 7.0, now * 4.0), Color(1, 1, 0.9, 0.95))
+	var now_tag: bool = not tiers_ready.is_empty() and boss_vuln and phase == &"boss" and skill_mode == "fight"
+	if now_tag or (full and not only_t1):  # in the jam a full ring still glows, but MAX cannot fire there: no tag
 		var pul2: float = 1.0 + (0.1 * sin(now * 14.0) if now_tag else 0.07 * sin(now * 10.0))
-		c.draw_set_transform(ctr + Vector2(-rad * 0.62, -rad * 0.78), deg_to_rad(-8.0), Vector2(pul2, pul2) * pop)
-		UiDraw.panel(c, Rect2(Vector2(-36, -16), Vector2(72, 32)), Color8(0xff, 0xd2, 0x3f), 10, 3, 3)
+		c.draw_set_transform(ctr + Vector2(-rad * 0.78, -rad * 0.86), deg_to_rad(-8.0), Vector2(pul2, pul2) * pop)
+		UiDraw.panel(c, Rect2(Vector2(-36, -16), Vector2(72, 32)), C_GOLD, 10, 3, 3)
 		UiDraw.text_c(c, Vector2.ZERO, "지금!" if now_tag else "MAX", 20, INK, 0, true, 0.0)
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Item button (88 u): colour + icon per item, cooldown pie unwinding clockwise with the seconds left, charge pips,
+## grey + reason glyph when unusable (⌀ no target, 🚫 phase / busy), pop + white ring when it comes back.
+func _draw_item(c: Control, slot: int) -> void:
+	var it: Dictionary = _item_of(slot)
+	if it.is_empty():
+		return
+	var id: String = str(it.get("id", ""))
+	var cool: float = float(it.get("cool", 0.0))
+	var cool_max: float = maxf(0.01, float(it.get("cool_max", 1.0)))
+	var ready: bool = bool(it.get("ready", cool <= 0.0))
+	var usable: bool = bool(it.get("usable", true))
+	var pt: float = now - _item_pop_t[slot - 1]
+	var pop: float = 1.0 + 0.2 * (1.0 - UiDraw.back_out(pt / 0.25, 3.0)) if pt < 0.25 else 1.0
+	var dt_: float = now - _item_deny_t[slot - 1]
+	var wob: float = sin(dt_ * 50.0) * 0.1 * (1.0 - dt_ / 0.3) if dt_ < 0.3 else 0.0
+	var ctr: Vector2 = c.size * 0.5
+	var rad: float = c.size.x * 0.5
+	c.draw_set_transform(ctr, wob, Vector2(pop, pop))
+	var cols: Array = BTN_JUMP if id == "mv_jump" else (BTN_DRONE if id == "mv_drone" else BTN_TOW)
+	if not usable or not ready:
+		cols = BTN_RAGE_OFF
+	var o: Vector2 = UiDraw.round_button(c, Vector2.ZERO, rad - 4.0, cols, _input != null and _input.is_zone_down("item%d" % slot))
+	var ink: Color = Color.WHITE if usable and ready else Color(1, 1, 1, 0.6)
+	var ic: Vector2 = o - Vector2(0, 9)
+	match id:
+		"mv_jump":
+			if not UiDraw.draw_icon(c, "jump", ic, 40, ink):
+				c.draw_colored_polygon(PackedVector2Array([ic + Vector2(0, -14), ic + Vector2(12, 4), ic + Vector2(-12, 4)]), ink)
+		"mv_drone":
+			_drone_icon(c, ic, ink)
+		_:
+			if not UiDraw.draw_icon(c, "wrecker", ic, 40, ink):
+				c.draw_circle(ic, 12, ink)
+	UiDraw.text_c(c, o + Vector2(0, 21), str(ITEM_LABEL.get(id, "아이템")), 18, ink, 5, true, 0.0)
+	if not ready and cool > 0.0:  # cooldown pie: dark sector of the remaining fraction, clockwise from 12 o'clock
+		var f: float = clampf(cool / cool_max, 0.0, 1.0)
+		var pts := PackedVector2Array([o])
+		var steps: int = maxi(2, ceili(40.0 * f))
+		for i: int in steps + 1:
+			var a: float = -PI / 2.0 + TAU * (1.0 - f) + TAU * f * float(i) / float(steps)
+			pts.append(o + Vector2(cos(a), sin(a)) * (rad - 6.0))
+		c.draw_colored_polygon(pts, Color(0.04, 0.05, 0.08, 0.62))
+		c.draw_arc(o, rad - 3.0, -PI / 2.0, -PI / 2.0 + TAU * (1.0 - f), 40, Color(1, 1, 1, 0.9), 4.0, true)
+		UiDraw.text_c(c, o + Vector2(0, -2), str(ceili(cool)), 34, Color.WHITE, 6, true, 0.0)
+	var charges: int = int(it.get("charges", -1))
+	if charges >= 0:
+		for i: int in maxi(1, charges):
+			var pc := o + Vector2((float(i) - (maxf(1.0, float(charges)) - 1.0) * 0.5) * 12.0, rad - 2.0)
+			c.draw_circle(pc, 5.0, INK)
+			c.draw_circle(pc, 3.5, C_GOLD if charges > 0 else C_OFF)
+	if not usable:
+		var rp := o + Vector2(rad * 0.55, -rad * 0.55)
+		c.draw_circle(rp, 13, INK)
+		c.draw_circle(rp, 10.5, Color8(0xff, 0x3b, 0x30) if str(it.get("reason", "")) != "target" else Color8(0x9a, 0xa3, 0xae))
+		c.draw_arc(rp, 6.0, 0.0, TAU, 16, Color.WHITE, 2.2, true)
+		c.draw_line(rp + Vector2(-5, 5), rp + Vector2(5, -5), Color.WHITE, 2.2, true)
+	if pt < 0.4:  # ready again: white ring burst
+		var k: float = pt / 0.4
+		c.draw_arc(o, rad + 4.0 + 16.0 * k, 0.0, TAU, 40, Color(1, 1, 1, 0.8 * (1.0 - k)), 5.0 * (1.0 - k) + 1.0, true)
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _drone_icon(c: Control, o: Vector2, ink: Color) -> void:
+	for d: Vector2 in [Vector2(-13, -9), Vector2(13, -9), Vector2(-13, 9), Vector2(13, 9)]:
+		c.draw_line(o, o + d * 0.8, INK, 5.0, true)
+		c.draw_line(o, o + d * 0.8, ink, 2.5, true)
+		c.draw_circle(o + d, 6.5, INK)
+		c.draw_circle(o + d, 5.0, Color(ink, 0.55))
+	c.draw_rect(Rect2(o - Vector2(8, 6), Vector2(16, 12)), INK)
+	c.draw_rect(Rect2(o - Vector2(6, 4), Vector2(12, 8)), ink)
+	c.draw_circle(o + Vector2(-3, -1), 1.8, Color8(0xff, 0x3b, 0x30))
+	c.draw_circle(o + Vector2(3, -1), 1.8, Color8(0x3a, 0x8b, 0xff))
 
 
 ## Full-screen layer: flash, damage vignette, kill letterbox + slow-mo vignette.
@@ -1143,6 +1554,28 @@ func _draw_screen_fx(c: Control = null) -> void:
 	# a tall phone, and the stepped side vignette showed up as vertical bands. Keep only a faint warm tint.
 	if _letterbox > 0.0:
 		_fx.draw_rect(r, Color(0.08, 0.04, 0.0, 0.10 * UiDraw.smooth(_letterbox)))
+	var fo: float = now - _focus_t
+	if fo >= 0.0 and fo < _focus_dur + 0.25:  # t5 telegraph: radial focus lines closing in + warm vignette
+		var k: float = clampf(fo / maxf(0.05, _focus_dur), 0.0, 1.0)
+		var fade: float = 1.0 if fo < _focus_dur else 1.0 - (fo - _focus_dur) / 0.25
+		_vignette(r, Color(1.0, 0.55, 0.1, 0.5 * fade))
+		var cc: Vector2 = r.get_center() + Vector2(0, -r.size.y * 0.04)
+		var far: float = r.size.length() * 0.6
+		for i: int in 36:
+			var h: float = fmod(float(i) * 0.618034, 1.0)
+			var ang: float = TAU * float(i) / 36.0 + h * 0.12
+			var inner_r: float = lerpf(far * 0.9, far * (0.32 + 0.18 * h), UiDraw.smooth(k))
+			var dir := Vector2(cos(ang), sin(ang))
+			var wdt: float = 0.012 + 0.018 * h
+			_fx.draw_colored_polygon(PackedVector2Array([cc + dir.rotated(wdt) * far, cc + dir * inner_r, cc + dir.rotated(-wdt) * far]),
+				Color(1, 1, 1, (0.3 + 0.35 * h) * fade))
+	if skip_hint_visible():  # 탭: 건너뛰기 (bottom centre, over the home indicator gap)
+		var pa: float = 0.55 + 0.35 * sin(now * 5.0)
+		var sr2: Rect2 = safe_rect()
+		var hp: Vector2 = Vector2(sr2.get_center().x, sr2.end.y - 64.0)
+		var tw: float = UiDraw.text_w("탭: 건너뛰기", 22) + 36.0
+		_fx.draw_style_box(UiDraw.box(Color(0.05, 0.06, 0.09, 0.55 * pa + 0.2), 18), Rect2(hp - Vector2(tw * 0.5, 20), Vector2(tw, 40)))
+		UiDraw.text_c(_fx, hp, "탭: 건너뛰기", 22, Color(1, 1, 1, 0.6 + 0.4 * pa), 4, true, 0.0)
 	var ft: float = now - _flash_t
 	if ft < _flash_dur:
 		_fx.draw_rect(r, Color(_flash_col, _flash_col.a * (1.0 - ft / _flash_dur)))

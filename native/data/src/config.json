@@ -119,7 +119,7 @@
     "worldSeedMul": 7919
   },
   "skills": {
-    "_doc": "docs/SKILLS.md §5 (sim: native/sim/skills_sim.gd). 분노 사다리 t1/t3/t5 + 아이템 + 피니시. Real s: hitstop, slowFor, skipAfter, dur (the §1 budget: skill_end comes dur real s after the cast) and the finish timeline. Sim s: delay, hitGap, bombGap, hop, cool, stun, minKillT. dmgIn = inside the vuln window (the window is decided once at the first hit of a multi-hit), dmgOut = outside. Without this key GameSim keeps the old rage horn / rage bomb.",
+    "_doc": "docs/SKILLS.md §5 (sim: native/sim/skills_sim.gd). 분노 사다리 t1/t3/t5 + 아이템 + 피니시. Real s: hitstop, slowFor, skipAfter, dur (the §1 budget: skill_end comes dur real s after the cast) and the finish timeline. Sim s: delay, hitGap, bombGap, hop, cool, stun, minKillT. dmgIn = inside the vuln window (the window is decided once at the first hit of a multi-hit), dmgOut = outside. Without this key GameSim keeps the old rage horn / rage bomb. Tuned on tests/test_e2e_skills.gd (autopilot, 1-1, native + fallback): hpMul 1.45 (doc first guess 1.25), rageGain.windowHit 0.03 + lock 0.2 → t3 once per fight, boss 10.6–17.9 s real over 34 runs.",
     "cineGap": 6.0,
     "finish": {
       "_doc": "BossSim._update_death timeline per finish id (real s from the kill tick). Kill hitstop + slow-mo x slow until settle; gone at done; release releaseDelay after gone; tap-to-skip after skipAfter jumps to done.",
@@ -141,7 +141,7 @@
       "t3": { "banner": "압정 폭격!!", "camera": { "lift": 0.25, "punch": -5, "shake": 0.5 }, "flash": ["ff7a1a", 0.25, 120], "sfx": [["launch", 0, 0.7, 1.0], ["tack", 0.05, 0.6, 0.9], ["tack", 0.1, 0.6, 1.05], ["tack", 0.15, 0.6, 1.2]] },
       "t5": { "banner": "참교육!!", "camera": { "punch": -8, "push": -6, "shake": 0.9 }, "flash": ["ffffff", 0.85, 160], "sfx": [["rageFull", 0, 0.7, 0.8], ["super", 0, 0.6, 1.0], ["superHit", 0.35, 1.0, 1.0], ["explosion", 0.35, 0.95, 1.0]] }
     },
-    "hpMul": 1.25,
+    "hpMul": 1.45,
     "invulnPad": 0.2,
     "items": {
       "mv_drone": { "bombGap": 0.05, "bomblets": 6, "charges": -1, "cool": 12.0, "coolJam": 8.0, "delay": 0.7, "dmgIn": 15, "dmgOut": 5, "dur": 1.0, "jamRange": 40, "passive": "minis", "passiveEvery": 0.7, "range": 45, "score": 300, "slot": 2 },
@@ -151,7 +151,7 @@
     "jamTier": 1,
     "ladder": [1, 3, 5],
     "minKillT": 6.0,
-    "rageGain": { "dodge": 0.04, "fightCap": 0.6, "windowHit": 0.01 },
+    "rageGain": { "_doc": "Fight rage: lock = once at the front lock (not capped; the ladder shows at once), then refills ≤ fightCap per fight: a tack hit inside a window (windowHit), a dodged attack (dodge: BossSim event, aimed at the player's lane when it started, ended without a hit). Doc first guess was windowHit 0.01 and no lock bonus: the iPhone fallback jam carries only ~0.12 rage into the fight and the autopilot never reached t3.", "dodge": 0.04, "fightCap": 0.6, "lock": 0.2, "windowHit": 0.03 },
     "select": "highest",
     "skipAfter": 0.5,
     "stunCap": 2.0,

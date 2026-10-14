@@ -89,7 +89,7 @@ func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dic
 			"finish": "", "death_t": 0.0, "launched": false, "y": 0.0, "vel_y": 0.0, "vel_s": 0.0, "vel_x": 0.0,
 			"spin": Vector3.ZERO, "rot": Vector3.ZERO, "is_last": false, "hit_from_rear": false,
 			"pull_x": 0.0, "pull_s0": 0.0, "pull_dist": 0.0, "parked": false, "headlights": false, "blinker": 0,
-			"force_finish": "", "stun_skill": 0.0, "stun_chain": 0.0, "stun_immune": 0.0, "recoil": 0.0, "beat": "",
+			"force_finish": "", "stun_skill": 0.0, "stun_chain": 0.0, "stun_immune": 0.0, "recoil": 0.0,
 		})
 	attack_t = 2.2
 	total_max_hp = 0.0
@@ -307,6 +307,7 @@ func cancel_attack(v: Dictionary) -> void:
 		if int(b["vi"]) == int(v["index"]):
 			b["life"] = 0.0
 			b["t"] = float(b["tele"]) + float(b["on"])  # no hit window left this tick
+			b["res"] = true  # cancelled, not dodged
 
 
 ## Pops one more tire (skills.t3.pop) while more than one is left. Returns 1 when it popped.
@@ -668,8 +669,10 @@ func throw_from(src_s: float, src_x: float, lane: int, p: PlayerSim, kind: Strin
 
 
 ## ctx: {time, phase: StringName, player: PlayerSim, player_behind: bool, lane_free: Callable(int)->bool,
-## traffic: TrafficBridge, night: bool}. Returns events: player_hit {cause, tier, text, push, flash, mini},
-## boss_phase (HP phase), bubble, attack, stun, gone {id, is_last}.
+## traffic: TrafficBridge, night: bool, real_dt: float}. Returns events: player_hit {cause, tier, text, push, flash, mini},
+## boss_phase (HP phase), bubble, attack, stun, gone {id, is_last}, dodge {kind, id} (an attack aimed at the player's lane
+## when it started — beam / wave / thrown cup / lunge — ended without a hit and with the player out of it; SKILLS
+## rageGain.dodge), finish_beat {id, finish, beat}.
 func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 	time = float(ctx.get("time", time + dt))
 	var rdt: float = float(ctx.get("real_dt", dt))
@@ -705,6 +708,8 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 		var L: Dictionary = v["lunge"]
 		if not L.is_empty():
 			L["t"] = float(L["t"]) + dt
+			if not L.has("aimed"):
+				L["aimed"] = player_in_lanes(p, BossSim.lanes_of(v))
 			match str(L["phase"]):
 				"tele":
 					v["nose"] = minf(1.0, float(L["t"]) / 0.55) * 0.6
@@ -721,6 +726,8 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 					if float(L["t"]) > 0.25:
 						L["phase"] = "back"
 						L["t"] = 0.0
+						if bool(L["aimed"]) and not bool(L["hit"]) and fighting and not player_in_lanes(p, BossSim.lanes_of(v)):
+							events.append({"type": "dodge", "kind": "lunge", "id": int(v["index"])})
 				_:
 					v["lunge_off"] = float(L["reach"]) * maxf(0.0, 1.0 - float(L["t"]) / 0.8)
 					if float(L["t"]) > 0.8:
@@ -796,6 +803,8 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 	# beams
 	for i: int in range(beams.size() - 1, -1, -1):
 		var b: Dictionary = beams[i]
+		if not b.has("aimed"):
+			b["aimed"] = player_in_lanes(p, b["lanes"])
 		b["t"] = float(b["t"]) + dt
 		b["life"] = float(b["life"]) - dt
 		var bv: Dictionary = villains[int(b["vi"])]
@@ -807,6 +816,10 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 					and p.s > float(bv["s"]) and p.s - float(bv["s"]) < 32.0:
 				b["hit"] = true
 				events.append({"type": "player_hit", "cause": "highbeam", "text": "눈부셔!!", "flash": true})
+		elif not b.has("res"):
+			b["res"] = true
+			if bool(b["aimed"]) and not bool(b["hit"]) and fighting and not player_in_lanes(p, b["lanes"]):
+				events.append({"type": "dodge", "kind": "highbeam", "id": int(b["vi"])})
 		if float(b["life"]) <= 0.0:
 			beams.remove_at(i)
 
@@ -814,6 +827,8 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 	var rv: float = ref_v()
 	for i: int in range(waves.size() - 1, -1, -1):
 		var wv: Dictionary = waves[i]
+		if not wv.has("aimed"):
+			wv["aimed"] = player_in_lanes(p, wv["lanes"])
 		var prev_s: float = float(wv["s"])
 		wv["s"] = prev_s + (rv + float(wv["speed"])) * dt
 		wv["life"] = float(wv["life"]) - dt
@@ -822,12 +837,18 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 			if prev_s <= p.s + p.len / 2.0 and float(wv["s"]) >= p.s - p.len / 2.0 and player_in_lanes(p, wv["lanes"]):
 				wv["hit"] = true
 				events.append({"type": "player_hit", "cause": str(wv["kind"]), "text": "콜록콜록!" if wv["kind"] == "smoke" else "고막 테러!"})
+		if not wv.has("res") and prev_s <= p.s + p.len / 2.0 and float(wv["s"]) >= p.s - p.len / 2.0:
+			wv["res"] = true
+			if bool(wv["aimed"]) and not bool(wv["hit"]) and fighting and not player_in_lanes(p, wv["lanes"]):
+				events.append({"type": "dodge", "kind": str(wv["kind"]), "id": -1})
 		if float(wv["life"]) <= 0.0 or float(wv["s"]) > p.s + 30.0:
 			waves.remove_at(i)
 
 	# items
 	for i: int in range(items.size() - 1, -1, -1):
 		var it: Dictionary = items[i]
+		if not it.has("aimed"):
+			it["aimed"] = p.occupies(int(it["lane"]))
 		if not bool(it["landed"]):
 			it["t"] = float(it["t"]) + dt
 			if float(it["t"]) >= float(it["dur"]):
@@ -838,6 +859,8 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 						var ik: String = str(it["kind"])
 						events.append({"type": "player_hit", "cause": ik, "mini": bool(it["from_mini"]),
 							"text": "커피 테러!" if ik == "cup" else "앗 뜨거!" if ik == "butt" else "폰 투척?!" if ik == "phone" else "으악!"})
+					elif bool(it["aimed"]) and fighting and not bool(it["from_mini"]) and not p.occupies(int(it["lane"])):
+						events.append({"type": "dodge", "kind": str(it["kind"]), "id": -1})
 					items.remove_at(i)
 					continue
 		else:

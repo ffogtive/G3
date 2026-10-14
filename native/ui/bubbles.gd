@@ -16,9 +16,13 @@ const BG: Dictionary = {
 }
 ## warn pops are white with a dark outline: the old yellow vanished on the yellow hero roof (art review).
 const POP_COLOR: Dictionary = {"warn": Color.WHITE, "score": Color8(0x8d, 0xff, 0xbb), "hit": Color8(0xff, 0xd2, 0x3f),
-	"crit": Color8(0xff, 0x9a, 0x2e), "miss": Color8(0xc9, 0xd3, 0xdf), "dmg": Color8(0xff, 0x5a, 0x4a)}
+	"crit": Color8(0xff, 0x9a, 0x2e), "miss": Color8(0xc9, 0xd3, 0xdf), "dmg": Color8(0xff, 0x5a, 0x4a),
+	"big": Color8(0xff, 0xe1, 0x4d), "tick": Color8(0xff, 0xf3, 0xb8), "again": Color8(0x7a, 0xe8, 0xff)}
 ## Fight pops (HUD on_event): hit numbers, crits in the signature window, "빗나감!" (wobbles), player damage.
-const POP_SIZES: Dictionary = {"hit": 36, "crit": 46, "miss": 30, "dmg": 36}
+const POP_SIZES: Dictionary = {"hit": 36, "crit": 46, "miss": 30, "dmg": 36, "big": 64, "tick": 26, "again": 34}
+## Skill pops (docs/SKILLS.md 1-5): "big" = the summed skill damage (one large number), "tick" = a multi-hit tick,
+## "again" = the t5 "한 번 더!" chip; they live longer than the plain hit pops.
+const POP_LIFE_KIND: Dictionary = {"big": 1.25, "again": 1.3, "tick": 0.55}
 const POP_OUTLINE := Color8(0x1b, 0x1c, 0x1f)
 const POP_RISE_M: float = 0.6
 const POP_PUNCH_S: float = 0.25
@@ -100,7 +104,7 @@ func step(t: float) -> void:
 			_order.erase(k)
 	var keep: Array[Dictionary] = []
 	for p: Dictionary in _pops:
-		if now - float(p["born"]) < POP_LIFE:
+		if now - float(p["born"]) < float(POP_LIFE_KIND.get(str(p["kind"]), POP_LIFE)):
 			keep.append(p)
 	_pops = keep
 	queue_redraw()
@@ -120,7 +124,7 @@ func _draw() -> void:
 		if camera.is_position_behind(wp):
 			continue
 		var t: float = now - float(p["born"])
-		var age: float = t / POP_LIFE
+		var age: float = clampf(t / float(POP_LIFE_KIND.get(str(p["kind"]), POP_LIFE)), 0.0, 1.0)
 		var lifted: Vector3 = wp + Vector3(0, POP_RISE_M * age, 0)  # rises in the world, so it clears the roof
 		if camera.is_position_behind(lifted):
 			continue
@@ -129,9 +133,9 @@ func _draw() -> void:
 		col.a = 1.0 - age * age
 		var kind: String = str(p["kind"])
 		var fs: int = int(POP_SIZES.get(kind, POP_SIZE))
-		var amp: float = 0.55 if kind == "crit" else 0.25
+		var amp: float = 0.55 if kind in ["crit", "big", "again"] else 0.25
 		var punch: float = 1.0 + amp * sin(PI * clampf(t / POP_PUNCH_S, 0.0, 1.0))  # 1.0 → 1.25 → 1.0
-		var rot: float = sin(t * 40.0) * 0.12 * (1.0 - age) if kind == "miss" else (deg_to_rad(-6.0) if kind == "crit" else 0.0)
+		var rot: float = sin(t * 40.0) * 0.12 * (1.0 - age) if kind == "miss" else (deg_to_rad(-6.0) if kind in ["crit", "big"] else 0.0)
 		var w: float = font_display.get_string_size(str(p["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		draw_set_transform(sp, rot, Vector2(punch, punch))
 		var at := Vector2(-w / 2.0, 0)
