@@ -13,7 +13,9 @@ extends RefCounted
 ##
 ## Interface (sim ↔ view/UI):
 ##   setup(stage, tables, seed); step(dt); input(cmd, value); state() -> Dictionary; events(); traffic().
-##   input: &"lane" ±1, &"honk", &"fire" (bool held), &"rage", &"brake" (bool held), &"retry", &"continue", &"jump".
+##   input: &"lane" ±1, &"honk", &"fire" (bool held), &"rage" [tier 1|3|5], &"brake" (bool held), &"retry", &"continue",
+##          &"jump" (legacy jam hop), &"item1" / &"item2" (loadout item slots), &"skip" (tap: skip the t5 / kill cinematic).
+##   Contract (docs/SKILLS.md §6, device feedback #3): &"fire" never makes a honk or a skill; only &"honk" honks.
 ##   events (drained by events()): {type: ...}
 ##     phase {phase, from} · boss_phase {boss_phase, label} · lock {} · lane {dir, lane} · hit {target_id, dmg, window, immune, kind: tack|bomb|mini, popped, hp_frac, s, x}
 ##     miss {s, x, reason} · fire {target_id, from_s, from_x, to_s, to_x, dur, lob} · fire_dry {s, x} (압정 in the jam, no
@@ -23,6 +25,12 @@ extends RefCounted
 ##     cutin, mini_act, released, auto_tow) · wreck {reason, fails} · retry {fails, pay_mul}
 ##     bubble {who: villain|car|player, id, text | table, kind, dur} · attack {kind, id} · bump {rel_v, push, dmg}
 ##     smash {id} · tow {id} · rage {full} · rage_horn {smashed, towed, cheaters, startled} · gone {id}
+##   SKILLS (config.skills, sim/skills_sim.gd, docs/SKILLS.md §6): skill_start {chan, tier, id, target_id, lanes, dur, cine, s, x}
+##     · skill_hit {chan, tier, id, target_id, idx, n, dmg, window, immune, stun, popped, killed, hp_frac, s, x [, execute,
+##     mini_id, obstacle_id]} · skill_end {chan, tier, id, skipped} · skill_denied {chan, tier, id, reason} · tier_ready
+##     {tier, segs} · item_ready {id, slot} · finisher {id, target_id, execute, s, x} (after the last kill) · skip {what}
+##     · finish_beat {id, finish, beat} (BossSim timeline beats). With config.skills the fight's &"rage" is the ladder
+##     (no bomb event); without it the old rage horn / bomb run.
 
 const _DB := preload("res://core/db.gd")
 const CAUSE_TIER: Dictionary = {"lunge": "fatal", "highbeam": "light", "horn": "light", "smoke": "light", "swerve": "heavy", "selfie": "light"}
@@ -38,6 +46,9 @@ var seed: int = 0
 var player := PlayerSim.new()
 var boss := BossSim.new()
 var weapons := WeaponsSim.new()
+var skills := SkillsSim.new()
+## Progress.loadout() from tables.options.loadout ({} = defaults): finish, items, rage_start_segs.
+var loadout: Dictionary = {}
 var bridge := TrafficBridge.new()
 var autopilot: Autopilot = null
 var force_fallback: bool = false
@@ -100,6 +111,11 @@ var _in_rage: bool = false
 var _in_retry: bool = false
 var _in_continue: bool = false
 var _in_jump: bool = false
+var _in_rage_tier: int = 0
+var _in_item: int = 0
+var _in_skip: bool = false
+var _ts: float = 1.0
+var _kill_finish: String = ""
 var _fire_held: bool = false
 var _fire_prev: bool = false
 var _brake_held: bool = false
@@ -116,7 +132,8 @@ var _night: bool = false
 
 
 ## stage: stages.json record. tables: DB.traffic_tables() ({config, vehicle_kinds, mini_types, approach});
-## {} loads them from res://data. Optional tables.options: {intro_hold: bool (wait for &"continue"), finish: String}.
+## {} loads them from res://data. Optional tables.options: {intro_hold: bool (wait for &"continue"), finish: String,
+## loadout: Progress.loadout() (finish, items → item1/item2, rage_start_segs)}.
 ## seed < 0 → the stage's traffic seed (id*1000+7); boss / weapon / cosmetic RNGs derive from it.
 func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 	stage = p_stage
@@ -132,9 +149,19 @@ func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 		hpc[k] = config["hp"][k]
 	var opts: Dictionary = tables.get("options", {}) if tables.get("options") is Dictionary else {}
 	intro_hold = bool(opts.get("intro_hold", false))
+	loadout = opts.get("loadout", {}) if opts.get("loadout") is Dictionary else {}
+	bc = bc.duplicate()
 	if opts.has("finish"):
-		bc = bc.duplicate()
 		bc["finish"] = str(opts["finish"])
+	elif str(loadout.get("finish", "")) != "":
+		bc["finish"] = str(loadout["finish"])
+	var skc: Dictionary = config.get("skills", {}) if config.get("skills") is Dictionary else {}
+	if not skc.is_empty():
+		bc["hpMul"] = float(skc.get("hpMul", 1.0)) * float(p_stage.get("skillHpMul", 1.0))
+		bc["finishTimeline"] = skc.get("finish", {})
+		bc["stunCap"] = skc.get("stunCap", 2.0)
+		bc["stunImmune"] = skc.get("stunImmune", 1.5)
+	skills.setup(skc, tune, loadout)
 	seed = p_seed if p_seed >= 0 else Mulberry32.traffic_seed(int(stage.get("id", 1)))
 	_fx_rng.seed = seed * 31 + 5
 	_leader_cb = _leader
@@ -160,6 +187,7 @@ func setup(p_stage: Dictionary, p_tables: Dictionary, p_seed: int) -> void:
 	_events.clear()
 	_result = {}
 	_setup_stage()
+	rage = minf(1.0, float(int(loadout.get("rage_start_segs", 0))) / float(tune.get("rageSegs", 5)))
 	min_hp = hp
 	phase = &""
 	_enter(&"intro")
@@ -209,6 +237,8 @@ func _setup_stage() -> void:
 		if int(buf[k * TrafficBridge.STRIDE + 7]) & TrafficBridge.LAMP_MINI:
 			minis_total += 1
 	bridge.set_villains(_villain_records())
+	skills.reset_run()
+	_kill_finish = ""
 
 
 ## main.js stageDamageMul: 1-1~1-3 ×0.5, 1-4~1-6 ×0.8, then ×1.0 → ×1.3 by chapter 10.
@@ -232,6 +262,13 @@ func input(cmd: StringName, value: Variant = null) -> void:
 			_fire_held = true if value == null else bool(value)
 		&"rage":
 			_in_rage = true
+			_in_rage_tier = int(value) if value != null else 0
+		&"item1":
+			_in_item = 1
+		&"item2":
+			_in_item = 2
+		&"skip":
+			_in_skip = true
 		&"brake":
 			_brake_held = true if value == null else bool(value)
 		&"retry":
@@ -287,6 +324,12 @@ func _enter(name: StringName) -> void:
 			hitstop = float(kc.get("hitstop", 0.16))
 			slow_until = real_time + float(kc.get("slowFor", 1.25))
 			slow_scale = float(kc.get("slow", 0.28))
+			if skills.enabled:  # SKILLS §4: impact hitstop, slow-mo until the finish's settle beat, then normal speed
+				var fc: Dictionary = skills.cfg.get("finish", {})
+				var tl: Dictionary = fc.get(_kill_finish, {}) if fc.get(_kill_finish) is Dictionary else {}
+				hitstop = float(fc.get("hitstop", 0.14))
+				slow_until = real_time + maxf(hitstop, float(tl.get("settle", 0.5)))
+				slow_scale = float(fc.get("slow", 0.3))
 		&"release":
 			var ol: int = _open_lane()
 			bridge.release(traffic_time, ol)
@@ -319,6 +362,8 @@ func step(dt: float) -> void:
 	elif real_time < slow_until:
 		ts = slow_scale
 	var sdt: float = dt * ts
+	_ts = ts
+	skills.time_scale = ts
 	time += sdt
 	phase_t += sdt
 	phase_real += dt
@@ -336,6 +381,9 @@ func step(dt: float) -> void:
 	var want_retry: bool = _in_retry
 	var want_continue: bool = _in_continue
 	var want_jump: bool = _in_jump
+	var want_tier: int = _in_rage_tier
+	var want_item: int = _in_item
+	var want_skip: bool = _in_skip
 	var fire_edge: bool = _fire_held and not _fire_prev
 	_fire_prev = _fire_held
 	_in_lane = 0
@@ -344,6 +392,9 @@ func step(dt: float) -> void:
 	_in_retry = false
 	_in_continue = false
 	_in_jump = false
+	_in_rage_tier = 0
+	_in_item = 0
+	_in_skip = false
 
 	if ph == &"fail":
 		if want_retry or want_continue:
@@ -392,11 +443,17 @@ func step(dt: float) -> void:
 
 	if want_jump and jam_like and player.jump():
 		_emit({"type": "bubble", "who": "player", "id": -1, "text": "참교육 점프!", "kind": "score", "dur": 1.0})
+	if want_skip and skills.enabled:
+		skills.skip(self)
 	if want_rage:
-		if jam_like:
+		if skills.enabled:
+			skills.rage(self, want_tier)
+		elif jam_like:
 			_rage_horn()
 		elif ph == &"boss":
 			_bomb()
+	if want_item != 0 and skills.enabled:
+		skills.item(self, want_item)
 	if jam_like and _fire_held and mini_id != 0 and boss_behind.is_empty() and weapons.cool <= 0.0:
 		var ci: Dictionary = bridge.car_info(mini_id)
 		if not ci.is_empty():
@@ -442,7 +499,7 @@ func step(dt: float) -> void:
 	# boss
 	var bev: Array[Dictionary] = boss.update(sdt, {"time": time, "phase": ph, "player": player,
 		"player_behind": ph == &"boss" and not front_locked, "lane_free": _lane_free, "traffic": bridge,
-		"night": _night})
+		"night": _night, "real_dt": dt})
 	for e: Dictionary in bev:
 		match str(e["type"]):
 			"player_hit":
@@ -454,7 +511,10 @@ func step(dt: float) -> void:
 			"gone":
 				_emit(e)
 				if bool(e["is_last"]):
-					release_at = real_time + float((bc.get("kill", {}) as Dictionary).get("releaseDelay", 0.95))
+					var rd: float = float((bc.get("kill", {}) as Dictionary).get("releaseDelay", 0.95))
+					if skills.enabled:
+						rd = float((skills.cfg.get("finish", {}) as Dictionary).get("releaseDelay", rd))
+					release_at = real_time + rd
 			"bubble":
 				if bool(e.get("taunt", false)) and ph in [&"jam", &"boss"]:
 					var tv: Dictionary = boss.villains[int(e["id"])]
@@ -463,6 +523,9 @@ func step(dt: float) -> void:
 				_emit(e)
 			_:
 				_emit(e)
+
+	# skills: queued hits (sim time), cast timers, cooldowns, tier / item ready edges
+	skills.tick(self, sdt, dt)
 
 	# weapons
 	_lock_target = _target() if ph == &"boss" else {}
@@ -708,6 +771,12 @@ func _rage_horn() -> void:
 		_bubble_player("분노 부족!")
 		return
 	rage = maxf(0.0, rage - cost)
+	_rage_horn_effect(float(tune.get("boostTime", 2.2)))
+
+
+## The jam rage horn's effect (legacy &"rage" and SKILLS t1_horn): clear the shoulder ahead (smash / tow / cheaters back
+## in line, startled cars; the GDScript fallback does it too) + boost.
+func _rage_horn_effect(boost: float) -> void:
 	rage_horns += 1
 	sync_traffic_player()
 	var rng_m: float = float(bridge.info().get("rage_horn", tune.get("rageHornRange", 48.0)))
@@ -715,7 +784,7 @@ func _rage_horn() -> void:
 	var ch: int = (r.get("cheaters", PackedInt32Array()) as PackedInt32Array).size()
 	cheaters += ch
 	score += 300 * ch
-	player.boost_t = float(tune.get("boostTime", 2.2))
+	player.boost_t = boost
 	_emit({"type": "rage_horn", "smashed": r.get("smashed"), "towed": r.get("towed"), "cheaters": r.get("cheaters"), "startled": r.get("startled")})
 
 
@@ -745,14 +814,7 @@ func _on_landing(ld: Dictionary) -> void:
 		var r: String = bridge.mini_hit(int(ld["mini_id"]), float((wc.get("tack", {}) as Dictionary).get("dmg", 1)) * float(bc.get("vulnMul", 4)))
 		if r == "":
 			return
-		combo += 1
-		max_combo = maxi(max_combo, combo)
-		_emit({"type": "hit", "target_id": -1, "mini_id": int(ld["mini_id"]), "kind": "mini", "dmg": 4.0, "window": false, "popped": 0,
-			"s": ld["s"], "x": ld["x"], "down": r == "down"})
-		if r == "down":
-			minis_done += 1
-			score += 400
-			_heal(int(hpc.get("healMini", 10)), "정비 쿠폰 +")
+		_mini_result(int(ld["mini_id"]), r, float(ld["s"]), float(ld["x"]))
 		return
 	if not bool(ld["hit"]):
 		if str(ld["kind"]) == "tack" and phase == &"boss" and boss.any_alive() and real_time - _miss_t > float((wc.get("tack", {}) as Dictionary).get("missEvery", 0.4)):
@@ -775,16 +837,40 @@ func _on_landing(ld: Dictionary) -> void:
 		"kind": "bomb" if bomb else "tack", "popped": r2["popped"], "hp_frac": boss.hp_frac(), "s": ld["s"], "x": ld["x"]})
 	if bomb and not bool(r2["window"]):
 		_bubble_player("지금 아냐!", "warn", 1.0)
+	if bool(r2["window"]) and not bomb:
+		skills.on_window_hit(self)
 	if bool(r2["killed"]):
-		var is_last: bool = not boss.any_alive()
-		var lanes: PackedInt32Array = boss.start_death(v, is_last)
-		_emit({"type": "kill", "id": int(v["index"]), "finish": str(v["finish"]), "last": is_last, "s": v["s"], "x": v["x"]})
-		if not lanes.is_empty():
-			bridge.drop_walls(lanes, 9.0)
-			_emit({"type": "pullover", "id": int(v["index"]), "lanes": lanes})
-		if is_last:
-			kill_s = float(v["s"])
-			_enter(&"kill")
+		_villain_killed(v, false)
+
+
+## A mini villain hit by a tack or caught by the drone: "hit" {kind: mini}, and on "down" the catch reward.
+func _mini_result(mini_id: int, r: String, s: float, x: float) -> void:
+	combo += 1
+	max_combo = maxi(max_combo, combo)
+	_emit({"type": "hit", "target_id": -1, "mini_id": mini_id, "kind": "mini", "dmg": 4.0, "window": false, "popped": 0,
+		"s": s, "x": x, "down": r == "down"})
+	if r == "down":
+		minis_done += 1
+		score += 400
+		_heal(int(hpc.get("healMini", 10)), "정비 쿠폰 +")
+
+
+## Kill path for tacks, the legacy bomb and skills: start_death → kill (+ pullover walls); the last one → finisher
+## (SKILLS) → kill phase. execute: the t5 execution did it.
+func _villain_killed(v: Dictionary, execute: bool) -> void:
+	var is_last: bool = not boss.any_alive()
+	var lanes: PackedInt32Array = boss.start_death(v, is_last)
+	_emit({"type": "kill", "id": int(v["index"]), "finish": str(v["finish"]), "last": is_last, "s": v["s"], "x": v["x"]})
+	if not lanes.is_empty():
+		bridge.drop_walls(lanes, 9.0)
+		_emit({"type": "pullover", "id": int(v["index"]), "lanes": lanes})
+	if is_last:
+		kill_s = float(v["s"])
+		_kill_finish = str(v["finish"])
+		if skills.enabled:
+			_emit({"type": "finisher", "id": _kill_finish, "target_id": int(v["index"]), "execute": execute, "s": v["s"], "x": v["x"]})
+			skills.end_all(self)
+		_enter(&"kill")
 
 
 func _wreck(reason: String) -> void:
@@ -849,6 +935,9 @@ func hint() -> String:
 			if boss.danger_lanes(player).has(player.lane):
 				return "피해! 차로 바꿔"
 			if window_left() > 0.0:
+				if skills.enabled:
+					var nt: int = skills.next_tier(self)
+					return "지금! 몰아쳐라" if nt == 0 else ("지금! 참교육" if nt == 5 else "지금! 압정 폭격" if nt == 3 else "지금! 경적 충격파")
 				return "지금! 분노 폭탄" if rage >= float(tune.get("superCost", 0.2)) - 1e-6 else "지금! 몰아쳐라"
 			var bh: String = str(boss.beh.get("hint")) if boss.beh != null and "hint" in boss.beh else ""
 			return bh if bh.length() <= 16 and bh != "" else "발사 꾹 · 공격 피하기"
@@ -857,12 +946,15 @@ func hint() -> String:
 
 ## Seconds left in the signature window of the first alive villain (0 = closed).
 func window_left() -> float:
+	var stun: float = 0.0
+	for v: Dictionary in boss.alive():
+		stun = maxf(stun, float(v.get("stun_skill", 0.0)))  # SKILLS: a skill stun is a window too
 	if boss.beh != null and boss.beh.has_method(&"window_left"):
-		return float(boss.beh.call(&"window_left", boss))
+		return maxf(stun, float(boss.beh.call(&"window_left", boss)))
 	for v: Dictionary in boss.alive():
 		if bool(boss.vuln(v)["window"]):
-			return 1.0
-	return 0.0
+			return maxf(stun, 1.0)
+	return stun
 
 
 func state() -> Dictionary:
@@ -874,6 +966,7 @@ func state() -> Dictionary:
 			"lane": roundi(float(v["lane_pos"])), "lane_pos": v["lane_pos"], "hp": maxf(0.0, float(v["hp"])), "hp_max": v["max_hp"],
 			"alive": v["alive"], "dying": v["dying"], "gone": v["gone"], "parked": v["parked"], "tell": boss.tell_of(v),
 			"vulnerable": bool(v["alive"]) and wl > 0.0, "window_left": wl if bool(v["alive"]) else 0.0, "tires": v["tires"],
+			"stun_skill": float(v.get("stun_skill", 0.0)),
 			"popped": v["popped"], "yaw": v["yaw"], "nose": v["nose"], "tilt_x": v["tilt_x"], "tilt_z": v["tilt_z"], "y": v["y"],
 			"rot": v["rot"], "flash": v["flash"], "headlights": v["headlights"], "blinker": v["blinker"], "finish": v["finish"],
 			"death_t": v["death_t"], "len": v["len"], "w": v["w"], "lunge_off": v["lunge_off"], "taunt": v["taunt"]})
@@ -902,9 +995,15 @@ func state() -> Dictionary:
 		"stats": {"score": score, "combo": combo, "fails": fails, "minis_done": minis_done, "minis_total": minis_total,
 			"pay_mul": pay_retry_mul, "stage_time": stage_clock, "boss_time": boss_clock},
 	}
+	out["skills"] = skills.state(self)
 	if phase == &"result":
 		out["result"] = _result
 	return out
+
+
+## Sim time scale of the last tick (0 in hitstop, slow_scale in slow-mo): the view advances FX by real dt × this.
+func time_scale() -> float:
+	return _ts
 
 
 func _make_result() -> Dictionary:
@@ -933,4 +1032,4 @@ func _make_result() -> Dictionary:
 		"pay_mul": pay_retry_mul, "freed": freed, "saved_hours": saved_h, "cath": cath, "bumps": bumps, "hits": hits,
 		"shots": _shots_total + weapons.shots, "hits_taken": hits_taken, "supers": supers, "minis_done": minis_done, "minis_total": minis_total,
 		"cheaters": cheaters, "rage_horns": rage_horns, "villain_name": " · ".join(names), "stage_id": int(stage.get("id", 0)),
-		"stats": st}
+		"stats": st, "skills": skills.counts.duplicate()}

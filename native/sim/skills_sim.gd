@@ -161,6 +161,22 @@ func next_tier(sim: GameSim) -> int:
 	return r.max() if not r.is_empty() else 0
 
 
+## A cast of this tier would find a target now (t1: a villain within range and ±laneRange of the player's lane).
+func has_target(sim: GameSim, tier: int) -> bool:
+	var m: String = mode(sim)
+	if m == "jam":
+		return true
+	if m == "off":
+		return false
+	if tier != 1:
+		return not _primary(sim).is_empty()
+	var c: Dictionary = _tc(1)
+	for v: Dictionary in sim.boss.alive():
+		if absf(float(v["s"]) - sim.player.s) <= float(c.get("range", 30.0)) and _near_lane(v, sim.player.lane, int(c.get("laneRange", 1))):
+			return true
+	return false
+
+
 func busy(chan: String) -> bool:
 	if active.has(chan):
 		return true
