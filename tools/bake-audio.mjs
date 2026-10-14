@@ -9,6 +9,7 @@
 //
 // Outputs (all in --out, names = what native/autoload/audio.gd plays):
 //   <sfx>.wav            every name in audio.js SFX{} + "cheer" (cheerHorns 대~한민국 합주), 16-bit PCM, mono unless L≠R
+//   sk_*.wav fin_*.wav   native-only skill / finisher SFX (SKILL_SFX + SKILL_SRC below, docs/SKILLS.md 2-6)
 //   mus_<song>.ogg       menu/jam/boss/release, seamless loops (release keeps its 2-bar intro → loop_offset)
 //   amb_<kind>.ogg       jam (idle hum + distant honks, stereo) / free (wind), seamless loops
 //   eng_lo.wav eng_hi.wav  engine tone at f_ref (throttle 0.4 / 1.0), exact-period loops; eng_road.wav road noise loop
@@ -77,6 +78,121 @@ const engState = (v, th) => { // audio.js setEngine() model, used to pick the ba
 const rpmRef = (ENG.f_ref - ENG.f[0]) / ENG.f[1];
 const vRef = ((rpmRef - ENG.rpm[0]) / ENG.rpm[1]) * (ENG.gears[1] - ENG.gears[0]) + ENG.gears[0]; // gear 0
 
+// ───────────────────────────── native-only skill SFX (docs/SKILLS.md 2-6)
+// audio.js is frozen and exports no synth helpers, so the skill / finisher recipes live here as their own browser module
+// (served as /skill_sfx.js) and render in the same OfflineAudioContext, pre-compressor, through the web sfx bus gain 0.9.
+// Voice-limit rows use the audio.js SFX{} fields; `seconds` is the render length (the tail is trimmed afterwards).
+const SKILL_SFX = {
+  sk_charge:  { g: 1, dur: 0.45, max: 1, gap: 0.2,  stagger: 0, pri: 2, seconds: 0.8 },  // t5 telegraph: rising whine 0.35 s
+  sk_carpet:  { g: 1, dur: 0.5,  max: 2, gap: 0.15, stagger: 0, pri: 1, seconds: 0.9 },  // t3: metal tack rain 0.4 s
+  sk_drone:   { g: 1, dur: 0.8,  max: 1, gap: 0.3,  stagger: 0, pri: 1, seconds: 1.2 },  // drone dive: doppler whine 0.7 s
+  sk_land:    { g: 1, dur: 0.35, max: 2, gap: 0.12, stagger: 0, pri: 2, seconds: 0.8 },  // jump landing: sub thud
+  sk_wave:    { g: 1, dur: 0.5,  max: 2, gap: 0.15, stagger: 0, pri: 2, seconds: 0.9 },  // t1 shockwave: low "bwom" + air
+  sk_tier1:   { g: 1, dur: 0.3,  max: 1, gap: 0.2,  stagger: 0, pri: 1, seconds: 0.8 },  // ready chimes
+  sk_tier3:   { g: 1, dur: 0.45, max: 1, gap: 0.2,  stagger: 0, pri: 1, seconds: 1.0 },
+  sk_tierMax: { g: 1, dur: 0.9,  max: 1, gap: 0.3,  stagger: 0, pri: 2, seconds: 1.6 },
+  fin_rocket: { g: 1, dur: 1.6,  max: 1, gap: 0.5,  stagger: 0, pri: 2, seconds: 2.2 },  // finisher stingers ≤ 2 s
+  fin_balloon:{ g: 1, dur: 1.5,  max: 1, gap: 0.5,  stagger: 0, pri: 2, seconds: 2.0 },
+  fin_heli:   { g: 1, dur: 1.9,  max: 1, gap: 0.5,  stagger: 0, pri: 2, seconds: 2.4 },
+  fin_ufo:    { g: 1, dur: 1.9,  max: 1, gap: 0.5,  stagger: 0, pri: 2, seconds: 2.4 },
+};
+const SKILL_SRC = String.raw`
+const T0 = 0.02;
+function noise(c, sec) { const n = Math.ceil(sec * c.sampleRate), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
+function gainAt(c, out, v = 0) { const g = c.createGain(); g.gain.value = v; g.connect(out); return g; }
+function env(p, t, a, peak, hold, rel, floor = 0.0001) { p.setValueAtTime(floor, t); p.linearRampToValueAtTime(peak, t + a);
+  p.setValueAtTime(peak, t + a + hold); p.exponentialRampToValueAtTime(floor, t + a + hold + rel); }
+function osc(c, type, f, out, t, dur) { const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t);
+  o.connect(out); o.start(t); o.stop(t + dur + 0.05); return o; }
+function nsrc(c, out, t, dur) { const s = c.createBufferSource(); s.buffer = noise(c, dur + 0.05); s.connect(out); s.start(t); s.stop(t + dur + 0.05); return s; }
+function filt(c, type, f, q, out) { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.connect(out); return b; }
+function ping(c, out, t, f, dur, v, type = 'sine') { const g = gainAt(c, out); env(g.gain, t, 0.002, v, 0, dur); osc(c, type, f, g, t, dur); }
+function boom(c, out, t, f0, f1, dur, v) { const g = gainAt(c, out); env(g.gain, t, 0.004, v, 0.02, dur);
+  const o = osc(c, 'sine', f0, g, t, dur); o.frequency.exponentialRampToValueAtTime(f1, t + dur); }
+function hiss(c, out, t, dur, v, type, f0, f1, q = 0.8) { const b = filt(c, type, f0, q, gainAt(c, out, 1)); b.frequency.setValueAtTime(f0, t);
+  b.frequency.exponentialRampToValueAtTime(f1, t + dur); const g = c.createGain(); g.gain.value = 0; g.connect(b); env(g.gain, t, dur * 0.25, v, 0, dur * 0.75);
+  nsrc(c, g, t, dur); return b; }
+export const skill = {
+  sk_charge(c, out) { // saw pair 180 → 900 Hz through an opening low-pass, tremolo speeding up, noise riser on top
+    const t = T0, d = 0.38, lp = filt(c, 'lowpass', 700, 4, gainAt(c, out, 1)); lp.frequency.setValueAtTime(700, t);
+    lp.frequency.exponentialRampToValueAtTime(7000, t + d);
+    const g = c.createGain(); g.gain.value = 0; g.connect(lp); g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.32, t + d); g.gain.linearRampToValueAtTime(0.0, t + d + 0.06);
+    for (const det of [-9, 9]) { const o = osc(c, 'sawtooth', 180, g, t, d + 0.06); o.detune.value = det; o.frequency.exponentialRampToValueAtTime(900, t + d); }
+    const trem = c.createGain(); trem.gain.value = 0; trem.connect(g.gain); const lfo = osc(c, 'sine', 10, trem, t, d);
+    lfo.frequency.linearRampToValueAtTime(34, t + d); trem.gain.setValueAtTime(0.0, t); trem.gain.linearRampToValueAtTime(0.12, t + d);
+    hiss(c, out, t, d + 0.04, 0.22, 'bandpass', 900, 7000, 1.4);
+  },
+  sk_carpet(c, out) { // 22 metal clicks over 0.42 s (band-passed noise ticks + two inharmonic pings), rubber thrum under it
+    for (let i = 0; i < 22; i++) { const t = T0 + 0.42 * (i / 22) + Math.random() * 0.016, f = 2600 + Math.random() * 4200;
+      const g = gainAt(c, filt(c, 'bandpass', f, 6, out)); env(g.gain, t, 0.001, 0.9, 0, 0.025); nsrc(c, g, t, 0.04);
+      ping(c, out, t, 1700 + Math.random() * 900, 0.06, 0.07); ping(c, out, t + 0.002, 3100 + Math.random() * 1500, 0.045, 0.05); }
+    const lp = filt(c, 'lowpass', 300, 1, out); const g = c.createGain(); g.gain.value = 0; g.connect(lp);
+    env(g.gain, T0, 0.05, 0.5, 0.25, 0.15); nsrc(c, g, T0, 0.5);
+  },
+  sk_drone(c, out) { // rotor buzz (saw AM at 75 Hz) with a doppler sweep: approach up, pass, fall away
+    const t = T0, d = 0.72, lp = filt(c, 'lowpass', 2600, 2, gainAt(c, out, 1)), g = c.createGain(); g.gain.value = 0; g.connect(lp);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.28, t + d * 0.55); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    const am = c.createGain(); am.gain.value = 0.5; am.connect(g); const buzz = c.createGain(); buzz.gain.value = 0.5; buzz.connect(am.gain);
+    osc(c, 'square', 75, buzz, t, d);
+    for (const [k, det] of [[1, 0], [2.01, 6]]) { const o = osc(c, 'sawtooth', 620 * k, am, t, d); o.detune.value = det;
+      o.frequency.linearRampToValueAtTime(980 * k, t + d * 0.5); o.frequency.linearRampToValueAtTime(560 * k, t + d); }
+    hiss(c, out, t, d, 0.06, 'highpass', 3000, 5000);
+  },
+  sk_land(c, out) { // sub drop 95 → 34 Hz, a low noise thump and a gritty asphalt crunch
+    boom(c, out, T0, 95, 34, 0.32, 0.95); boom(c, out, T0, 190, 60, 0.12, 0.35);
+    const lp = filt(c, 'lowpass', 500, 0.7, out), g = c.createGain(); g.gain.value = 0; g.connect(lp); env(g.gain, T0, 0.002, 0.9, 0.01, 0.09); nsrc(c, g, T0, 0.15);
+    const bp = filt(c, 'bandpass', 1500, 1.2, out), g2 = c.createGain(); g2.gain.value = 0; g2.connect(bp); env(g2.gain, T0 + 0.005, 0.002, 0.45, 0.02, 0.12); nsrc(c, g2, T0, 0.2);
+  },
+  sk_wave(c, out) { // horn shockwave: a falling "bwom" + air rush that sweeps down like the pressure front passing
+    boom(c, out, T0, 140, 45, 0.42, 0.7);
+    const g = gainAt(c, out); env(g.gain, T0, 0.01, 0.22, 0.05, 0.3); const o = osc(c, 'sawtooth', 220, filt(c, 'lowpass', 900, 1, g), T0, 0.4);
+    o.frequency.exponentialRampToValueAtTime(70, T0 + 0.4);
+    hiss(c, out, T0, 0.45, 0.35, 'bandpass', 5000, 400, 0.9);
+  },
+  sk_tier1(c, out) { ping(c, out, T0, 1318.5, 0.22, 0.32, 'triangle'); ping(c, out, T0 + 0.06, 1975.5, 0.3, 0.28, 'triangle'); },
+  sk_tier3(c, out) { [1046.5, 1568, 2093].forEach((f, i) => { ping(c, out, T0 + i * 0.065, f, 0.28, 0.3, 'triangle'); ping(c, out, T0 + i * 0.065, f * 2.01, 0.12, 0.06); }); },
+  sk_tierMax(c, out) { // C major arpeggio up to C7, a sparkle tail with vibrato and a soft sub under the first note
+    [1046.5, 1318.5, 1568, 2093].forEach((f, i) => { ping(c, out, T0 + i * 0.055, f, 0.4, 0.28, 'triangle'); ping(c, out, T0 + i * 0.055, f * 1.5, 0.2, 0.05); });
+    for (let i = 0; i < 9; i++) ping(c, out, T0 + 0.25 + i * 0.07, 3000 + Math.random() * 2500, 0.18, 0.06);
+    boom(c, out, T0, 110, 55, 0.35, 0.4);
+  },
+  fin_rocket(c, out) { // ignition crack, roaring thrust (noise + 48 Hz saw) climbing away (pitch up, low-pass closing)
+    const t = T0; boom(c, out, t, 120, 40, 0.3, 0.8);
+    const lp = filt(c, 'lowpass', 3500, 0.8, gainAt(c, out, 1)); lp.frequency.setValueAtTime(3500, t + 0.05); lp.frequency.exponentialRampToValueAtTime(500, t + 1.5);
+    const g = c.createGain(); g.gain.value = 0; g.connect(lp); env(g.gain, t, 0.05, 0.75, 0.35, 1.1); nsrc(c, g, t, 1.6);
+    const g2 = gainAt(c, lp); env(g2.gain, t, 0.06, 0.3, 0.3, 1.0); const o = osc(c, 'sawtooth', 48, g2, t, 1.5); o.frequency.exponentialRampToValueAtTime(110, t + 1.4);
+    hiss(c, out, t, 0.25, 0.4, 'highpass', 2000, 6000);
+  },
+  fin_balloon(c, out) { // six rubbery pops, then a slide whistle up as the bundle floats away
+    for (let i = 0; i < 6; i++) { const t = T0 + i * 0.06, g = gainAt(c, out); env(g.gain, t, 0.002, 0.45, 0, 0.07);
+      const o = osc(c, 'sine', 260 + i * 40, g, t, 0.08); o.frequency.exponentialRampToValueAtTime(900 + i * 60, t + 0.05);
+      const bp = filt(c, 'bandpass', 2000, 2, out), g2 = c.createGain(); g2.gain.value = 0; g2.connect(bp); env(g2.gain, t, 0.001, 0.4, 0, 0.03); nsrc(c, g2, t, 0.05); }
+    const t = T0 + 0.42, g = gainAt(c, out); env(g.gain, t, 0.08, 0.24, 0.7, 0.35);
+    const o = osc(c, 'sine', 620, g, t, 1.15); o.frequency.exponentialRampToValueAtTime(1650, t + 1.05);
+    const vib = c.createGain(); vib.gain.value = 18; vib.connect(o.frequency); osc(c, 'sine', 6.5, vib, t, 1.15);
+  },
+  fin_heli(c, out) { // rotor whup-whup (noise AM at 11 Hz) fading in, the hook clank at 0.6 s, then away
+    const t = T0, lp = filt(c, 'lowpass', 700, 1.2, gainAt(c, out, 1)), g = c.createGain(); g.gain.value = 0; g.connect(lp);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.35); g.gain.setValueAtTime(0.5, t + 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.95);
+    const am = c.createGain(); am.gain.value = 0.55; am.connect(g); const lfoG = c.createGain(); lfoG.gain.value = 0.45; lfoG.connect(am.gain);
+    const lfo = osc(c, 'sine', 11, lfoG, t, 1.95); lfo.frequency.linearRampToValueAtTime(13, t + 1.9); nsrc(c, am, t, 1.95);
+    const tc = t + 0.6; [1250, 2310, 3470].forEach((f, i) => ping(c, out, tc, f, 0.18 - i * 0.03, 0.22 - i * 0.05));
+    const bp = filt(c, 'bandpass', 3000, 1.5, out), g2 = c.createGain(); g2.gain.value = 0; g2.connect(bp); env(g2.gain, tc, 0.001, 0.6, 0, 0.04); nsrc(c, g2, tc, 0.06);
+  },
+  fin_ufo(c, out) { // wobbling sine with a rising sweep, ring shimmer, and the "bloop" vanish at 1.4 s
+    const t = T0, g = gainAt(c, out); env(g.gain, t, 0.12, 0.26, 1.05, 0.2);
+    const o = osc(c, 'sine', 520, g, t, 1.4); o.frequency.exponentialRampToValueAtTime(980, t + 1.35);
+    const vib = c.createGain(); vib.gain.value = 120; vib.connect(o.frequency); const l = osc(c, 'sine', 7, vib, t, 1.4); l.frequency.linearRampToValueAtTime(14, t + 1.35);
+    const g3 = gainAt(c, out); env(g3.gain, t + 0.1, 0.2, 0.07, 0.9, 0.2); const r = osc(c, 'triangle', 1560, g3, t + 0.1, 1.3);
+    const rm = c.createGain(); rm.gain.value = 300; rm.connect(r.frequency); osc(c, 'sine', 31, rm, t + 0.1, 1.3);
+    const tb = t + 1.4, g2 = gainAt(c, out); env(g2.gain, tb, 0.004, 0.4, 0.02, 0.22); const b = osc(c, 'sine', 1400, g2, tb, 0.26);
+    b.frequency.exponentialRampToValueAtTime(180, tb + 0.24);
+  },
+};
+`;
+
 // ───────────────────────────── render jobs
 const SEED = 0x5eed1007;
 const fnv = (s) => { let h = 0x811c9dc5; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193); } return h >>> 0; };
@@ -103,6 +219,7 @@ for (const [file, th] of [['eng_lo', ENG.throttle[1]], ['eng_hi', ENG.throttle[0
   jobs.push({ kind: 'engine', name: file, file, seconds: 6, seed: SEED ^ fnv(file), v: vRef, th, mute: { buf: true } });
 }
 jobs.push({ kind: 'engine', name: 'road', file: 'eng_road', seconds: 6.5, seed: SEED ^ fnv('road'), v: ENG.road[1], th: ENG.throttle[1], mute: { osc: 'all' } });
+for (const [name, t] of Object.entries(SKILL_SFX)) jobs.push({ kind: 'skill', name, file: name, seconds: t.seconds, seed: SEED ^ fnv(name) });
 const todo = jobs.filter((j) => want(j.file) || want(j.name));
 
 // ───────────────────────────── Chromium
@@ -116,6 +233,7 @@ const page = await browser.newPage();
 await page.route('http://bake.invalid/**', (route) => {
   const p = new URL(route.request().url()).pathname;
   if (p === '/audio.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: src });
+  if (p === '/skill_sfx.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: SKILL_SRC });
   return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>bake</title>' });
 });
 await page.goto('http://bake.invalid/');
@@ -144,7 +262,10 @@ await page.evaluate(({ makeupDb }) => {
     const { audio } = await import(`/audio.js?r=${++rev}`); // fresh module state per render
     const ctx = new OfflineAudioContext(2, Math.ceil(job.seconds * rate), rate);
     audio.init({ context: ctx, noLimiter: true });
-    if (job.kind === 'sfx') audio.play(job.name);
+    if (job.kind === 'skill') { // native-only recipe: same context, web sfx bus gain 0.9, no compressor
+      const { skill } = await import(`/skill_sfx.js?r=${rev}`);
+      const bus = ctx.createGain(); bus.gain.value = 0.9; bus.connect(ctx.destination); skill[job.name](ctx, bus);
+    } else if (job.kind === 'sfx') audio.play(job.name);
     else if (job.kind === 'cheer') audio.cheerHorns();
     else if (job.kind === 'music') audio.startMusic(job.name);
     else if (job.kind === 'amb') audio.startAmbience(job.name);
@@ -273,12 +394,13 @@ function writeOrCheck(fileName, bytes, chs, meta) {
 for (const job of todo) {
   const t0 = Date.now();
   const chs = await render(job);
-  if (job.kind === 'sfx' || job.kind === 'cheer') {
+  if (job.kind === 'sfx' || job.kind === 'cheer' || job.kind === 'skill') {
     let y = trimTail(chs);
     let beat0 = 0;
     if (job.kind === 'cheer') { const from = S(0.06 - 0.04); y = y.map((c) => c.slice(from)); beat0 = 0.04; } // cheer t0 = ctx 0.06 s
     const st = stats(y); const hr = headroom(y); y = hr.chs;
-    const base = job.kind === 'cheer' ? { g: 1, dur: 4.6, max: 1, gap: 1, stagger: 0, pri: 2 } : SFXT[job.name];
+    const skillRow = () => { const { seconds, ...row } = SKILL_SFX[job.name]; return { ...row, note: 'native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)' }; };
+    const base = job.kind === 'cheer' ? { g: 1, dur: 4.6, max: 1, gap: 1, stagger: 0, pri: 2 } : job.kind === 'skill' ? skillRow() : SFXT[job.name];
     const ent = man.sfx[job.name] && job.file !== job.name ? man.sfx[job.name] : { ...base, files: [] };
     if (job.file === job.name) ent.files = [];
     ent.files.push(`${job.file}.wav`);

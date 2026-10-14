@@ -16,7 +16,8 @@ extends RefCounted
 ##   input: &"lane" ±1, &"honk", &"fire" (bool held), &"rage", &"brake" (bool held), &"retry", &"continue", &"jump".
 ##   events (drained by events()): {type: ...}
 ##     phase {phase, from} · boss_phase {boss_phase, label} · lock {} · lane {dir, lane} · hit {target_id, dmg, window, immune, kind: tack|bomb|mini, popped, hp_frac, s, x}
-##     miss {s, x, reason} · fire {target_id, from_s, from_x, to_s, to_x, dur, lob} · bomb {target_id, dur}
+##     miss {s, x, reason} · fire {target_id, from_s, from_x, to_s, to_x, dur, lob} · fire_dry {s, x} (압정 in the jam, no
+##     target — never a honk) · bomb {target_id, dur}
 ##     damage {amount, hp, hp_max, reason, cause, floor} · stun {id, dur} · kill {id, finish} · pullover {id, lanes}
 ##     release {open_lane} · honk {lane} · honk_reply {id, data} (+ the other TrafficBridge events: brake_wave,
 ##     cutin, mini_act, released, auto_tow) · wreck {reason, fails} · retry {fails, pay_mul}
@@ -103,6 +104,7 @@ var _fire_held: bool = false
 var _fire_prev: bool = false
 var _brake_held: bool = false
 var _miss_t: float = -99.0
+var _dry_t: float = -99.0
 var _result: Dictionary = {}
 var _lock_target: Dictionary = {}
 var _intro_go: bool = true
@@ -355,8 +357,11 @@ func step(dt: float) -> void:
 
 	var mini_id: int = bridge.mini_target() if jam_like else 0
 	var boss_behind: Dictionary = _target() if ph == &"boss" and not front_locked else {}
-	if ph == &"jam" and fire_edge and mini_id == 0:
-		want_honk = true
+	# Device feedback 2026-10-14 #3 ("압정버튼을 눌렀는데 경적이 됨"): a 압정 press in the jam without a mini target
+	# used to honk (web main.js:1055 wantHorn parity). 압정 is never the horn now; an idle press gets a dry feedback.
+	if ph == &"jam" and fire_edge and mini_id == 0 and real_time - _dry_t > 0.35:
+		_dry_t = real_time
+		_emit({"type": "fire_dry", "s": player.s, "x": player.x})
 
 	if ph in [&"jam", &"boss", &"cruise"] and lane_dir != 0:
 		sync_traffic_player()

@@ -30,6 +30,7 @@ var hop: float = 0.0
 var mode: StringName = &"jam"
 var ghost: bool = false
 var jump_t: float = 0.0
+var jump_dur: float = 0.75
 var boost_t: float = 0.0
 var brake_on: bool = false
 var slow_time: float = 0.0
@@ -63,6 +64,7 @@ func reset(p_s: float, p_lane: int) -> void:
 	mode = &"jam"
 	ghost = false
 	jump_t = 0.0
+	jump_dur = 0.75
 	boost_t = 0.0
 	brake_on = false
 	slow_time = 0.0
@@ -109,11 +111,16 @@ func knock(back: float, kick: float) -> void:
 	invuln = float((tune.get("hp", {}) as Dictionary).get("invuln", 1.0))
 
 
-func jump() -> bool:
+## hop: air time (sim s). p_invuln > 0: invulnerable that long (SKILLS mv_jump in the fight). boost: the jam hop's
+## forward kick (off in the fight, where the boss-mode follow controller owns the speed). GameSim owns cool / ownership.
+func jump(hop_s: float = 0.75, p_invuln: float = 0.0, boost: bool = true) -> bool:
 	if jump_t > 0.0:
 		return false
-	jump_t = 0.75
-	v = maxf(v, 10.0)
+	jump_dur = maxf(0.05, hop_s)
+	jump_t = jump_dur
+	invuln = maxf(invuln, p_invuln)
+	if boost:
+		v = maxf(v, 10.0)
 	return true
 
 
@@ -221,7 +228,7 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 	land_grace = maxf(0.0, land_grace - dt)
 	if jump_t > 0.0:
 		jump_t = maxf(0.0, jump_t - dt)
-		hop = maxf(hop, sin(PI * (1.0 - jump_t / 0.75)) * 3.4)
+		hop = maxf(hop, sin(PI * (1.0 - jump_t / jump_dur)) * 3.4)
 		if jump_t == 0.0:
 			land_grace = 0.35
 	bump_kick = maxf(0.0, bump_kick - dt * 3.2)

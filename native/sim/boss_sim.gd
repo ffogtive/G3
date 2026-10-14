@@ -8,6 +8,10 @@ extends RefCounted
 ##     it in its lane (the oracle's villain ignored the player, M1a feedback "원흉 차가 뒤에서 앞으로 통과");
 ##   - P0#7 damage: outside the signature window `dmg_out`, inside (vulnerable() > 1) `dmg_in` (GameSim passes both);
 ##   - R1: snapshot()/restore() carry the phase-applied state (attacks, intervalMul, stopped/slow/zig, lane pos).
+##   - docs/SKILLS.md (config.skills, GameSim + SkillsSim): skill_damage() = damage() + a generic skill stun
+##     (v.stun_skill: a window in vuln(), attacks blocked, capped at skills.stunCap per chain, then skills.stunImmune s
+##     of stun immunity), cancel_attack(), force_pop(), execute(); hold pauses the attack clock while a skill is cast;
+##     the death timeline reads skills.finish.<id> (real s via ctx.real_dt) and skip_death() jumps it to `done`.
 ##
 ## 가설: ✅ boss.js is ~600 lines of logic + ~250 of mesh/fx; the logic part ports 1:1 when every mesh write
 ##       becomes a state field the view reads (tell, headlights, nose, tilt, popped, y, hazards()).
@@ -37,6 +41,12 @@ var rng := RandomNumberGenerator.new()
 var vuln_mul: float = 4.0
 var immune_below: float = 0.3
 var _vuln_pop_t: float = -9.0
+## SKILLS: attack clock paused while > 0 (sim s; GameSim sets it while a skill is cast).
+var hold: float = 0.0
+var stun_cap: float = 2.0
+var stun_immune_s: float = 1.5
+## config.skills.finish ({} = the old constants: rocket 0.85 / 2.15 s, balloon·heli·ufo 0.8 + 3.0 / 2.4 s, sim time).
+var finish_tl: Dictionary = {}
 
 
 func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dictionary) -> void:
@@ -46,6 +56,11 @@ func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dic
 	vuln_mul = float(cfg.get("vulnMul", 4.0))
 	immune_below = float(cfg.get("immuneBelow", 0.3))
 	finish_style = str(cfg.get("finish", "rocket"))
+	var hp_mul: float = float(cfg.get("hpMul", 1.0))
+	finish_tl = cfg.get("finishTimeline", {}) if cfg.get("finishTimeline") is Dictionary else {}
+	stun_cap = float(cfg.get("stunCap", 2.0))
+	stun_immune_s = float(cfg.get("stunImmune", 1.5))
+	hold = 0.0
 	villains.clear()
 	beams.clear()
 	waves.clear()
@@ -59,7 +74,7 @@ func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dic
 		var lane: float = float(sp.get("lane", 0.0))
 		var stopped: bool = st.get("stopped") == true
 		var zig: bool = bool(st.get("zig")) if st.get("zig") != null else str(sp.get("kind", "")) == "villainPhone"
-		var hp: float = float(st.get("hp", 100.0))
+		var hp: float = float(st.get("hp", 100.0)) * hp_mul
 		villains.append({
 			"index": i, "kind": str(sp.get("kind", "villainSedan")), "name": str(st.get("name", "원흉")),
 			"color": int(st.get("color")) if st.get("color") != null else -1,
@@ -74,7 +89,7 @@ func spawn(p_stage: Dictionary, specs: Array, p_beh: Object, seed: int, cfg: Dic
 			"finish": "", "death_t": 0.0, "launched": false, "y": 0.0, "vel_y": 0.0, "vel_s": 0.0, "vel_x": 0.0,
 			"spin": Vector3.ZERO, "rot": Vector3.ZERO, "is_last": false, "hit_from_rear": false,
 			"pull_x": 0.0, "pull_s0": 0.0, "pull_dist": 0.0, "parked": false, "headlights": false, "blinker": 0,
-			"force_finish": "",
+			"force_finish": "", "stun_skill": 0.0, "stun_chain": 0.0, "stun_immune": 0.0, "recoil": 0.0, "beat": "",
 		})
 	attack_t = 2.2
 	total_max_hp = 0.0
@@ -207,6 +222,8 @@ func target_for(p: PlayerSim, lane_range: int = 1, behind_range: float = 42.0) -
 ## Signature window state: {window: bool, immune: bool, mul: float (web value)}.
 func vuln(v: Dictionary) -> Dictionary:
 	var m: float = float(beh.call(&"vulnerable", self, v)) if beh != null and beh.has_method(&"vulnerable") else 1.0
+	if float(v.get("stun_skill", 0.0)) > 0.0:
+		m = maxf(m, 1.5)  # SKILLS: a skill stun is a window (×vulnMul tacks), whatever the signature says
 	return {"window": m > 1.001, "immune": m < immune_below, "mul": m}
 
 
@@ -220,6 +237,14 @@ func damage(v: Dictionary, dmg_out: float, dmg_in: float, from_rear: bool) -> Di
 		_vuln_pop_t = time
 		var it: String = str(beh.get("immune_text")) if beh != null and "immune_text" in beh else ""
 		pending.append({"type": "bubble", "who": "villain", "id": int(v["index"]), "text": it if it != "" else "안 맞아!", "kind": "warn", "dur": 1.0})
+	var r: Dictionary = _apply(v, amount, from_rear)
+	r["window"] = vu["window"]
+	r["immune"] = vu["immune"]
+	return r
+
+
+## HP loss + tire pops at 75/50/25 % + kill flag (shared by damage() and skill_damage()).
+func _apply(v: Dictionary, amount: float, from_rear: bool) -> Dictionary:
 	v["hit_from_rear"] = from_rear
 	var before: float = float(v["hp"]) / float(v["max_hp"])
 	v["hp"] = float(v["hp"]) - amount
@@ -235,7 +260,91 @@ func damage(v: Dictionary, dmg_out: float, dmg_in: float, from_rear: bool) -> Di
 	var killed: bool = float(v["hp"]) <= 0.0
 	if killed:
 		v["alive"] = false
-	return {"killed": killed, "popped": popped, "window": vu["window"], "immune": vu["immune"], "dmg": amount, "villain": v}
+	return {"killed": killed, "popped": popped, "dmg": amount, "villain": v}
+
+
+## SKILLS (docs/SKILLS.md §6): damage() for a skill hit. window: -1 = ask vuln() now, 0/1 = decided at the first hit of
+## a multi-hit (so a stun from hit 1 does not turn hits 2..n into window hits). hp_floor > 0 keeps HP ≥ floor
+## (skills.minKillT). stun (sim s) goes through apply_stun(). Returns {killed, popped, window, immune, dmg, stun}.
+func skill_damage(v: Dictionary, dmg_in: float, dmg_out: float, stun: float, from_rear: bool, window: int = -1,
+		hp_floor: float = 0.0) -> Dictionary:
+	if v.is_empty() or not bool(v["alive"]):
+		return {"killed": false, "popped": 0, "window": false, "immune": false, "dmg": 0.0, "stun": 0.0}
+	var vu: Dictionary = vuln(v)
+	var win: bool = bool(vu["window"]) if window < 0 else window == 1
+	var immune: bool = bool(vu["immune"]) and not win
+	var amount: float = dmg_in if win else dmg_out * (float(vu["mul"]) if immune else 1.0)
+	if hp_floor > 0.0:
+		amount = minf(amount, maxf(0.0, float(v["hp"]) - hp_floor))
+	var r: Dictionary = _apply(v, amount, from_rear)
+	r["window"] = win
+	r["immune"] = immune
+	r["stun"] = apply_stun(v, stun) if not bool(r["killed"]) and stun > 0.0 else 0.0
+	return r
+
+
+## Generic skill stun: adds up to stun_cap per chain; when it runs out the villain is stun-immune for stun_immune_s.
+## Returns the stun actually granted (0 while immune or capped).
+func apply_stun(v: Dictionary, dur: float) -> float:
+	if float(v.get("stun_immune", 0.0)) > 0.0 or not bool(v["alive"]):
+		return 0.0
+	var grant: float = minf(dur, maxf(0.0, stun_cap - float(v["stun_chain"])))
+	if grant <= 0.0:
+		return 0.0
+	v["stun_skill"] = float(v["stun_skill"]) + grant
+	v["stun_chain"] = float(v["stun_chain"]) + grant
+	cancel_attack(v)
+	return grant
+
+
+## Cancels the villain's running telegraphs: lunge (tele/go/hold) + a queued swerve lunge + its high beams.
+func cancel_attack(v: Dictionary) -> void:
+	v["lunge"] = {}
+	v["lunge_off"] = 0.0
+	v["lunge_at"] = 0.0
+	v["nose"] = 0.0
+	for b: Dictionary in beams:
+		if int(b["vi"]) == int(v["index"]):
+			b["life"] = 0.0
+			b["t"] = float(b["tele"]) + float(b["on"])  # no hit window left this tick
+
+
+## Pops one more tire (skills.t3.pop) while more than one is left. Returns 1 when it popped.
+func force_pop(v: Dictionary) -> int:
+	if stage.get("honkOnly") == true or int(v["tires"]) <= 1:
+		return 0
+	pop_tire(v)
+	return 1
+
+
+## t5 execute: HP to 0 (GameSim then runs the usual kill → start_death path).
+func execute(v: Dictionary) -> Dictionary:
+	if v.is_empty() or not bool(v["alive"]):
+		return {"killed": false, "popped": 0, "window": false, "immune": false, "dmg": 0.0, "stun": 0.0}
+	var amount: float = maxf(0.0, float(v["hp"]))
+	var r: Dictionary = _apply(v, amount + 1.0, false)
+	r["dmg"] = amount
+	r["killed"] = true
+	v["alive"] = false
+	r["window"] = bool(vuln(v)["window"])
+	r["immune"] = false
+	r["stun"] = 0.0
+	return r
+
+
+## Tap-to-skip: jumps every dying villain's timeline to its finish `done` (skills.finish.<id>.done) so it is gone on
+## the next update. HP / kill results are already final. Returns how many were skipped.
+func skip_death() -> int:
+	var n: int = 0
+	for v: Dictionary in villains:
+		if bool(v["dying"]) and not bool(v["gone"]):
+			var fin: String = str(v["finish"]) if str(v["finish"]) != "" else "rocket"
+			var tl: Dictionary = finish_tl.get(fin, {}) if finish_tl.get(fin) is Dictionary else {}
+			v["death_t"] = maxf(float(v["death_t"]), float(tl.get("done", 1.9)))
+			if fin == "rocket" or fin == "":
+				v["launched"] = true
+			n += 1
+	return n
 
 
 func pop_tire(v: Dictionary) -> void:
@@ -294,8 +403,10 @@ func _sm(x: float) -> float:
 	return c * c * (3.0 - 2.0 * c)
 
 
-## Returns true when the villain just finished its exit (boss.onGone).
-func _update_death(v: Dictionary, dt: float) -> bool:
+## Returns true when the villain just finished its exit (boss.onGone). rdt = real dt (timeline clock with finish_tl).
+func _update_death(v: Dictionary, dt: float, rdt: float = -1.0) -> bool:
+	if not finish_tl.is_empty():
+		return _update_death_tl(v, dt, rdt if rdt >= 0.0 else dt)
 	v["death_t"] = float(v["death_t"]) + dt
 	var t: float = float(v["death_t"])
 	var fin: String = str(v["finish"])
@@ -341,6 +452,64 @@ func _update_death(v: Dictionary, dt: float) -> bool:
 	if t - 0.8 > done and not bool(v["gone"]):
 		v["gone"] = true
 		v["dying"] = false
+		return true
+	return false
+
+
+const _BEATS: Array[String] = ["settle", "lift", "hook", "beam", "twinkle"]
+
+
+## SKILLS §4 finish timeline (skills.finish.<id>, real s from the kill): motion integrates sim dt (so hitstop / slow-mo
+## still freeze / slow it), the beats and `done` run on the real clock. Emits finish_beat {id, finish, beat} once per beat.
+func _update_death_tl(v: Dictionary, dt: float, rdt: float) -> bool:
+	var t0: float = float(v["death_t"])
+	v["death_t"] = t0 + rdt
+	var t: float = float(v["death_t"])
+	var fin: String = str(v["finish"]) if str(v["finish"]) != "" else "rocket"
+	var tl: Dictionary = finish_tl.get(fin, {}) if finish_tl.get(fin) is Dictionary else {}
+	var done: float = float(tl.get("done", 2.0))
+	for b: String in _BEATS:
+		if tl.has(b) and t0 < float(tl[b]) and t >= float(tl[b]):
+			pending.append({"type": "finish_beat", "id": int(v["index"]), "finish": fin, "beat": b})
+	if bool(v["gone"]):
+		return false
+	if fin == "pullover":
+		var kd: float = done / 2.2
+		v["base_s"] = float(v["pull_s0"]) + float(v["pull_dist"]) * _sm(t / (1.9 * kd))
+		v["s"] = v["base_s"]
+		var k: float = _sm((t - 0.45 * kd) / (1.5 * kd))
+		v["x"] = float(v["pull_x"]) + (Cfg.lane_x(Cfg.SHOULDER_LANE) - float(v["pull_x"])) * k
+		v["yaw"] = -sin(k * PI) * 0.25
+	else:
+		v["base_s"] = float(v["base_s"]) + float(v["v_nominal"]) * dt
+		if fin == "rocket":
+			if not bool(v["launched"]) and t > float(tl.get("lift", 0.6)):
+				v["launched"] = true
+				v["vel_x"] = (rng.randf() - 0.5) * 4.0
+				v["vel_y"] = 36.0
+				v["vel_s"] = float(v["v"]) + 6.0
+				v["spin"] = (v["spin"] as Vector3) * 1.8
+			var g: float = -5.0 if bool(v["launched"]) else -26.0
+			v["vel_y"] = float(v["vel_y"]) + g * dt
+			v["y"] = float(v["y"]) + float(v["vel_y"]) * dt
+			v["x"] = float(v["x"]) + float(v["vel_x"]) * dt
+			if not bool(v["launched"]) and float(v["y"]) < 0.0:
+				v["y"] = 0.0
+				v["vel_y"] = absf(float(v["vel_y"])) * 0.45
+			v["s"] = float(v["s"]) + float(v["vel_s"]) * dt
+			v["rot"] = (v["rot"] as Vector3) + (v["spin"] as Vector3) * dt
+		else:
+			# balloon (lift) / heli (hook, then away forward) / ufo (beam, spinning): the view draws the prop
+			var up: float = float(tl.get("lift", tl.get("hook", tl.get("beam", tl.get("settle", 0.5)))))
+			v["s"] = float(v["s"]) + float(v["v_nominal"]) * dt + (6.0 * dt if fin == "heli" and t > up else 0.0)
+			if t > up:
+				v["y"] = float(v["y"]) + (2.0 + (t - up) * 4.5) * dt
+				if fin == "ufo":
+					v["rot"] = (v["rot"] as Vector3) + Vector3(0.0, 6.0 * dt, 0.0)
+	if t >= done:
+		v["gone"] = true
+		v["dying"] = false
+		v["parked"] = fin == "pullover"
 		return true
 	return false
 
@@ -503,16 +672,25 @@ func throw_from(src_s: float, src_x: float, lane: int, p: PlayerSim, kind: Strin
 ## boss_phase (HP phase), bubble, attack, stun, gone {id, is_last}.
 func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 	time = float(ctx.get("time", time + dt))
+	var rdt: float = float(ctx.get("real_dt", dt))
+	hold = maxf(0.0, hold - dt)
 	var events: Array[Dictionary] = []
 	var p: PlayerSim = ctx["player"]
 	var fighting: bool = ctx.get("phase", &"") == &"boss"
 	for v: Dictionary in villains:
 		if bool(v["dying"]):
-			if _update_death(v, dt):
+			if _update_death(v, dt, rdt):
 				events.append({"type": "gone", "id": int(v["index"]), "is_last": bool(v["is_last"]), "finish": str(v["finish"])})
 			continue
 		if not bool(v["alive"]):
 			continue
+		if float(v["stun_skill"]) > 0.0:
+			v["stun_skill"] = maxf(0.0, float(v["stun_skill"]) - dt)
+			if float(v["stun_skill"]) <= 0.0:
+				v["stun_chain"] = 0.0
+				v["stun_immune"] = stun_immune_s
+		elif float(v["stun_immune"]) > 0.0:
+			v["stun_immune"] = maxf(0.0, float(v["stun_immune"]) - dt)
 		v["v"] = v["v_nominal"]
 		# native: never drive through the player sitting right in front in our lane
 		if player_in_lanes(p, BossSim.lanes_of(v)) and p.s > float(v["base_s"]):
@@ -555,6 +733,9 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 				events.append({"type": "player_hit", "cause": "lunge", "text": "들이받기!", "push": 4.0})
 		else:
 			v["nose"] = float(v["nose"]) * exp(-dt * 6.0)
+			if float(v["recoil"]) > 0.0:  # SKILLS t1: knocked 1.5 m back, back in 0.3 s
+				v["recoil"] = maxf(0.0, float(v["recoil"]) - dt)
+				v["lunge_off"] = -1.5 * float(v["recoil"]) / 0.3
 		v["s"] = float(v["base_s"]) + float(v["lunge_off"])
 		if beh != null and beh.has_method(&"motion"):
 			beh.call(&"motion", self, v, dt, ctx)
@@ -586,7 +767,7 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 		if not pe.is_empty():
 			events.append(pe)
 
-	if fighting and any_alive():
+	if fighting and any_alive() and hold <= 0.0:
 		attack_t -= dt
 		if attack_t <= 0.0:
 			var iv: Array = stage.get("attackInterval") if stage.get("attackInterval") is Array else [2.5, 3.5]
@@ -595,7 +776,7 @@ func update(dt: float, ctx: Dictionary) -> Array[Dictionary]:
 			attack_t = (float(iv[0]) + rng.randf() * (float(iv[1]) - float(iv[0]))) * interval_mul
 			var al: Array[Dictionary] = alive()
 			var v: Dictionary = al[rng.randi_range(0, al.size() - 1)]
-			if not (beh != null and beh.has_method(&"blocked") and bool(beh.call(&"blocked", self, v))):
+			if float(v["stun_skill"]) <= 0.0 and not (beh != null and beh.has_method(&"blocked") and bool(beh.call(&"blocked", self, v))):
 				var peaceful: bool = stage.get("honkOnly") == true or attacks.is_empty()
 				var behind: String = "throw"
 				if beh != null and "has_behind_attack" in beh and bool(beh.get("has_behind_attack")):
@@ -726,7 +907,8 @@ func snapshot() -> Dictionary:
 ## Restores snapshot() onto a freshly spawned boss. Longitudinal position stays anchored to the re-spawned jam
 ## front (the traffic is re-spawned around it); everything else comes from the snapshot.
 const _KEEP_FRESH: Array[String] = ["base_s", "s", "lunge_off", "lunge", "lunge_at", "return_at", "v", "taunt", "taunt_until",
-	"next_taunt", "flash", "death_t", "launched", "y", "vel_y", "vel_s", "vel_x", "rot", "headlights"]
+	"next_taunt", "flash", "death_t", "launched", "y", "vel_y", "vel_s", "vel_x", "rot", "headlights", "stun_skill", "stun_chain",
+	"stun_immune", "recoil"]
 
 
 func restore(snap: Dictionary) -> void:

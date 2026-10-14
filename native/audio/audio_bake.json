@@ -145,6 +145,74 @@
    "rms": 0.20906,
    "gain_db": 4.494
   },
+  "fin_balloon": {
+   "g": 1,
+   "dur": 1.5,
+   "max": 1,
+   "gap": 0.5,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "fin_balloon.wav"
+   ],
+   "seconds": 1.575,
+   "channels": 1,
+   "peak": 0.4473,
+   "rms": 0.11245,
+   "gain_db": -6.073
+  },
+  "fin_heli": {
+   "g": 1,
+   "dur": 1.9,
+   "max": 1,
+   "gap": 0.5,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "fin_heli.wav"
+   ],
+   "seconds": 1.8179,
+   "channels": 1,
+   "peak": 0.5047,
+   "rms": 0.03234,
+   "gain_db": -5.024
+  },
+  "fin_rocket": {
+   "g": 1,
+   "dur": 1.6,
+   "max": 1,
+   "gap": 0.5,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "fin_rocket.wav"
+   ],
+   "seconds": 1.574,
+   "channels": 1,
+   "peak": 1.1165,
+   "rms": 0.14435,
+   "gain_db": 1.872
+  },
+  "fin_ufo": {
+   "g": 1,
+   "dur": 1.9,
+   "max": 1,
+   "gap": 0.5,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "fin_ufo.wav"
+   ],
+   "seconds": 1.6709,
+   "channels": 1,
+   "peak": 0.3601,
+   "rms": 0.14209,
+   "gain_db": -7.956
+  },
   "go": {
    "g": 0.7,
    "dur": 0.9,
@@ -304,6 +372,142 @@
    "peak": 0.2737,
    "rms": 0.04999,
    "gain_db": -10.339
+  },
+  "sk_carpet": {
+   "g": 1,
+   "dur": 0.5,
+   "max": 2,
+   "gap": 0.15,
+   "stagger": 0,
+   "pri": 1,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_carpet.wav"
+   ],
+   "seconds": 0.5558,
+   "channels": 1,
+   "peak": 0.3527,
+   "rms": 0.04344,
+   "gain_db": -8.137
+  },
+  "sk_charge": {
+   "g": 1,
+   "dur": 0.45,
+   "max": 1,
+   "gap": 0.2,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_charge.wav"
+   ],
+   "seconds": 0.4699,
+   "channels": 1,
+   "peak": 0.7266,
+   "rms": 0.07381,
+   "gain_db": -1.859
+  },
+  "sk_drone": {
+   "g": 1,
+   "dur": 0.8,
+   "max": 1,
+   "gap": 0.3,
+   "stagger": 0,
+   "pri": 1,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_drone.wav"
+   ],
+   "seconds": 0.7984,
+   "channels": 1,
+   "peak": 0.3812,
+   "rms": 0.03104,
+   "gain_db": -7.462
+  },
+  "sk_land": {
+   "g": 1,
+   "dur": 0.35,
+   "max": 2,
+   "gap": 0.12,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_land.wav"
+   ],
+   "seconds": 0.3698,
+   "channels": 1,
+   "peak": 1.281,
+   "rms": 0.201,
+   "gain_db": 3.066
+  },
+  "sk_tier1": {
+   "g": 1,
+   "dur": 0.3,
+   "max": 1,
+   "gap": 0.2,
+   "stagger": 0,
+   "pri": 1,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_tier1.wav"
+   ],
+   "seconds": 0.3855,
+   "channels": 1,
+   "peak": 0.2734,
+   "rms": 0.04577,
+   "gain_db": -10.349
+  },
+  "sk_tier3": {
+   "g": 1,
+   "dur": 0.45,
+   "max": 1,
+   "gap": 0.2,
+   "stagger": 0,
+   "pri": 1,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_tier3.wav"
+   ],
+   "seconds": 0.4361,
+   "channels": 1,
+   "peak": 0.3247,
+   "rms": 0.0561,
+   "gain_db": -8.855
+  },
+  "sk_tierMax": {
+   "g": 1,
+   "dur": 0.9,
+   "max": 1,
+   "gap": 0.3,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_tierMax.wav"
+   ],
+   "seconds": 1.019,
+   "channels": 1,
+   "peak": 0.5977,
+   "rms": 0.07139,
+   "gain_db": -3.555
+  },
+  "sk_wave": {
+   "g": 1,
+   "dur": 0.5,
+   "max": 2,
+   "gap": 0.15,
+   "stagger": 0,
+   "pri": 2,
+   "note": "native-only skill SFX (bake-audio.mjs SKILL_SRC, docs/SKILLS.md 2-6)",
+   "files": [
+    "sk_wave.wav"
+   ],
+   "seconds": 0.4955,
+   "channels": 1,
+   "peak": 0.8426,
+   "rms": 0.14166,
+   "gain_db": -0.572
   },
   "splat": {
    "g": 0.85,
@@ -711,5 +915,5 @@
    "gain_db": -17.848
   }
  },
- "total_bytes": 5109930
+ "total_bytes": 6095446
 }

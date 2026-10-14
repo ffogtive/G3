@@ -95,6 +95,205 @@
       "note": "GameSim 'damage' (player HP lost, P0#5: the villain's telegraphed attacks)",
       "web": []
     },
+    "finishBalloon": {
+      "android": [
+        {
+          "amp": 0.3,
+          "ms": 8,
+          "t": 0
+        },
+        {
+          "amp": 0.3,
+          "ms": 8,
+          "t": 0.06
+        },
+        {
+          "amp": 0.3,
+          "ms": 8,
+          "t": 0.12
+        },
+        {
+          "amp": 0.3,
+          "ms": 8,
+          "t": 0.18
+        },
+        {
+          "amp": 0.3,
+          "ms": 8,
+          "t": 0.24
+        },
+        {
+          "amp": 0.3,
+          "ms": 8,
+          "t": 0.3
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.3,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.9,
+          "t": 0.06,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.9,
+          "t": 0.12,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.9,
+          "t": 0.18,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.9,
+          "t": 0.24,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.9,
+          "t": 0.3,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 500,
+      "note": "SKILLS.md 4 풍선: one tick per balloon (6 x 0.06 s)"
+    },
+    "finishHeli": {
+      "android": [
+        {
+          "amp": 0.2,
+          "ms": 200,
+          "t": 0
+        },
+        {
+          "amp": 0.8,
+          "ms": 25,
+          "t": 0.6
+        }
+      ],
+      "ios": [
+        {
+          "dur": 1.2,
+          "intensity": 0.25,
+          "sharpness": 0.1,
+          "t": 0,
+          "type": "continuous"
+        },
+        {
+          "intensity": 0.8,
+          "sharpness": 0.6,
+          "t": 0.6,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 500,
+      "note": "SKILLS.md 4 헬기: rotor rumble 1.2 s + hook clank 0.6 s in"
+    },
+    "finishRocket": {
+      "android": [
+        {
+          "amp": 0.6,
+          "ms": 120,
+          "t": 0
+        },
+        {
+          "amp": 0.4,
+          "ms": 10,
+          "t": 1
+        }
+      ],
+      "ios": [
+        {
+          "decayTo": 0.1,
+          "dur": 0.5,
+          "intensity": 0.6,
+          "sharpness": 0.4,
+          "t": 0,
+          "type": "continuous"
+        },
+        {
+          "intensity": 0.4,
+          "sharpness": 1,
+          "t": 1,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 500,
+      "note": "SKILLS.md 4 로켓: ignition rumble 0.5 s 0.6 -> 0.1 + star tick 1.0 s later"
+    },
+    "finishUfo": {
+      "android": [
+        {
+          "amp": 0.2,
+          "ms": 60,
+          "t": 0
+        },
+        {
+          "amp": 0.4,
+          "ms": 60,
+          "t": 0.5
+        },
+        {
+          "amp": 0.6,
+          "ms": 60,
+          "t": 1
+        },
+        {
+          "amp": 0.6,
+          "ms": 12,
+          "t": 1.4
+        }
+      ],
+      "ios": [
+        {
+          "dur": 0.35,
+          "intensity": 0.2,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "continuous"
+        },
+        {
+          "dur": 0.35,
+          "intensity": 0.33,
+          "sharpness": 0.9,
+          "t": 0.35,
+          "type": "continuous"
+        },
+        {
+          "dur": 0.35,
+          "intensity": 0.46,
+          "sharpness": 0.9,
+          "t": 0.7,
+          "type": "continuous"
+        },
+        {
+          "dur": 0.35,
+          "intensity": 0.6,
+          "sharpness": 0.9,
+          "t": 1.05,
+          "type": "continuous"
+        },
+        {
+          "intensity": 0.6,
+          "sharpness": 1,
+          "t": 1.4,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 500,
+      "note": "SKILLS.md 4 UFO: beam hum rising 0.2 -> 0.6 over 1.4 s (stacked steps) + vanish tick"
+    },
     "fire": {
       "android": [
         {
@@ -155,6 +354,83 @@
       ],
       "minIntervalMs": null,
       "web": ["main.js:1078 'horn'"]
+    },
+    "itemDrone": {
+      "android": [
+        {
+          "amp": 0.35,
+          "ms": 10,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.35,
+          "sharpness": 0.9,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "maxPerSecond": 10,
+      "minIntervalMs": 40,
+      "note": "SKILLS.md 3-3 드론 폭격: one call per bomblet (skill_hit idx 0..5)"
+    },
+    "itemJumpLand": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 50,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 1,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.1,
+          "intensity": 0.6,
+          "sharpness": 0.2,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 200,
+      "note": "SKILLS.md 3-3 점프 쿵 landing"
+    },
+    "itemTow": {
+      "android": [
+        {
+          "amp": 0.7,
+          "ms": 25,
+          "t": 0
+        },
+        {
+          "amp": 0.7,
+          "ms": 25,
+          "t": 0.1
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.7,
+          "sharpness": 0.6,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.7,
+          "sharpness": 0.6,
+          "t": 0.1,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 200,
+      "note": "SKILLS.md 3-3 레커 고리 철컥 (M2)"
     },
     "kill": {
       "android": [
@@ -553,6 +829,154 @@
       "minIntervalMs": null,
       "web": ["main.js:790 fx.shake(0.25, 0.2)"]
     },
+    "skillDenied": {
+      "android": [
+        {
+          "amp": 0.35,
+          "ms": 25,
+          "t": 0
+        },
+        {
+          "amp": 0.25,
+          "ms": 25,
+          "t": 0.07
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.45,
+          "sharpness": 0.1,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.3,
+          "sharpness": 0.1,
+          "t": 0.07,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 350,
+      "note": "SKILLS.md 2-1 분노 부족 / cool / busy: dull double knock"
+    },
+    "skillT1": {
+      "android": [
+        {
+          "amp": 0.8,
+          "ms": 60,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.8,
+          "sharpness": 0.5,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.12,
+          "intensity": 0.5,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 120,
+      "note": "SKILLS.md 2-3 t1 경적 충격파 impact (skill_hit t1)"
+    },
+    "skillT3Hit": {
+      "android": [
+        {
+          "amp": 0.6,
+          "ms": 14,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.6,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "maxPerSecond": 10,
+      "minIntervalMs": 40,
+      "note": "SKILLS.md 2-3 t3 압정 폭격: one call per skill_hit (idx 0..3); no slow-mo baked in"
+    },
+    "skillT5Charge": {
+      "android": [
+        {
+          "amp": 0.25,
+          "ms": 100,
+          "t": 0
+        },
+        {
+          "amp": 0.45,
+          "ms": 100,
+          "t": 0.12
+        },
+        {
+          "amp": 0.7,
+          "ms": 100,
+          "t": 0.24
+        }
+      ],
+      "ios": [
+        {
+          "dur": 0.12,
+          "intensity": 0.25,
+          "sharpness": 0.3,
+          "t": 0,
+          "type": "continuous"
+        },
+        {
+          "dur": 0.12,
+          "intensity": 0.45,
+          "sharpness": 0.3,
+          "t": 0.12,
+          "type": "continuous"
+        },
+        {
+          "dur": 0.11,
+          "intensity": 0.7,
+          "sharpness": 0.3,
+          "t": 0.24,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 300,
+      "note": "SKILLS.md 2-3 t5 예고 0.35 s rising 0.25 -> 0.7 (stacked continuous steps; decayTo cannot rise)"
+    },
+    "skillT5Impact": {
+      "android": [
+        {
+          "amp": 1,
+          "ms": 120,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 1,
+          "sharpness": 0.7,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "decayTo": 0,
+          "dur": 0.6,
+          "intensity": 0.6,
+          "sharpness": 0.2,
+          "t": 0,
+          "type": "continuous"
+        }
+      ],
+      "minIntervalMs": 200,
+      "note": "SKILLS.md 2-3 t5 impact = villainKill pattern"
+    },
     "tackHit": {
       "android": [
         {
@@ -572,6 +996,55 @@
       "maxPerSecond": 4,
       "minIntervalMs": 120,
       "web": ["main.js:613 'hit'"]
+    },
+    "tierReady1": {
+      "android": [
+        {
+          "amp": 0.3,
+          "ms": 10,
+          "t": 0
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.3,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 300,
+      "note": "SKILLS.md 2-3 t1 ready"
+    },
+    "tierReady3": {
+      "android": [
+        {
+          "amp": 0.5,
+          "ms": 12,
+          "t": 0
+        },
+        {
+          "amp": 0.5,
+          "ms": 12,
+          "t": 0.06
+        }
+      ],
+      "ios": [
+        {
+          "intensity": 0.5,
+          "sharpness": 0.8,
+          "t": 0,
+          "type": "transient"
+        },
+        {
+          "intensity": 0.5,
+          "sharpness": 0.8,
+          "t": 0.06,
+          "type": "transient"
+        }
+      ],
+      "minIntervalMs": 300,
+      "note": "SKILLS.md 2-3 t3 ready (x2, 60 ms)"
     },
     "tirePop": {
       "android": [

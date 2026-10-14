@@ -135,7 +135,8 @@
       },
       "id": "mv_jump",
       "name": "참교육 점프",
-      "price": 220000
+      "price": 220000,
+      "skill": "mv_jump"
     },
     {
       "cat": "move",
@@ -146,7 +147,8 @@
       },
       "id": "mv_drone",
       "name": "블박 드론",
-      "price": 600000
+      "price": 600000,
+      "skill": "mv_drone"
     },
     {
       "cat": "finish",

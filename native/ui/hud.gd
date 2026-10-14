@@ -5,7 +5,8 @@ extends CanvasLayer
 ##  - top: N1 progress bar + "원흉까지 N m" pill (jam), villain plate = name + HP bar with white damage lag + tires +
 ##    "약점!" tag (boss), combo, release counter sign (release), pause.
 ##  - bottom: ◀ ▶ lanes, 경적, big 압정 (fire, hold) with the P0#2 range ring (green in range, grey out), 분노 with a
-##    charge ring (rage bomb / rage horn), bumper HP + rage rows, speedometer, one-line hint chip (P0#4, ≤ 16 chars).
+##    segmented charge ring (one segment per rage cost, "MAX" glow when full; the only rage gauge — device feedback
+##    2026-10-14 #2 dropped the duplicate rage bar), bumper HP row, speedometer, one-line hint chip (P0#4, ≤ 16 chars).
 ##  - overlays on root: N4 lock-on reticle, pops (hit numbers, "빗나감!"), banners, flash / vignette / kill letterbox,
 ##    result card, fail card.
 ## Driving it (view/game.gd): apply_state(GameSim.state()) every frame, on_event(e) for each drained sim event,
@@ -102,13 +103,13 @@ var _dist: Label
 var _speed: Label
 var _unit: Label
 var _hp_row: Control
-var _rage_row: Control
 var _btn_left: Control
 var _btn_right: Control
 var _btn_horn: Control
 var _btn_fire: Control
 var _btn_rage: Control
 var _fire_ring: Control
+var _rage_ring: Control
 var _gauge: Control
 var _fx: Control
 var _input: LaneInput
@@ -123,6 +124,8 @@ var _hp_prev: float = -1.0
 var _fire_kick: float = -99.0
 var _miss_t: float = -99.0
 var _rage_ready_t: float = -99.0
+var _rage_max_t: float = -99.0
+var _dry_pop_t: float = -99.0
 var _rage_was_ready: bool = false
 var _hint_shown: String = ""
 var _hint_t: float = -99.0
@@ -220,9 +223,7 @@ func _ready() -> void:
 	_chip.offset_top = -334
 	_chip.offset_bottom = -288
 	_hp_row = _custom(_draw_hp)
-	_bottom_left(_hp_row, 112, 330, 222, 182)
-	_rage_row = _custom(_draw_rage)
-	_bottom_left(_rage_row, 112, 330, 176, 136)
+	_bottom_left(_hp_row, 112, 330, 198, 158)  # centred on the speedometer (the rage bar under it is gone)
 	_gauge = _custom(_draw_gauge)
 	_bottom_left(_gauge, 16, 98, 220, 132)
 	_speed = _label("0", 30, Color.WHITE, 5)
@@ -242,6 +243,8 @@ func _ready() -> void:
 	_corner(_btn_fire, false, 14, 16, SZ_FIRE)
 	_btn_rage = _custom(_draw_rage_btn)
 	_corner(_btn_rage, false, 32, 16 + SZ_FIRE + 22, SZ_RAGE)
+	_rage_ring = _custom(_draw_rage_ring)
+	_corner(_rage_ring, false, 32 - 10, 16 + SZ_FIRE + 22 - 10, SZ_RAGE + 20)
 	_btn_horn = _custom(_draw_horn)
 	_corner(_btn_horn, false, 14 + SZ_FIRE + 16, 16, SZ_HORN)
 	_btn_pause = _custom(_draw_pause)
@@ -253,7 +256,7 @@ func _ready() -> void:
 	for b: Control in [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage]:
 		_btn_alpha[b] = IDLE_ALPHA
 		b.modulate.a = IDLE_ALPHA
-	_controls = [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage, _fire_ring, _hp_row, _rage_row, _gauge, _speed, _unit]
+	_controls = [_btn_left, _btn_right, _btn_horn, _btn_fire, _btn_rage, _fire_ring, _rage_ring, _hp_row, _gauge, _speed, _unit]
 	for c: Control in safe.get_children():
 		_vis[c] = 1.0
 	# ── overlays (above the widgets)
@@ -305,7 +308,7 @@ func reserved_rects() -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	if not visible:
 		return out
-	for c: Control in [_bar, _pill, _boss, _chip, _hp_row, _rage_row, _gauge, _btn_left, _btn_right, _btn_horn, _btn_fire,
+	for c: Control in [_bar, _pill, _boss, _chip, _hp_row, _gauge, _btn_left, _btn_right, _btn_horn, _btn_fire,
 			_btn_rage, _btn_pause]:
 		if c.visible:
 			out.append(c.get_global_rect().grow(4.0))
@@ -320,6 +323,27 @@ func button_sizes_pt() -> Dictionary:
 		var c: Control = {"left": _btn_left, "right": _btn_right, "horn": _btn_horn, "fire": _btn_fire, "rage": _btn_rage}[n]
 		out[n] = minf(c.size.x, c.size.y) * k
 	return out
+
+
+## Fill (0..1) of each 분노 ring segment: one segment per rage cost (5 at the default 0.2).
+static func rage_segments(frac: float, cost: float) -> PackedFloat32Array:
+	var n: int = clampi(roundi(1.0 / maxf(0.05, cost)), 1, 10)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i: int in n:
+		out[i] = clampf(clampf(frac, 0.0, 1.0) * float(n) - float(i), 0.0, 1.0)
+	return out
+
+
+## Full 분노 segments (= charges ready at the current cost).
+func rage_level() -> int:
+	var n: int = Hud.rage_segments(rage_frac, rage_cost).size()
+	return clampi(floori(rage_frac * float(n) + 1e-4), 0, n)
+
+
+## Full rage: the 분노 ring glows "MAX".
+func rage_max() -> bool:
+	return rage_frac >= 1.0 - 1e-4
 
 
 func _load_font() -> Font:
@@ -443,6 +467,10 @@ func apply_state(st: Dictionary) -> void:
 	if ready and not _rage_was_ready:
 		_rage_ready_t = now
 	_rage_was_ready = ready
+	if rage_max() and _rage_max_t < 0.0:
+		_rage_max_t = now
+	elif not rage_max():
+		_rage_max_t = -99.0
 	shown = Vector2(clampf(float(st.get("progress", shown.x)), 0.0, 1.0), maxf(0.0, float(st.get("distance_m", shown.y))))
 	_dist.text = distance_text(shown.y)
 	var stats: Dictionary = st.get("stats", {})
@@ -521,6 +549,12 @@ func on_event(e: Dictionary) -> void:
 					pops.pop(wp + Vector3(0, 1.2, 0), "펑크!", "crit")
 			if big:
 				flash(Color(1, 0.95, 0.7, 0.35), 0.1)
+		"fire_dry":  # 압정 in the jam with nothing to aim at (never a honk): dull wobble + a short pop
+			_miss_t = now
+			_haptic("miss")
+			if now - _dry_pop_t > 1.2 and road != null:
+				_dry_pop_t = now
+				pops.pop(road.position(float(e.get("s", player_s)) + 3.0, float(e.get("x", 0.0))) + Vector3(0, 2.0, 0), "조준 대상 없음", "miss")
 		"miss":
 			_miss_t = now
 			if road != null:
@@ -979,11 +1013,6 @@ func _draw_hp(c: Control) -> void:
 	_segments(c, "범퍼", hp_value / hp_max, C_HP if hp_value / hp_max > 0.3 else Color8(0xff, 0x5a, 0x3c), _hp_hit_t, true)
 
 
-func _draw_rage(c: Control) -> void:
-	var rt: float = now - _rage_ready_t
-	_segments(c, "분노", rage_frac, C_RAGE.lightened(0.25 * maxf(0.0, 1.0 - rt / 0.3)) if rt < 0.3 else C_RAGE, -99.0, false)
-
-
 func _draw_left(c: Control) -> void:
 	var o: Vector2 = UiDraw.round_button(c, c.size * 0.5, c.size.x * 0.5, BTN_BLUE, _input != null and _input.is_zone_down("left"))
 	if not UiDraw.draw_icon(c, "left", o, 54):
@@ -1041,11 +1070,16 @@ func _draw_fire_ring(c: Control) -> void:
 			c.draw_arc(ctr, rad, a1, a1 + TAU / float(n) * 0.55, 6, C_NORANGE, 5.0, true)
 
 
-## 분노: charge ring = rage fraction (cost notches); ready → orange face + flame wiggle; "지금!" badge in the window.
+## 분노: segmented charge ring = rage fraction (one segment per cost); ready → orange face + flame wiggle; full →
+## "MAX" badge + pulsing halo; "지금!" badge in the signature window.
+func _rage_pop() -> float:
+	var rt: float = now - _rage_ready_t
+	return 1.0 + 0.18 * (1.0 - UiDraw.back_out(rt / 0.25, 3.0)) if rage_frac >= rage_cost - 1e-6 and rt < 0.25 else 1.0
+
+
 func _draw_rage_btn(c: Control) -> void:
 	var ready: bool = rage_frac >= rage_cost - 1e-6
-	var rt: float = now - _rage_ready_t
-	var pop: float = 1.0 + 0.18 * (1.0 - UiDraw.back_out(rt / 0.25, 3.0)) if ready and rt < 0.25 else 1.0
+	var pop: float = _rage_pop()
 	var ctr: Vector2 = c.size * 0.5
 	c.draw_set_transform(ctr, 0.0, Vector2(pop, pop))
 	var rad: float = c.size.x * 0.5
@@ -1056,20 +1090,46 @@ func _draw_rage_btn(c: Control) -> void:
 		c.draw_circle(Vector2.ZERO, 14, Color8(0xff, 0x5a, 0x1f))
 	c.draw_set_transform(ctr, 0.0, Vector2(pop, pop))
 	UiDraw.text_c(c, o + Vector2(0, 22), "분노", 21, Color.WHITE if ready else Color(1, 1, 1, 0.7), 5, true, 0.0)
-	# charge ring
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## The 분노 charge ring (its own control so it is not ghosted with the idle button: it is the only rage gauge now).
+## One segment per rage cost with gaps as ticks, full segments yellow, the current one partial orange; full rage →
+## white-gold pulse, halo and a "MAX" tag (the "지금!" tag takes that spot in the signature window).
+func _draw_rage_ring(c: Control) -> void:
+	var pop: float = _rage_pop()
+	var ctr: Vector2 = c.size * 0.5
+	var rad: float = SZ_RAGE * 0.5
+	c.draw_set_transform(ctr, 0.0, Vector2(pop, pop))
 	var a0: float = -PI / 2.0
-	c.draw_arc(Vector2.ZERO, rad - 2.0, 0.0, TAU, 48, Color(INK, 0.8), 8.0, true)
-	if rage_frac > 0.0:
-		c.draw_arc(Vector2.ZERO, rad - 2.0, a0, a0 + TAU * rage_frac, 48, Color8(0xff, 0xd2, 0x3f) if ready else C_RAGE, 5.0, true)
-	var notches: int = maxi(1, roundi(1.0 / maxf(0.05, rage_cost)))
-	for i: int in notches:
-		var a: float = a0 + TAU * float(i) / float(notches)
-		c.draw_line(Vector2(cos(a), sin(a)) * (rad - 7.0), Vector2(cos(a), sin(a)) * (rad + 3.0), INK, 2.5)
-	if ready and boss_vuln and phase == &"boss":
-		var pul: float = 1.0 + 0.1 * sin(now * 14.0)
-		c.draw_set_transform(ctr + Vector2(-rad * 0.62, -rad * 0.78), deg_to_rad(-8.0), Vector2(pul, pul) * pop)
+	var segs: PackedFloat32Array = Hud.rage_segments(rage_frac, rage_cost)
+	var n: int = segs.size()
+	var span: float = TAU / float(n)
+	var gap: float = minf(0.2, span * 0.2)
+	var rr: float = rad - 2.0
+	var full: bool = rage_max()
+	if full:  # MAX: pulsing halo behind the ring, a short burst when it fills
+		var burst: float = maxf(0.0, 1.0 - (now - _rage_max_t) / 0.35)
+		var pul: float = 0.5 + 0.5 * sin(now * 10.0)
+		for k: int in 3:
+			c.draw_arc(Vector2.ZERO, rr + 5.0 + 4.0 * float(k) + 8.0 * burst, 0.0, TAU, 56,
+				Color(1.0, 0.86, 0.3, (0.42 - 0.12 * float(k)) * (0.55 + 0.45 * pul) + 0.3 * burst), 4.0, true)
+	c.draw_arc(Vector2.ZERO, rr, 0.0, TAU, 56, Color(INK, 0.9), 12.0, true)
+	for i: int in n:
+		var s0: float = a0 + span * float(i) + gap * 0.5
+		var s1: float = a0 + span * float(i + 1) - gap * 0.5
+		c.draw_arc(Vector2.ZERO, rr, s0, s1, 12, C_OFF, 7.0, true)
+		var part: float = segs[i]
+		if part > 0.0:
+			var col: Color = Color.WHITE.lerp(Color8(0xff, 0xd2, 0x3f), 0.5 + 0.5 * sin(now * 10.0)) if full else \
+				(Color8(0xff, 0xd2, 0x3f) if part >= 1.0 else C_RAGE)
+			c.draw_arc(Vector2.ZERO, rr, s0, s0 + (s1 - s0) * part, 12, col, 7.0, true)
+	var now_tag: bool = rage_frac >= rage_cost - 1e-6 and boss_vuln and phase == &"boss"
+	if now_tag or full:
+		var pul2: float = 1.0 + (0.1 * sin(now * 14.0) if now_tag else 0.07 * sin(now * 10.0))
+		c.draw_set_transform(ctr + Vector2(-rad * 0.62, -rad * 0.78), deg_to_rad(-8.0), Vector2(pul2, pul2) * pop)
 		UiDraw.panel(c, Rect2(Vector2(-36, -16), Vector2(72, 32)), Color8(0xff, 0xd2, 0x3f), 10, 3, 3)
-		UiDraw.text_c(c, Vector2.ZERO, "지금!", 20, INK, 0, true, 0.0)
+		UiDraw.text_c(c, Vector2.ZERO, "지금!" if now_tag else "MAX", 20, INK, 0, true, 0.0)
 	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

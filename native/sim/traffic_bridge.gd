@@ -303,6 +303,8 @@ func set_phase(phase: String, allow_events: bool, jam_like: bool, focus_s: float
 func set_villains(villains: Array[Dictionary]) -> void:
 	_villains_external = true
 	_villains = villains
+	if _creep != null:
+		_creep.villains = villains  # leader / lane queries between steps see this tick's villains (fallback)
 
 
 func villains() -> Array[Dictionary]:
@@ -438,10 +440,14 @@ func cars_in_lane(lane: int, s_min: float, s_max: float) -> PackedInt32Array:
 	return out
 
 
-## traffic.js rageHorn(player, range): {smashed, towed, cheaters, startled} id arrays.
+## traffic.js rageHorn(player, range): {smashed, towed, cheaters, startled} id arrays. The fallback does the same on its
+## shoulder obstacles and lanes 2-3 (docs/SKILLS.md §2-5: the iPhone build runs it; it has no cheaters).
 func rage_horn(range_m: float) -> Dictionary:
 	if _core != null:
 		return _core.call(&"rage_horn", range_m)
+	if _creep != null:
+		var appr: Dictionary = _setup_info.get("approach", {}) if _setup_info.get("approach") is Dictionary else {}
+		return _creep.rage_horn(float(_player["s"]), range_m, 2.0, str(appr.get("shoulder", "open")) == "occupied")
 	return {"smashed": PackedInt32Array(), "towed": PackedInt32Array(), "cheaters": PackedInt32Array(), "startled": PackedInt32Array()}
 
 
@@ -536,6 +542,11 @@ class _Creep:
 	var jam_speed: float = 2.4
 	var front_line: float = 200.0
 	var villain_lanes: Array[bool] = [false, false, false, false]
+	## Boss-sim villain records ({s, x, w, len, v, alive}, TrafficBridge.set_villains / step). Device feedback
+	## 2026-10-14 #1 ("빌런 차 뒤에섰을때 앞으로 통과"): the fallback leader / merge / honk checks only knew NPC cars and
+	## shoulder obstacles, so the player drove straight through the villain. Villains are leaders and lane blockers here
+	## like in the C++ buckets (ids -100 - index, traffic.cpp set_villain).
+	var villains: Array[Dictionary] = []
 	var released: bool = false
 	var night: bool = false
 	var t: float = 0.0
@@ -663,10 +674,11 @@ class _Creep:
 			_order.append(PackedInt32Array(idx))
 		_order_dirty = false
 
-	func step(dt: float, time: float, player: Dictionary, villains: Array[Dictionary], _phase: String) -> void:
+	func step(dt: float, time: float, player: Dictionary, p_villains: Array[Dictionary], _phase: String) -> void:
 		t = time
 		if _order_dirty:
 			_rebuild_order()
+		villains = p_villains
 		for vd: Dictionary in villains:
 			if bool(vd.get("alive", true)):
 				front_line = float(vd.get("baseS", vd["s"]))
@@ -744,6 +756,12 @@ class _Creep:
 			if gap > 0.0 and gap < best:
 				best = gap
 				who = i
+		for k: int in villains.size():
+			var vd: Dictionary = villains[k]
+			if _Creep.villain_in_lane(vd, p_lane):
+				var gv: float = (float(vd["s"]) - float(vd["len"]) / 2.0) - (p_s + p_len / 2.0 - 0.5)
+				if gv > 0.0 and gv < best and gv <= 16.0:
+					return {"kind": "villain", "id": -100 - k}  # the villain never yields (traffic.js honk)
 		if who < 0 or best > 16.0:
 			return {"kind": "", "id": 0}
 		if is_nan(wall_off[who]) and lc_t[who] >= 1.0 and p_lane < 4:
@@ -764,9 +782,38 @@ class _Creep:
 			for o: Variant in obstacles:
 				if int((o as Dictionary)["id"]) == int(g["id"]):
 					g["smash"] = bool((o as Dictionary).get("smash", false))
+		elif str(g["type"]) == "villain":
+			g["v"] = float((villains[-100 - int(g["id"])] as Dictionary).get("v", 0.0))
 		else:
 			g["v"] = v[int(g["id"]) - 1] if int(g["id"]) > 0 else 0.0
 		return g
+
+	## traffic.js occupies(): |x - laneX(lane)| < w/2 + LANE_W/2 - 0.6 (alive villains only, like alive_villains_).
+	static func villain_in_lane(vd: Dictionary, l: int) -> bool:
+		return bool(vd.get("alive", true)) and absf(float(vd["x"]) - Cfg.lane_x(l)) < float(vd["w"]) / 2.0 + Cfg.LANE_W / 2.0 - 0.6
+
+	## traffic_core.cpp rage_horn on the creep (no cheaters here): shoulder obstacles in [p_s - behind, p_s + range] are
+	## smashed (cones / debris) or towed (breakdown, only when tow_ok), NPCs in lanes 2-3 in range are startled.
+	func rage_horn(p_s: float, range_m: float, behind: float, tow_ok: bool) -> Dictionary:
+		var smashed := PackedInt32Array()
+		var towed := PackedInt32Array()
+		var startled := PackedInt32Array()
+		var keep: Array = []
+		for o: Variant in obstacles:
+			var od: Dictionary = o
+			var os: float = float(od["s"])
+			var sm: bool = bool(od.get("smash", false))
+			if os < p_s - behind or os > p_s + range_m or not (sm or tow_ok):
+				keep.append(od)
+			elif sm:
+				smashed.append(int(od["id"]))
+			else:
+				towed.append(int(od["id"]))
+		obstacles = keep
+		for i: int in n:
+			if not released and s[i] >= p_s - behind and s[i] <= p_s + range_m and lane[i] >= 2 and is_nan(wall_off[i]):
+				startled.append(ids[i])
+		return {"smashed": smashed, "towed": towed, "cheaters": PackedInt32Array(), "startled": startled}
 
 	## Device feedback 2026-10-14 ("갓길 장애물 그냥 통과함"): without the C++ ext the shoulder had no leaders, so the
 	## player drove through the breakdown car and cones. Smashable obstacles go away when hit; the breakdown stays.
@@ -802,6 +849,15 @@ class _Creep:
 					best = go
 					who = int(od["id"])
 					typ = "obstacle"
+		for k: int in villains.size():
+			var vd: Dictionary = villains[k]
+			if _Creep.villain_in_lane(vd, l):
+				var vh: float = float(vd["len"]) / 2.0
+				var gv: float = float(vd["s"]) - vh - front
+				if float(vd["s"]) > front - vh and gv < best:
+					best = gv
+					who = -100 - k
+					typ = "villain"
 		return {"gap": best, "id": who, "type": typ}
 
 	func lane_free(l: int, p_s: float, p_len: float) -> bool:
@@ -817,6 +873,9 @@ class _Creep:
 				var od: Dictionary = o
 				if float(od["s"]) + float(od["len"]) / 2.0 > lo and float(od["s"]) - float(od["len"]) / 2.0 < hi:
 					return false
+		for vd: Dictionary in villains:
+			if _Creep.villain_in_lane(vd, l) and float(vd["s"]) + float(vd["len"]) / 2.0 > lo and float(vd["s"]) - float(vd["len"]) / 2.0 < hi:
+				return false
 		return true
 
 	func write(buf: PackedFloat32Array, alpha: float) -> void:
