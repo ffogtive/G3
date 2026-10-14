@@ -134,6 +134,7 @@ func _flow() -> int:
 	var host: Control = await _host()
 	var app := ScrApp.new()
 	app.private_save = "user://shot_meta/flow_progress.json"
+	app.game_scene_path = ScrApp.FAKE_GAME
 	app.debug_safe_pt = _safe
 	app.fake_auto_s = 0.4
 	host.add_child(app)

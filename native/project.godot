@@ -18,7 +18,9 @@ config_version=5
 config/name="1차선 참교육"
 config/version="0.1.0"
 config/features=PackedStringArray("4.7", "Mobile")
-run/main_scene="res://view/game.tscn"
+run/main_scene="res://screens/app.tscn"
+boot_splash/bg_color=Color(0.086, 0.137, 0.239, 1)
+boot_splash/show_image=false
 
 [autoload]
 

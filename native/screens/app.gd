@@ -22,7 +22,7 @@ enum State { TITLE, CARD, GAME, PAUSED, REWARD }
 const FAKE_GAME: String = "res://screens/dev_fake_game.tscn"
 const REAL_GAME: String = "res://view/game.tscn"
 ## The one line final integration flips (NATIVE_PARITY 8-2).
-const GAME_SCENE: String = FAKE_GAME
+const GAME_SCENE: String = REAL_GAME
 const THEME_PATH: String = "res://ui/theme/lane1_theme.tres"
 
 var game_scene_path: String = GAME_SCENE

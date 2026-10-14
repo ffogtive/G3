@@ -81,7 +81,8 @@ func _main() -> void:
 	_game.seed = _seed
 	_game.with_debug_panel = false
 	if not _state_path.is_empty() or _opts.has("stub"):
-		_game.traffic_mode = "stub"
+		# M1b: game.tscn always runs GameSim (TrafficBridge); the view TrafficStub replay is gone, --state pins the camera
+		print("INFO shot_jam: --stub / --state car pinning needs the M1a TrafficStub path (removed in M1b); camera only")
 	var t_build: int = Time.get_ticks_msec()
 	_vp.add_child(_game)
 	var build_ms: int = Time.get_ticks_msec() - t_build
@@ -268,7 +269,8 @@ func _apply_web_state(path: String) -> void:
 	_game.player.lane = int(p["lane"])
 	_game.player.lc_t = 1.0
 	_game.player.yaw = float(p.get("yaw", 0.0))
-	_game.player.lamp_bits = 1 if bool(p.get("brake", false)) else 0
+	if "lamp_bits" in _game.player:
+		_game.player.set(&"lamp_bits", 1 if bool(p.get("brake", false)) else 0)
 	_game.sim_time = float(d.get("t", _game.sim_time))
 	_game.traffic.call(&"read_into", _game._cur)
 	_game._prev = _game._cur.duplicate()

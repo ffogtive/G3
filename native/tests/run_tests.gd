@@ -98,6 +98,14 @@ func _main() -> void:
 		quit(0)
 		return
 	print("SUMMARY files=%d fails=%d time=%.2fs" % [ran, total_fails, (Time.get_ticks_msec() - t0) / 1000.0])
+	# game.tscn tests start music / SFX: stop them and let the mix thread free the playbacks (wall clock) before quitting,
+	# otherwise the exit reports them as leaked resources (test_audio.gd teardown note)
+	var au: Node = root.get_node_or_null(^"Audio")
+	if au != null and au.has_method(&"stop_all"):
+		au.call(&"stop_all")
+		var t_ms: int = Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t_ms < 250:
+			await process_frame
 	quit(mini(total_fails, EXIT_CAP))
 
 

@@ -630,3 +630,73 @@ M1은 게임의 대부분이므로 다섯 단계로 나누고, **사용자의 �
 - UI·오디오·텍스트가 비어 있다. 메뉴·상점·스테이지 선택, 표지판·VMS 글자(M1c), BGM과 경적 외 효과음, 스테이지 배지·제목·잔챙이 카운터·분노 버튼이 없다.
 - 스테이지는 1-1 낮뿐이다. 밤·날씨가 없다.
 - 브레이크 파동을 읽히게 하는 연출(사용자 결정 ❓), 뷰 CPU 0.6–1.0 ms(1.0 ms 경계, 기기 측정 ❓), 실제 Metal·120 Hz·발열 ❓가 남아 있다.
+
+### 2026-10-14 — M1b 통합: 1-1을 iPhone에서 끝까지 (GameSim · 압정/분노 버튼 · BGM · 결과)
+가설: `view/game.gd`가 GameSim을 1/120 고정 틱으로 돌리고 `state()`/`events()`만으로 그리면, 1-1을 폰에서 끝까지 플레이할 수 있다. 흐름: 정체(BGM + 엔진) → 원흉 등장·잠금 → 압정/분노 타격 피드백 → 처치 → 해방 파도 → 결과 → 다시/다음. ✅ 컨테이너(e2e 5 seed, 버튼 경로, 견인 → 재도전, 페이즈 음악, 샷, iOS export). ❓ 기기 체감.
+
+**사용자 기기 피드백 → 이번 빌드**
+- "배경음도 없고" → 페이즈마다 `Audio.phase()`(웹 enterPhase)를 부른다. 인트로·정체는 mus_jam + 정체 앰비언스, 원흉전은 mus_boss, 해방은 환호 뒤 0.6 s에 mus_release를 시작해 결과 화면까지 이어 간다. 엔진음은 매 프레임 낸다. iOS 세션은 Playback이라 무음 스위치를 켜도 들린다 ❓(기기).
+- "원흉까지 갔는데 아무것도 안 나타나고 / 원흉 차도 뒤에서 앞으로 통과" → 원흉은 BossSim이 몰고, 뷰는 `state().villains`를 따른다(e2e 위치 오차 0.000 m). 35 m 앞에서 '원흉 발견!'과 HP 판이 뜬다. 갓길로 앞지르면 '정면 잠금!'이 뜬다. 잠금 전에는 leash가 원흉 앞으로 2.5 m까지만 허용한다(P0#1).
+- "압정 버튼은 없나?" → 오른쪽 아래 빨간 **압정** 버튼(꾹 누르기)과 **분노** 버튼이 있다.
+  - 정체에서 압정은 잔챙이를 맞히고, 맞힐 대상이 없으면 경적이 된다(웹과 같다).
+  - 원흉전에서 압정은 레티클 안의 원흉을 맞힌다. 원흉 차로 ±1 안이면 초록이고, 밖이면 회색 + '◀ 원흉 차로로' + '빗나감!'이다.
+  - 분노는 잠금 전에 분노 경적, 잠금 뒤에 폭탄이다.
+  - 스와이프: 아래는 브레이크, 위는 분노다.
+- DBG 탭이 진행 바 앞을 가림 → 탭을 숨겼다. 세 손가락 탭이나 F1로 연다. 갠트리 격자 문제는 UI 단계에서 고쳤다(dissolve).
+
+**iPhone에서 지금 보일 것** (`git pull` → `tools/mac/ios_run.sh`)
+1. 2 s 인트로 뒤 정체 BGM이 나온다. 하단 바: ◀ ▶ · 경적 · 압정(큰 빨강) · 분노.
+2. 갓길로 가면 '원흉 발견! 정속주행 김사장'이 뜬다. 원흉은 1차선 앞에서 정체 선두를 잡고 있다. 앞질러 잠그면 레티클(LOCK)이 원흉 위에 붙는다.
+3. 공격 예고를 3D로 그린다(새 `fx/hazard_view.gd`, UI 단계에서 비어 있던 부분):
+   - 상향등: 빛기둥이 점멸하다가 켜진다.
+   - 경적: 차로마다 아치가 퍼진다.
+   - 투척: 포물선을 그리며 날아오고, 떨어질 곳에 빨간 링이 찬다.
+   - 이 밖에 돌진, 상향등 릴레이 경직(약점! ×4)이 있다.
+4. 처치하면 슬로모 폭발, '참교육 완료!' + 패배 대사, 궤도 카메라가 나온다. 해방되면 ✓ 파도, '해방된 차량 N대', 해방 BGM이 나온다.
+5. 결과 카드: 걸린 시간 · 최저 내구도 · 견인 · 원흉전 시간, 미션 3개, 포상금. 기록은 `Progress.record_result`에 저장한다. 버튼:
+   - 다음 빌런: 1-2 로드. 1-2는 범용 보스다.
+   - 다시하기: 1-1 다시.
+   - 메뉴: 아직 타이틀 화면이 없어서 1-1을 다시 시작한다.
+6. HP가 0이 되면 '견인!' 카드가 뜨고, 다시 도전하면 원흉 33 m 뒤에서 이어 간다. 결과 카드에는 견인 1회와 ★2 실패가 정직하게 찍힌다(P0#6).
+
+**바꾼 것** (커밋 없음)
+- `view/game.gd`
+  - GameSim을 중심으로 다시 썼다.
+  - 입력은 LaneInput → `GameSim.input`으로 간다. 압정은 누르는 동안 + 틱보다 짧은 탭의 edge를 넘긴다. 브레이크·분노·경적도 같은 길이다.
+  - 이벤트 → HUD/FightFx/카메라/N5/말풍선 + 웹 audio.play 대응 SFX + 햅틱. 같은 소리를 페이즈 소리와 이벤트 소리로 두 번 내지 않는다.
+  - 히어로 차량은 틱에서 놓고 엔진이 보간한다.
+  - 재도전하면 NPC 사양과 고장차를 다시 읽는다.
+  - 처치 페이즈에서는 원흉 말풍선을 숨긴다. 배너가 같은 대사를 이미 보여 주기 때문이다.
+  - 호스팅 계약을 갖췄다: `stage_finished`·`paused_changed`·`hosted`·`intro_hold`+`begin()`·`loadout`. `test_screens_host`의 INFO 줄은 모두 true다.
+  - `--autoplay` 플래그를 추가했다.
+- `fx/hazard_view.gd`(신규), `view/hero_vehicle_view.gd`(`set_flat`: 터진 타이어), `view/debug_panel.gd`(탭 숨김 + `toggle()`).
+- 테스트:
+  - `test_e2e_1_1`(`--suite=e2e`), `test_phase_audio`(unit).
+  - `test_view_smoke`·`test_hud_progress`를 GameSim 경로로 바꿨다.
+  - `run_tests.gd`는 종료 전에 오디오를 비운다(재생 중이던 스트림이 누수 경고로 보고되던 문제).
+  - `shot_game.gd`(신규): 통합 game.tscn의 페이즈별 샷.
+  - `shot_jam.gd`: `--stub/--state`의 차량 고정을 제거했다. TrafficStub 경로가 없어져서 이제 카메라만 고정한다.
+- `tools/native-check.sh`: 6단계 `e2e`를 추가했다. 헤드리스 e2e 다음 Xvfb `shot_game`을 돌린다. `--no-e2e`로 끈다.
+
+**검증**
+- e2e 5 seed(1007/3/11/42/77) 모두 intro → jam → boss → kill → release → cruise → result 카드까지 갔다.
+  - 판 시간 43.2–46.7 s, 원흉전 10.9–12.9 s, 전부 ★3, 최저 HP 80–97, 견인 0.
+  - 레티클이 화면에 있고 압정 버튼이 보인다. SFX 141–173개, 햅틱 143–167개.
+- 압정 버튼 경로: LaneInput `fire:down`을 1.2 s 유지하자 fire 6, hit/miss 6이 나왔고, 떼자 멈췄다.
+- 견인 → 재도전: 카드 retry → jam → boss → result. 결과는 견인 1, 최저 HP 0, ★2 실패, 32.4 s.
+- `test_phase_audio`: 음악은 jam → boss → (환호) → release 순서로만 바뀐다. release 요청은 0.60 s 뒤에 온다. cruise 앰비언스는 free다. 엔진 루프가 돈다.
+- 전체 unit 22파일 fails=0, integration(screens_host) fails=0. `native-check.sh` GREEN(ext·import·t0·shot·jam·e2e).
+- 1-2~1-6 범용 보스 probe(GameSim + autopilot): 모두 result까지 갔다(57–87 s). 오류 0.
+- iOS export dry-run(`--export-debug iOS`)은 exit 0, 27 s.
+  - 폴더 440 MB 중 409 MB는 디버그 엔진 xcframework, 20 MB는 MoltenVK다. `lane1.pck`는 11.2 MB다.
+  - libtraffic iOS xcframework는 들어가고 tests/는 빠진다.
+  - .ipa는 Linux라 만들지 않는다. Mac에서 빌드·설치·실행·기능 확인은 각각 ❓다.
+- 샷: `…/scratchpad/m1b/final/final_{jam, boss_approach, boss_lock, attack, kill, release, result}.png`.
+
+**알려진 차이 · 결정 필요 ❓**
+- 튜닝 승인이 필요하다(GameSim 단계): `weapons.tack.rate` 5(웹 7), 약점 창 안 `bomb.dmg` 16(웹 28). 원흉전을 10–20 s에 맞추려고 바꾼 값이다.
+- 기기 빌드의 main scene은 아직 `view/game.tscn`이다. 타이틀·스테이지 선택·차고(`screens/app.tscn`)로 바꾸는 것은 FI(NATIVE_PARITY 8)에서 한다. 계약은 준비됐다.
+- 1-2~1-6은 시그니처 미이식 상태로 범용 보스와 공격표를 쓴다(M2).
+- 예고 연출은 단순하다: 원뿔, 아치, 구, 링. 웹의 컵·폰 모델은 아니다. 부순 콘은 정적 배칭이라 남아 보인다. 고장차만 숨긴다.
+- 원흉전 화면이 붐빈다. '치명! −N' 팝이 도발 말풍선과 겹친다(M1d 정리 후보).
+- 기기에서 아직 확인하지 않은 것 ❓: 무음 스위치를 켠 BGM, 햅틱 체감(fire 5/s), 120 Hz에서 FX·예고를 켠 프레임 시간.

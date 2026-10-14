@@ -81,6 +81,8 @@ var ticks: int = 0
 var log_events: Array[Dictionary] = []
 var phase_log: Array[StringName] = []
 var sfx_played: int = 0
+var haptic_calls: int = 0
+var event_counts: Dictionary = {}       # event type → count over the whole run (log_events keeps only the last 256)
 var result_shown: bool = false
 var _prev := PackedFloat32Array()
 var _cur := PackedFloat32Array()
@@ -277,6 +279,13 @@ func set_paused(on: bool) -> void:
 	paused_changed.emit(on)
 
 
+## Leaving the game (reload for retry / next, back to the host's menu, test teardown): the game's music, ambience and
+## engine stop with it (the next scene / screen requests its own).
+func _exit_tree() -> void:
+	if audio != null and audio.has_method(&"stop_all"):
+		audio.call(&"stop_all")
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED and _built:
 		set_paused(true)
@@ -316,6 +325,7 @@ func _haptics() -> Node:
 
 
 func haptic(event_name: String) -> void:
+	haptic_calls += 1
 	if haptics != null and haptics.has_method(&"haptic"):
 		haptics.call(&"haptic", event_name)
 
@@ -427,6 +437,7 @@ func _snap_heroes() -> void:
 
 func _on_event(e: Dictionary) -> void:
 	_log(e)
+	event_counts[str(e.get("type", ""))] = int(event_counts.get(str(e.get("type", "")), 0)) + 1
 	hud.on_event(e)
 	fx.on_event(e, st)
 	camera.on_event(e)
@@ -654,6 +665,8 @@ func _bubble(e: Dictionary, p: Dictionary) -> void:
 	var pos: Callable
 	match who:
 		"villain":
+			if sim.phase == &"kill" and not str(stage.get("defeatLine", "")).is_empty():
+				return  # the "참교육 완료!" banner already carries the defeat line (two copies overlapped)
 			var hv: HeroVehicleView = _villain_view(id)
 			if hv == null:
 				return

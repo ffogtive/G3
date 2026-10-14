@@ -46,6 +46,7 @@ func _frames(n: int = 2) -> void:
 func _app() -> ScrApp:
 	var app := ScrApp.new()
 	app.private_save = DIR.path_join("flow.json")
+	app.game_scene_path = ScrApp.FAKE_GAME   # the shipped default is REAL_GAME (FI 8-2); this loop test drives the fake
 	_tree.root.add_child(app)
 	return app
 
@@ -188,6 +189,7 @@ func _flow() -> void:
 func _sim_contract() -> void:
 	var app := ScrApp.new()
 	app.private_save = DIR.path_join("sim.json")
+	app.game_scene_path = ScrApp.FAKE_GAME
 	_tree.root.add_child(app)
 	await _frames(3)
 	app.pick_stage(1)

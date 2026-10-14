@@ -4,7 +4,7 @@
 # 가설: ✅ "import → 헤드리스 T0 → Xvfb Mobile 스모크 샷" 3단이 모두 exit 0이면 골격(엔진 4.7.2,
 #       ext .so 로드, 렌더 경로)이 살아 있다. 실패한 단계 이름이 곧 고칠 곳이다.
 #
-# Usage: tools/native-check.sh [--no-build-ext] [--no-shot] [--no-jam] [-- <run_tests.gd args, e.g. --suite=all>]
+# Usage: tools/native-check.sh [--no-build-ext] [--no-shot] [--no-jam] [--no-e2e] [-- <run_tests.gd args, e.g. --suite=all>]
 # Steps:
 #   1. ext   tools/godot/build_ext.sh (incremental; skipped with --no-build-ext or without cmake/c++)
 #   2. import  godot --headless --path native --import  (registers .gdextension, builds class cache)
@@ -15,6 +15,10 @@
 #            frame, draw budget overrun (250 / 400), N5 overlap, or no reply bubble / HONK ring on screen (the honk is
 #            0.3 s before the capture so both are still alive; at 4.5 s both had expired and the check proved nothing).
 #            Skipped with --no-shot or --no-jam.
+#   6. e2e   (M1b) godot --headless ... -s res://tests/run_tests.gd -- --suite=e2e: game.tscn on GameSim played to the
+#            result card on 5 seeds (autopilot), the 압정 button path through LaneInput, wreck → fail card → retry →
+#            honest result. Then (with Xvfb, unless --no-shot) tests/shot_game.gd renders each phase of the integrated
+#            game into <out>/e2e (exit 1 when a moment is never reached or the reticle is off screen). --no-e2e skips.
 # Env: GODOT (default godot47, falls back to godot with a warning), NATIVE_PROJ (default native/), NATIVE_CHECK_OUT
 #      (default native/build/native-check; gitignored and hidden from the Godot importer).
 set -uo pipefail
@@ -22,15 +26,16 @@ set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PROJ=${NATIVE_PROJ:-$ROOT/native}
 OUT=${NATIVE_CHECK_OUT:-$PROJ/build/native-check}
-BUILD_EXT=1 SHOT=1 JAM=1
+BUILD_EXT=1 SHOT=1 JAM=1 E2E=1
 TEST_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-build-ext) BUILD_EXT=0 ;;
     --no-shot) SHOT=0 ;;
     --no-jam) JAM=0 ;;
+    --no-e2e) E2E=0 ;;
     --) shift; TEST_ARGS=("$@"); break ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $1 (test args go after --)" >&2; exit 2 ;;
   esac
   shift
@@ -142,6 +147,30 @@ if [ "$SHOT" = 1 ]; then
   else
     echo "[native-check] INFO: xvfb-run missing, skipping render smoke"; RESULTS+=("shot=skipped")
   fi
+fi
+
+# 6. e2e: the integrated 1-1 ---------------------------------------------------------------------------
+if [ "$E2E" = 1 ]; then
+  "$GODOT" --headless --path "$PROJ" -s res://tests/run_tests.gd -- --suite=e2e 2>&1 | tee "$OUT/e2e.log" \
+    | grep -E '^(PASS|FAIL|SKIP|INFO e2e|DONE|SUMMARY|SCRIPT ERROR)'
+  rc=${PIPESTATUS[0]}
+  grep -q '^SUMMARY files=[1-9]' "$OUT/e2e.log" || { echo "[native-check] e2e ran no test file (crash?)"; [ "$rc" = 0 ] && rc=1; }
+  if grep -E '^SCRIPT ERROR' "$OUT/e2e.log" | head -n 5 | grep -q .; then
+    grep -E '^SCRIPT ERROR' "$OUT/e2e.log" | head -n 5; [ "$rc" = 0 ] && rc=1
+  fi
+  if [ "$SHOT" = 1 ] && command -v xvfb-run >/dev/null; then
+    rm -rf "$OUT/e2e"
+    xvfb-run -a -s "-screen 0 1280x1024x24" "$GODOT" --path "$PROJ" --rendering-method mobile \
+      --audio-driver Dummy -s res://tests/shot_game.gd -- --out="$OUT/e2e" --safe-pt=59,34 > "$OUT/e2e_shots.log" 2>&1
+    src=$?
+    grep -E '^(RESULT ok|FAIL|INFO shot)' "$OUT/e2e_shots.log"
+    if grep -E '^SCRIPT ERROR' "$OUT/e2e_shots.log" | head -n 5 | grep -q .; then
+      grep -E '^SCRIPT ERROR' "$OUT/e2e_shots.log" | head -n 5; [ "$src" = 0 ] && src=1
+    fi
+    [ -s "$OUT/e2e/final_result.png" ] || { [ "$src" = 0 ] && src=1; }
+    [ "$rc" = 0 ] && rc=$src
+  fi
+  step e2e $rc
 fi
 
 echo "[native-check] ${RESULTS[*]}  (logs: $OUT)"
