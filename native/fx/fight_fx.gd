@@ -46,6 +46,7 @@ var _curtain_mat: ShaderMaterial
 
 var _mm: Array[MultiMeshInstance3D] = []      # 0 lit, 1 glow, 2 smoke
 var _parts: Array[Array] = [[], [], []]       # per system: Array of Dictionary {p, v, r, w, s0, s1, life, age, c, g, drag, bounce, shape}
+var _bufs: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]  # reused MultiMesh buffers
 var _rings: Array[Dictionary] = []            # {mi, mat, born, dur, r0, r1, col}
 var _lights: Array[Dictionary] = []           # {light, born, dur, e}
 var _tack_mm: MultiMeshInstance3D
@@ -631,10 +632,15 @@ func advance(dt: float) -> void:
 
 func _step_sys(sys: int, dt: float) -> void:
 	var arr: Array = _parts[sys]
-	var alive: Array = []
 	var mm: MultiMesh = _mm[sys].multimesh
-	var buf := PackedFloat32Array()
-	buf.resize(mm.instance_count * 16)
+	if arr.is_empty():
+		if mm.visible_instance_count != 0:
+			mm.visible_instance_count = 0
+		return
+	var alive: Array = []
+	var buf: PackedFloat32Array = _bufs[sys]
+	if buf.size() != mm.instance_count * 16:
+		buf.resize(mm.instance_count * 16)
 	var n: int = 0
 	for q: Variant in arr:
 		var d: Dictionary = q
@@ -719,6 +725,7 @@ func _step_sys(sys: int, dt: float) -> void:
 		buf[o + 15] = col.a
 		n += 1
 	_parts[sys] = alive
+	_bufs[sys] = buf
 	mm.buffer = buf
 	mm.visible_instance_count = n
 
