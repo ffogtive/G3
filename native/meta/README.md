@@ -25,7 +25,7 @@
 ## `record_result(id, result)`
 읽는 키(괄호 = 별칭): `cleared`, `aborted`, `hp_end`(`hp`), `hp_max`, `min_hp`, `tows`(`fails`, `retries`), `minis_done`, `minis_total`, `missions_done`(`missions[{done}]`, hp/minis가 없을 때만), `cath`(없으면 bumps·boss_time_s·supers·max_combo로 계산), `freed`, `cheaters`, `mini_fines`, `score`(최종 점수), `seed`(없으면 `floor(time_s·1000) % 997 + 1`), `time_s`, `photo`(Image 또는 user:// 경로), `stats`(보스 통계 줄), `retry_mul`(`pay_mul`, 견인 수가 없을 때만).
 돌려주는 키: `stage_id, cleared, stars, prev_stars, new_stars, missions[{id,label,done}], score, best_score, new_best, fine, base, bonus, star_mult, item_pay_mul, retry_mul, replay_mul, pay_mul, payout, views, subs_gained, comments[3], milestone, wallet_before, wallet, subs_before, subs, violation, villain_name, card, case, cause, stage_name, photo, album_count, unlocks[ids], next_id, is_last, stats[{label,value}], seed, tows`.
-클리어가 아니거나 `aborted`면 아무것도 바꾸지 않고 `payout 0`을 돌려준다.
+클리어가 아니거나 `aborted`면 아무것도 바꾸지 않고 `payout 0`을 돌려준다. `cleared`가 없는 결과(GameSim `state().result`는 phase result에서만 생긴다)는 `missions`나 `stars`가 있으면 클리어로 본다.
 
 ## 테스트
 `godot47 --headless --path native -s res://tests/run_tests.gd -- --filter=rewards` (웹 골든), `--filter=save` (원자 저장·.bak·마이그레이션·미래 schema), `--filter=meta` (해금 1→2→3, 구매·장착, loadout, 재로드, 설정, 오늘의 빌런, P0 스위치, GameSim 별칭, 사진).

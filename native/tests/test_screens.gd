@@ -4,7 +4,9 @@ extends RefCounted
 ##   reward timeline (web TL order and times) → 다음 빌런 (1-2 card) → ✕ → dashboard (wallet, ★, NEXT moved);
 ##   abort = no reward; pause → resume / quit; card timer starts exactly once; locked tile does nothing;
 ##   garage buy (auto-equip, wallet, tab counts, badge) / poor (no change, "₩X 부족!") / equip; settings persist;
-##   album shows the cleared stage. Every model is a private Progress on user://test_screens/ (never the player save).
+##   album shows the cleared stage; G2 game held behind the card (begin() on start, freed on ✕); a game that pauses the
+##   tree itself gets the app pause menu; a raw GameSim 1-1 autopilot result (no `cleared`) is paid and recorded.
+##   Every model is a private Progress on user://test_screens/ (never the player save).
 ##
 ## 가설: ✅ the screens only talk to ScrMeta, so the same flow runs on the real Progress autoload API.
 

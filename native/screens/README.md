@@ -3,7 +3,7 @@
 가설:
 - ✅ 웹 대시보드 흐름(타이틀 → 챕터 탭 → 스테이지 그리드 → 스테이지 카드 → 시작 → 보상 타임라인 → 대시보드)을 Control 씬으로 옮기고 가짜 게임을 붙이면, 판 안 GameSim 없이도 루프 전체를 지금 테스트할 수 있다(`tests/test_screens.gd`).
 - ✅ 화면은 `ScrMeta` 하나로만 진행도를 읽고 쓴다. 그래서 실제 `Progress` autoload(`native/meta`)와 대체 stub에서 같은 화면이 같은 숫자로 돈다(stub ↔ Progress 대조 테스트).
-- ❓ 웹은 스테이지 카드를 인트로 위에 띄운다(NATIVE_PARITY 7 G2). 지금은 카드 → 게임 로드 순서다. 미리 로드할지는 최종 통합(FI)에서 정한다.
+- ~~❓ 미리 로드할지는 FI가 정한다~~ → ◐ app이 G2를 지원한다: game 씬에 `intro_hold`가 있으면 카드 뒤에 붙여 두고 시작에서 `begin()`을 부른다. 지금 `view/game.gd`에는 없어서 시작할 때 로드한다(NATIVE_PARITY 7 G2).
 
 | 파일 | 역할 (웹 원본) |
 |---|---|
@@ -31,10 +31,8 @@ godot47 --path native res://screens/app.tscn -- --game=fake|real --stage=N --saf
 ```
 
 ## 최종 통합(FI)에 넘기는 것
-1. `project.godot`의 `run/main_scene`을 `res://screens/app.tscn`으로 바꾼다. `Progress` autoload는 이미 등록돼 있다.
-2. `app.gd`의 `GAME_SCENE`을 `REAL_GAME`(`res://view/game.tscn`)으로 바꾼다(한 줄). `dev_fake_game.*`는 export에서 뺀다.
-3. game.tscn에는 다음이 필요하다(`test_screens_host`가 현재 없음을 보고한다).
-   - `var loadout: Dictionary`: `Progress.loadout()`에 `left_hand`를 더한 값이다.
-   - `signal stage_finished(result)`: 클리어·포기 때 한 번만 낸다. 키는 meta/README.md의 `record_result` 사실 키다.
-   - `signal pause_requested` 또는 `paused_changed(on)`: 일시정지 메뉴를 띄운다.
-   - `set_paused(on)`: 메뉴에서 계속하기를 누르면 app이 부른다.
+정확한 단계는 `docs/NATIVE_PARITY.md` 8절에 있다. 요약:
+1. `project.godot` `run/main_scene="res://screens/app.tscn"` (+ boot_splash 색). `Progress` autoload는 이미 등록돼 있다.
+2. `app.gd` `GAME_SCENE = REAL_GAME`. `screens/dev_fake_game.*`는 export에서 빼도 된다(app.gd는 그 클래스를 참조하지 않는다).
+3. `view/game.gd`: `stage_finished(result)`(클리어 = `sim.state().result` 그대로, 실패 카드 메뉴 = `{aborted: true}`), `loadout`, `hosted`, `intro_hold` + `begin()`, 선택 `paused_changed(on)`. app은 신호가 없어도 `tree.paused`를 보고 일시정지 메뉴를 띄운다.
+4. `test_screens_host`의 INFO 줄이 모두 true가 되면 계약이 끝난 것이다.

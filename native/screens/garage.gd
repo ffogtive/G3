@@ -221,15 +221,15 @@ func _render_loadout() -> void:
 			continue
 		var id: String = meta.equipped(str(cat["id"]))
 		var it: Dictionary = meta.item(id)
-		var slot: PanelContainer = ScrKit.panel(ScrKit.sb(Color.WHITE, 14, 3, 0, Lane1Pal.INK, Vector4(6, 4, 8, 4)))
+		var slot: PanelContainer = ScrKit.panel(ScrKit.sb(Color.WHITE, 14, 3, 0, Lane1Pal.INK, Vector4(5, 4, 6, 4)))
 		slot.name = "Slot_" + str(cat["id"])
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var h: HBoxContainer = ScrKit.hbox(4)
-		h.add_child(ScrKit.item_art(id, 52))
+		var h: HBoxContainer = ScrKit.hbox(3)
+		h.add_child(ScrKit.item_art(id, 42))
 		var v: VBoxContainer = ScrKit.vbox(0)
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.add_child(ScrKit.lbl(str(cat["label"]), 14, Lane1Pal.MUTED, false))
-		var nl: Label = ScrKit.ellipsis(ScrKit.lbl(str(it.get("name", "—")), 18, Lane1Pal.INK, true))
+		var nl: Label = ScrKit.ellipsis(ScrKit.lbl(str(it.get("name", "—")), 17, Lane1Pal.INK, true))
 		nl.name = "Name"
 		v.add_child(nl)
 		h.add_child(v)
@@ -335,6 +335,8 @@ func _card(it: Dictionary) -> Control:
 	if not tag_txt.is_empty():
 		var tg: PanelContainer = ScrKit.chip(tag_txt, Lane1Pal.YELLOW if s == "buy" else Color.WHITE, Lane1Pal.INK, 22 if price > 0 else 18, 4, 16)
 		tg.name = "Price"
+		if price > 0:
+			_coin_prefix(tg.get_child(0) as Label, 22)   # ui.js itemCardHTML: SVG.coin before the price
 		tagrow.add_child(tg)
 	var tm: MarginContainer = ScrKit.margin(10, -20 if not tag_txt.is_empty() else 0, 10, 0)
 	tm.add_child(tagrow)
@@ -388,6 +390,7 @@ func _action(it: Dictionary, s: String) -> Control:
 		"buy":
 			var b2: ScrKit.Pill = ScrKit.pill("구매", Lane1Pal.BTN_YELLOW, 26)
 			b2.name = "Buy"
+			_coin_prefix(b2.find_child("Text", true, false) as Label, 30)   # web: coin icon + 구매
 			ScrKit.tap(b2, func() -> void: do_buy(id), "")
 			return b2
 	var v: VBoxContainer = ScrKit.vbox(6)
@@ -492,3 +495,19 @@ func float_text(anchor: Control, text: String, col: Color, dy: float) -> void:
 	tw.tween_property(l, "position:y", l.position.y - 46.0, 1.1)
 	tw.tween_property(l, "modulate:a", 0.0, 0.5).set_delay(0.7)
 	tw.chain().tween_callback(l.queue_free)
+
+
+## Puts a coin icon in front of a label (same parent slot, centred row).
+static func _coin_prefix(l: Label, px: int) -> void:
+	if l == null or l.get_parent() == null:
+		return
+	var par: Node = l.get_parent()
+	var idx: int = l.get_index()
+	var row: HBoxContainer = ScrKit.hbox(4)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	par.remove_child(l)
+	row.add_child(ScrKit.icon("coin", px))
+	row.add_child(l)
+	par.add_child(row)
+	par.move_child(row, idx)

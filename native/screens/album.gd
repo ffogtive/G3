@@ -224,7 +224,7 @@ func _card(st: Dictionary, label: String) -> Control:
 	var np: PanelContainer = ScrKit.panel(ScrKit.sb(Color.WHITE if has else Color("#eef0f3"), 12, 3, 0, Lane1Pal.INK if has else Color("#b6bdc6"), Vector4(10, 4, 10, 4)))
 	np.add_child(ScrKit.ellipsis(ScrKit.lbl(ScrKit.stage_title(st), 19, Lane1Pal.INK if has else Lane1Pal.MUTED, true)))
 	v.add_child(np)
-	var who: String = ScrKit.villain_names(st) if has else str(st.get("highway", ""))
+	var who: String = _all_names(st) if has else str(st.get("highway", ""))
 	v.add_child(ScrKit.ellipsis(ScrKit.lbl(who, 16, Color("#6b5a3a") if has else Lane1Pal.MUTED, false)))
 	var mr: HBoxContainer = ScrKit.hbox(4)
 	var amt: String = "구조 표창" if ck == "rescue" else ("계도" if ck == "warn" else (ScrKit.big_won(fine) if ck == "crime" else ScrKit.won(fine)))
@@ -256,3 +256,12 @@ static func photo_tex(photo: Variant) -> Texture2D:
 		if img != null and not img.is_empty():
 			return ImageTexture.create_from_image(img)
 	return null
+
+
+## ui.js albumCardHTML vname: every villain's full name joined by ' & ' (not the 'OO 2대' short form of villainNames).
+static func _all_names(st: Dictionary) -> String:
+	var names: PackedStringArray = []
+	for v: Variant in st.get("villains", []):
+		if v is Dictionary and not str((v as Dictionary).get("name", "")).is_empty():
+			names.append(str((v as Dictionary)["name"]))
+	return " & ".join(names) if not names.is_empty() else str(st.get("highway", ""))
