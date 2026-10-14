@@ -573,6 +573,38 @@ summary() {
   printf '  logs    : %s\n' "$(rel "$RUN_DIR")"
 }
 
+# Device feedback 2026-10-14: without cmake the C++ traffic core was stubbed and the GDScript fallback ran (cars and
+# shoulder obstacles felt "passable"). Provision cmake + ninja ourselves: Homebrew if it is there, else a private
+# Python venv (PyPI ships universal2 cmake/ninja wheels) under ~/.lane1/venv — no admin rights, nothing global.
+ensure_cmake() {
+  if have cmake; then
+    ok "cmake $(cmake --version 2>/dev/null | awk 'NR == 1 {print $3}' || true)"
+    return 0
+  fi
+  local venv="$HOME/.lane1/venv"
+  if [ -x "$venv/bin/cmake" ]; then
+    PATH="$venv/bin:$PATH"
+    export PATH
+    ok "cmake from $venv"
+    return 0
+  fi
+  log "cmake not found — installing a private copy (C++ traffic core needs it; once, ~30 s)"
+  if have brew && brew install cmake ninja >"$RUN_DIR/cmake-install.log" 2>&1; then
+    ok "cmake installed with Homebrew"
+    return 0
+  fi
+  if python3 -m venv "$venv" >>"$RUN_DIR/cmake-install.log" 2>&1 &&
+    "$venv/bin/python3" -m pip install --quiet --upgrade pip cmake ninja >>"$RUN_DIR/cmake-install.log" 2>&1 &&
+    [ -x "$venv/bin/cmake" ]; then
+    PATH="$venv/bin:$PATH"
+    export PATH
+    ok "cmake installed in $venv"
+    return 0
+  fi
+  warn "could not install cmake (log: $(rel "$RUN_DIR/cmake-install.log")): the C++ traffic core becomes a stub and the" \
+    "game uses the slower GDScript fallback. Fix: brew install cmake ninja, then re-run."
+}
+
 # ===============================================================================================================
 stage_begin "preflight"
 check_xcode
@@ -591,8 +623,7 @@ fi
 resolve_team
 ensure_godot
 ensure_templates
-have cmake || warn "cmake not found: the C++ traffic core becomes a stub and the game uses the slower GDScript fallback" \
-  "(brew install cmake ninja)"
+ensure_cmake
 grep -q '^run/main_scene=' "$LANE1_NATIVE/project.godot" ||
   warn "native/project.godot has no run/main_scene yet — the app will start to an empty screen/quit (gate owner)"
 stage_end

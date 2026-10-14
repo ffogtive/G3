@@ -157,9 +157,13 @@ func _target_pose() -> Array[Vector3]:
 				var por: bool = is_portrait()
 				var ang: float = -0.9 + _phase_t * 0.5
 				var r: float = 16.0 if por else 13.0
-				var p: Vector3 = kill_target + Vector3(kill_side * cos(ang) * r, 0.0, -sin(ang) * r)
-				p.y = maxf(7.5, kill_target.y * 0.55 + 8.0)
-				return [p, kill_target]
+				# Device feedback 2026-10-14: following a finish that launches the villain (rocket) pointed the camera at
+				# empty sky. Keep the orbit low and the look-at near the road so the car flies OUT of a frame that
+				# still shows the road, the jam and the HUD context.
+				var look: Vector3 = Vector3(kill_target.x, minf(kill_target.y, 4.5), kill_target.z)
+				var p: Vector3 = look + Vector3(kill_side * cos(ang) * r, 0.0, -sin(ang) * r)
+				p.y = clampf(look.y * 0.55 + 8.0, 7.5, 11.0)
+				return [p, look]
 		"release":
 			if is_finite(release_s):
 				var t: float = _phase_t

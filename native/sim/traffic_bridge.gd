@@ -446,11 +446,15 @@ func rage_horn(range_m: float) -> Dictionary:
 
 
 func smash(obstacle_id: int) -> bool:
-	return bool(_core.call(&"smash", obstacle_id)) if _core != null else false
+	if _core != null:
+		return bool(_core.call(&"smash", obstacle_id))
+	return _creep != null and _creep.remove_obstacle(obstacle_id, true)
 
 
 func remove_obstacle(obstacle_id: int) -> bool:
-	return bool(_core.call(&"remove_obstacle", obstacle_id)) if _core != null else false
+	if _core != null:
+		return bool(_core.call(&"remove_obstacle", obstacle_id))
+	return _creep != null and _creep.remove_obstacle(obstacle_id, false)
 
 
 func jolt(id: int) -> void:
@@ -754,22 +758,51 @@ class _Creep:
 
 	func leader(p: Dictionary) -> Dictionary:
 		var g: Dictionary = gap_ahead(roundi(float(p["lane"])), float(p["s"]) + float(p.get("len", 4.2)) / 2.0)
-		g["v"] = v[int(g["id"]) - 1] if int(g["id"]) > 0 else 0.0
 		g["smash"] = false
+		if str(g["type"]) == "obstacle":
+			g["v"] = 0.0
+			for o: Variant in obstacles:
+				if int((o as Dictionary)["id"]) == int(g["id"]):
+					g["smash"] = bool((o as Dictionary).get("smash", false))
+		else:
+			g["v"] = v[int(g["id"]) - 1] if int(g["id"]) > 0 else 0.0
 		return g
+
+	## Device feedback 2026-10-14 ("갓길 장애물 그냥 통과함"): without the C++ ext the shoulder had no leaders, so the
+	## player drove through the breakdown car and cones. Smashable obstacles go away when hit; the breakdown stays.
+	func remove_obstacle(id: int, only_smashable: bool) -> bool:
+		for k: int in obstacles.size():
+			var od: Dictionary = obstacles[k]
+			if int(od["id"]) == id:
+				if only_smashable and not bool(od.get("smash", false)):
+					return false
+				obstacles.remove_at(k)
+				return true
+		return false
 
 	func gap_ahead(l: int, front: float) -> Dictionary:
 		if _order_dirty:
 			_rebuild_order()
 		var best: float = INF
 		var who: int = 0
+		var typ: String = ""
 		if l >= 0 and l < _order.size():
 			for i: int in _order[l]:
 				var g: float = s[i] - ln[i] / 2.0 - front
 				if s[i] > front - ln[i] / 2.0 and g < best:
 					best = g
 					who = ids[i]
-		return {"gap": best, "id": who, "type": "car" if who > 0 else ""}
+					typ = "car"
+		if l == 4:
+			for o: Variant in obstacles:
+				var od: Dictionary = o
+				var half: float = float(od["len"]) / 2.0
+				var go: float = float(od["s"]) - half - front
+				if float(od["s"]) > front - half and go < best:
+					best = go
+					who = int(od["id"])
+					typ = "obstacle"
+		return {"gap": best, "id": who, "type": typ}
 
 	func lane_free(l: int, p_s: float, p_len: float) -> bool:
 		if _order_dirty:

@@ -1079,11 +1079,10 @@ func _draw_screen_fx(c: Control = null) -> void:
 	var vt: float = now - _vig_dmg_t
 	if vt < 0.45:
 		_vignette(r, Color(1, 0.1, 0.05, 0.55 * (1.0 - vt / 0.45)))
+	# Device feedback 2026-10-14 ("동영상 나올 때 위아래 짤림"): the kill letterbox bars read as a cropped screen on
+	# a tall phone, and the stepped side vignette showed up as vertical bands. Keep only a faint warm tint.
 	if _letterbox > 0.0:
-		var h: float = 64.0 * UiDraw.smooth(_letterbox)
-		_fx.draw_rect(Rect2(r.position, Vector2(r.size.x, h)), Color(0, 0, 0, 0.92))
-		_fx.draw_rect(Rect2(Vector2(0, r.end.y - h), Vector2(r.size.x, h)), Color(0, 0, 0, 0.92))
-		_vignette(r, Color(0.05, 0.03, 0.0, 0.45 * _letterbox))
+		_fx.draw_rect(r, Color(0.08, 0.04, 0.0, 0.10 * UiDraw.smooth(_letterbox)))
 	var ft: float = now - _flash_t
 	if ft < _flash_dur:
 		_fx.draw_rect(r, Color(_flash_col, _flash_col.a * (1.0 - ft / _flash_dur)))
