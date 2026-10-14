@@ -68,6 +68,29 @@ func _r3_rage(hud: Hud) -> void:
 	_check(tags == [true, true, false, false], "U2: reticle '분노' tag when a rage tier can hit the villain %s" % str(tags))
 
 
+## r3 final (device review major): 분노 tapped > 60 m from the villain → chase 0.8 s → refund with
+## skill_denied {reason far, refunded, text '너무 멀다!'}. DENY_TEXT had no "far", so the HUD popped "분노 부족!" over the
+## player's car while the ring still held the segment (feedback 2 "범위에 안 닿아" made worse). Also the chase itself
+## (skill_chase) had no consumer: 0.8 s of nothing after the tap (minor).
+func _far_refund(hud: Hud, tree: SceneTree) -> void:
+	var cam := Camera3D.new()
+	tree.root.add_child(cam)
+	hud.bind_world(cam, RoadGraph.new())
+	hud.apply_state(_skills_state(UiStubState.boss(true), "fight", "wave", 1, true))
+	hud.pops.clear_pops()
+	hud.on_event({"type": "skill_chase", "chan": "rage", "tier": 1, "id": "t1_wave", "dur": 0.8})
+	hud.advance(0.05)
+	var chase_txt: PackedStringArray = hud.pops.texts_pops()
+	var chasing: float = hud.rage_chase_t() if hud.has_method(&"rage_chase_t") else -1.0
+	hud.on_event({"type": "skill_denied", "chan": "rage", "tier": 1, "id": "t1_wave", "reason": "far", "refunded": true, "text": "너무 멀다!"})
+	hud.advance(0.05)
+	var txt: PackedStringArray = hud.pops.texts_pops()
+	_check(txt.has("너무 멀다!") and not txt.has("분노 부족!"), "far refund pops '너무 멀다!', never '분노 부족!' %s" % str(txt))
+	_check(chase_txt.size() == 1 and chasing >= 0.0 and hud.rage_chase_t() < 0.0, "skill_chase answers at once: one pop %s + 분노 ring chase dashes (%.2f s), cleared by the refund" % [str(chase_txt), chasing])
+	cam.queue_free()
+	await tree.process_frame
+
+
 func _check(ok: bool, what: String) -> void:
 	print(("PASS" if ok else "FAIL") + " hud_rage: " + what)
 	if not ok:
@@ -123,6 +146,7 @@ func run() -> int:
 	hud.advance(0.1)
 	_check(not below and hud.rage_max(), "MAX glow only at full rage (0.99 → %s, 1.0 → %s)" % [below, hud.rage_max()])
 	_r3_rage(hud)
+	await _far_refund(hud, tree)
 	hud.queue_free()
 	inp.queue_free()
 	await tree.process_frame

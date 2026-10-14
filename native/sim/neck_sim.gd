@@ -16,7 +16,7 @@ extends RefCounted
 ## active GameSim sends the traffic player mode "neck" (no stuck assist on either backend) and routes &"honk" here
 ## instead of TrafficBridge.honk.
 ## A valve honk counts only from the shoulder within `range` m of the plug's rear ("붙어서 빵": pulled up behind it); from
-## beyond range it is "far" (sulk `stubborn` s + safetyPenalty); in range but more than `rudeV` m/s faster = "nudge"
+## beyond range it is "far" (sulk + `stubborn` s per far honk, at most stubbornMax s, + safetyPenalty); in range but more than `rudeV` m/s faster = "nudge"
 ## ('조금 더 붙어!', free); while it sulks an in-range honk is ignored (no refresh, no penalty) — r3 final, device review.
 ## Valves (data plug.valve): honk (n honks within `window` s; blink: 1-8 blinker first; passV/passFor: 1-6 pass slowly)
 ## · race (1-2: honk -> 0.8 s aside; the nose must get `advance` m past its rear by then or the thief takes it back) · quiet (1-3:
@@ -43,7 +43,7 @@ const DEFAULTS: Dictionary = {
 	"plug": {"valve": "honk", "n": 1, "window": 1.5, "wait": 3.0, "safety": 8.0, "chip": "붙어서 빵 1번", "chipAt": 3.0,
 		"back": 9.0, "len": 4.5, "w": 1.9, "car": "sedan", "kind": "cutter", "activeDist": 35.0, "range": 6.0, "rudeV": 3.0,
 		"clearAt": 0.55,
-		"exit": "cutin", "exitDur": 1.2, "stubborn": 2.0, "spamN": 0, "spamWin": 4.0, "deafFor": 5.0, "advance": 0.3,
+		"exit": "cutin", "exitDur": 1.2, "stubborn": 3.0, "stubbornMax": 6.0, "spamN": 0, "spamWin": 4.0, "deafFor": 5.0, "advance": 0.3,
 		"near": 4.0, "duoRange": 40.0, "penalty": 2.0, "blockFor": 4.0, "blink": 0.0, "passV": 6.0, "passFor": 3.0,
 		"straddle": false, "rage": 0.1, "score": 300, "rageReach": 26.0, "safetyPenalty": 1.0, "safetyMax": 4.0, "lines": {}},
 }
@@ -455,8 +455,8 @@ func on_honk(sim: GameSim) -> Dictionary:
 			sim._emit({"type": "neck_block", "reason": "spam"})
 	elif not in_range:
 		r = "far"
-		if float(pc.get("stubborn", 0.0)) > 0.0:
-			_stubborn = float(pc.get("stubborn", 2.0))
+		if float(pc.get("stubborn", 0.0)) > 0.0:  # each far honk adds to the sulk (charging in honking = a long sulk)
+			_stubborn = minf(float(pc.get("stubbornMax", 6.0)), _stubborn + float(pc.get("stubborn", 3.0)))
 			_penalize(float(pc.get("safetyPenalty", 1.0)))
 			_say(sim, "far", "taunt", 1.2)
 	elif _deaf > 0.0 or (valve == "push" and _push_block > 0.0) or _stubborn > 0.0:

@@ -87,8 +87,10 @@ const CP_PULSE_S: float = 0.6
 ## Damage numbers are shown ×10 (view only; no HP number is shown anywhere): "-3" ticks read as a weak skill (rvB).
 const DMG_SHOW_MUL: int = 10
 const ITEM_LABEL: Dictionary = {"mv_jump": "점프", "mv_drone": "드론", "mv_tow": "레커"}
+## r3 final (device review): "far" = the boss-phase t1 chase ran out (segment refunded) — it used to fall back to "분노 부족!"
+## while the ring still held the segment. An event's own text wins over the table.
 const DENY_TEXT: Dictionary = {"rage": "분노 부족!", "cool": "쿨타임!", "charges": "다 썼다!", "target": "대상 없음",
-	"phase": "지금은 못 써!", "busy": "시전 중!", "blocked": "원흉은 못 넘는다!", "room": "착지 공간 없음"}
+	"phase": "지금은 못 써!", "busy": "시전 중!", "blocked": "원흉은 못 넘는다!", "room": "착지 공간 없음", "far": "너무 멀다!"}
 ## Skill banner placement: higher and smaller than the phase banners so the framed cars stay readable.
 const SKILL_BANNER_Y: float = 0.20  # 0.26 → 0.20 (rvB): the text sat on the player's car in the boss framing
 
@@ -217,6 +219,9 @@ var _item_deny_t: Array[float] = [-99.0, -99.0]
 var _items_layout: bool = false
 var _tier_flash: Dictionary = {}       # tier → time
 var _deny_t: float = -99.0
+## r3 final: skill_chase (t1 out of reach in the boss phase: boost towards the villain, then hit or refund) start / length.
+var _chase_t: float = -99.0
+var _chase_dur: float = 0.0
 var _focus_t: float = -99.0
 var _focus_dur: float = 0.35
 var _cine_until: float = -99.0
@@ -883,7 +888,7 @@ func _item_of(slot: int) -> Dictionary:
 ## One drained GameSim event (UI side: pops, banners, flashes, counters).
 func on_event(e: Dictionary) -> void:
 	match str(e.get("type", "")):
-		"skill_start", "skill_hit", "skill_end", "skill_denied", "tier_ready", "item_ready", "finisher":
+		"skill_start", "skill_hit", "skill_end", "skill_denied", "tier_ready", "item_ready", "finisher", "skill_chase":
 			_on_skill_event(e)
 		"fire":
 			if not bool(e.get("drone", false)):  # the passive drone's shots are not the player's 압정 (no button recoil)
@@ -1064,12 +1069,21 @@ func _on_skill_event(e: Dictionary) -> void:
 				_cine_until = minf(_cine_until, now)
 		"skill_denied":
 			_deny_t = now
+			_chase_t = -99.0
 			if str(e.get("chan", "rage")) == "item":
 				_item_deny_t[_slot_of(id) - 1] = now
 			if road != null:
 				var pp: Dictionary = _state.get("player", {})
-				pops.pop(road.position(float(pp.get("s", player_s)), float(pp.get("x", 0.0))) + Vector3(0, 3.0, 0),
-					str(DENY_TEXT.get(str(e.get("reason", "rage")), "분노 부족!")), "miss")
+				var dtx: String = str(e.get("text", "")) if str(e.get("text", "")) != "" else str(DENY_TEXT.get(str(e.get("reason", "rage")), "분노 부족!"))
+				pops.pop(road.position(float(pp.get("s", player_s)), float(pp.get("x", 0.0))) + Vector3(0, 3.0, 0), dtx, "miss")
+		"skill_chase":
+			# r3 final (device review minor): the tap answers at once — "추격!" over the car + a spinning ring on the button
+			_chase_t = now
+			_chase_dur = maxf(0.1, float(e.get("dur", 0.8)))
+			_rage_ready_t = now
+			if road != null:
+				var pc2: Dictionary = _state.get("player", {})
+				pops.pop(road.position(float(pc2.get("s", player_s)), float(pc2.get("x", 0.0))) + Vector3(0, 3.0, 0), "추격!", "score")
 		"tier_ready":
 			var tier: int = int(e.get("tier", 0))
 			_tier_flash[tier] = now
@@ -1767,6 +1781,12 @@ func _draw_fire_ring(c: Control) -> void:
 ## 분노 button: the face is the tier a tap casts now (state.skills.next_tier): 청소 (jam t1, a breaking cone) / 충격파
 ## (fight t1, wave arcs) in crimson, 폭격 (t3, red-orange, a tack rain), 참교육 (t5, gold, the equipped finish's icon);
 ## grey 분노 when nothing is ready (rage_face_label()). Kicks on ready / cast, wobbles on a denied tap.
+## Seconds since the current t1 chase started (−1 when none is running).
+func rage_chase_t() -> float:
+	var ct: float = now - _chase_t
+	return ct if ct >= 0.0 and ct < _chase_dur else -1.0
+
+
 func _rage_pop() -> float:
 	var rt: float = now - _rage_ready_t
 	return 1.0 + 0.18 * (1.0 - UiDraw.back_out(rt / 0.25, 3.0)) if rt < 0.25 else 1.0
@@ -1782,6 +1802,11 @@ func _draw_rage_btn(c: Control) -> void:
 	var rad: float = c.size.x * 0.5
 	var cols: Array = BTN_RAGE_OFF if tier <= 0 else (BTN_RAGE if tier == 1 else BTN_T3 if tier == 3 else BTN_T5)
 	var o: Vector2 = UiDraw.round_button(c, Vector2.ZERO, rad - 6.0, cols, _input != null and _input.is_zone_down("rage"))
+	var ct: float = now - _chase_t
+	if ct >= 0.0 and ct < _chase_dur:  # chasing: dashes orbiting the ring until it hits or refunds
+		for k: int in 6:
+			var a0: float = now * 9.0 + TAU * float(k) / 6.0
+			c.draw_arc(Vector2.ZERO, rad - 2.0, a0, a0 + 0.5, 6, Color(C_GOLD, 0.95), 5.0, true)
 	var wig: float = sin(now * 9.0) * 0.1 if tier > 0 else 0.0
 	c.draw_set_transform(ctr + (o - Vector2(0, 11)) * pop, wig, Vector2(pop, pop))
 	var ink: Color = Color.WHITE if tier > 0 else Color(1, 1, 1, 0.55)

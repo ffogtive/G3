@@ -36,7 +36,7 @@ extends RefCounted
 ##      stunPreLock s; a pre-lock cast holds the attack clock but gives no cast invuln (the player keeps the jam bump
 ##      rules until the lock). Out of reach in the boss phase: the segment is spent, skill_chase {dur} + chase s of boost, the
 ##      wave fires on the first tick a villain is in reach, else the segment is refunded: skill_denied {reason "far",
-##      refunded true} + bubble "너무 멀다!" (has_target(t1) stays true: the button never greys out for range).
+##      refunded true, text "너무 멀다!"} (the HUD pops that text; has_target(t1) stays true: the button never greys out for range).
 ##   state(): + combo {n, left, next_n, next_id, next_name, best, timeout, cycle, marks}, face (clear | wave | carpet |
 ##      finish), prelock, chase.
 
@@ -1013,9 +1013,10 @@ func _tick_chase(sim: GameSim) -> void:
 		var tier: int = int(_chase.get("tier", 1))
 		_chase = {}
 		_refund(sim, tier)
+		# r3 final (device review): one message — the HUD pops the denial's text over the car; the extra player bubble
+		# with the same words sat on top of it and neither read
 		sim._emit({"type": "skill_denied", "chan": "rage", "tier": tier, "id": "t1_wave", "reason": "far", "refunded": true,
 			"text": "너무 멀다!"})
-		sim._emit({"type": "bubble", "who": "player", "id": -1, "text": "너무 멀다!", "kind": "warn", "dur": 1.0})
 
 
 # --- r3 C1: 압정 combo --------------------------------------------------------------------------------------------

@@ -881,12 +881,14 @@ func _chase(fb: bool) -> void:
 	var ev: Array[Dictionary] = []
 	_until(sim, func() -> bool: return not _of(ev, "skill_denied").is_empty() or not _of(ev, "skill_hit").is_empty(), 1.2, ev)
 	var dn: Array[Dictionary] = _of(ev, "skill_denied")
-	var bub: bool = false
+	# r3 final: one message — the denial carries the text (the HUD pops it); no second player bubble on top of it
+	var bub: int = 0
 	for b: Dictionary in _of(ev, "bubble"):
-		bub = bub or str(b.get("text", "")) == "너무 멀다!"
+		bub += 1 if str(b.get("text", "")) == "너무 멀다!" else 0
 	_check(dn.size() == 1 and str(dn[0]["reason"]) == "far" and bool(dn[0].get("refunded", false)) and is_equal_approx(sim.rage, r0)
-		and _of(ev, "skill_hit").is_empty() and bub and not _of(ev, "skill_chase").is_empty(),
-		"90 m ahead: chase then skill_denied{far, refunded} + '너무 멀다!', rage %.2f == %.2f (%s)" % [sim.rage, r0, str(dn)])
+		and _of(ev, "skill_hit").is_empty() and str(dn[0].get("text", "")) == "너무 멀다!" and bub == 0 and not _of(ev, "skill_chase").is_empty(),
+		"90 m ahead: chase then skill_denied{far, refunded, text '너무 멀다!'} (no duplicate bubble %d), rage %.2f == %.2f (%s)" % [bub,
+		sim.rage, r0, str(dn)])
 	# just out of reach behind: the chase boost closes it inside 0.8 s → hit (or a refund, never a lost segment)
 	var c: GameSim = _fight(fb)
 	_quiet(c)
