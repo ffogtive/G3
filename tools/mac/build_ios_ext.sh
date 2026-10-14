@@ -41,7 +41,7 @@ STATUS_FILE="$STATUS_DIR/ext_status.txt"
 IOS_MIN="15.0" # == application/min_ios_version in native/export_presets.cfg (Godot 4.7.2 default)
 
 HOST_ONLY=0 TARGET=template_debug NO_EXT=0 NO_HAPTICS=0 CLEAN=0 CONTAINER_STUBS=0
-JOBS=$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) | head -n 1)
+JOBS=$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) | head -n 1 || true)
 is_macos || HOST_ONLY=1
 for a in "$@"; do
   case "$a" in
@@ -183,8 +183,8 @@ build_traffic_ios() {
     grep -E 'error:|Error' "$STATUS_DIR/traffic_build.log" | head -n 20 >&2 || true
     return 1
   }
-  lib=$(find "$EXT_DIR/bin" "$bdir" -name "libtraffic.ios.$t.arm64.a" 2>/dev/null | head -n 1)
-  cpp=$(find "$bdir" -name "libgodot-cpp.ios.$t.arm64.a" 2>/dev/null | head -n 1)
+  lib=$(find "$EXT_DIR/bin" "$bdir" -name "libtraffic.ios.$t.arm64.a" 2>/dev/null | head -n 1 || true)
+  cpp=$(find "$bdir" -name "libgodot-cpp.ios.$t.arm64.a" 2>/dev/null | head -n 1 || true)
   if [ -z "$lib" ] || [ -z "$cpp" ]; then
     warn "traffic build finished but libtraffic/libgodot-cpp .a not found under $(rel "$bdir")"
     return 1

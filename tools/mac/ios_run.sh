@@ -170,8 +170,13 @@ check_xcode() {
         "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
       ;;
   esac
-  ver=$(xcodebuild -version 2>/dev/null | awk '/^Xcode/ {print $2; exit}')
-  [ -n "$ver" ] || die 3 "xcodebuild -version failed (license not accepted? run: sudo xcodebuild -license accept)"
+  # Read the whole output (no early `exit` in awk → no SIGPIPE) and never let a non-zero xcodebuild kill the
+  # script silently under `set -euo pipefail` (seen on a real Mac: preflight ended with no message).
+  local ver_out
+  ver_out=$(xcodebuild -version 2>&1 || true)
+  ver=$(printf '%s\n' "$ver_out" | awk '/^Xcode / && v == "" {v = $2} END {print v}' || true)
+  [ -n "$ver" ] || die 3 "xcodebuild -version failed: $(printf '%s' "$ver_out" | head -n 2 | tr '\n' ' ' || true)" \
+    "license not accepted? sudo xcodebuild -license accept   ·   first launch: sudo xcodebuild -runFirstLaunch"
   version_ge "$ver" "$XCODE_MIN" || die 3 "Xcode $ver is too old (need >= $XCODE_MIN; expected 27.x). Update Xcode from the App Store."
   if ! xcodebuild -checkFirstLaunchStatus >/dev/null 2>&1; then
     die 3 "Xcode first-launch setup is pending: sudo xcodebuild -runFirstLaunch   (and: sudo xcodebuild -license accept)"
@@ -284,11 +289,11 @@ ensure_templates() {
 # Team ID; the team is the certificate subject's OU (Apple DTS, developer.apple.com/forums/thread/802517).
 detect_teams() {
   local names name ou
-  names=$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | sort -u)
+  names=$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | sort -u || true)
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     ou=$(security find-certificate -c "$name" -p 2>/dev/null | openssl x509 -noout -subject 2>/dev/null |
-      sed -n 's/.*OU[[:space:]]*=[[:space:]]*\([A-Z0-9]\{10\}\).*/\1/p' | head -n 1)
+      sed -n 's/.*OU[[:space:]]*=[[:space:]]*\([A-Z0-9]\{10\}\).*/\1/p' | head -n 1 || true)
     [ -z "$ou" ] || printf '%s\n' "$ou"
   done <<EOF
 $names
@@ -306,7 +311,7 @@ resolve_team() {
     log "Team ID from LANE1_TEAM_ID / deploy.env: $(mask "$TEAM_ID")"
   else
     local teams count
-    teams=$(detect_teams | sort -u)
+    teams=$(detect_teams | sort -u || true)
     count=$(printf '%s' "$teams" | grep -c . || true)
     if [ "$count" = 1 ]; then
       TEAM_ID=$teams
@@ -423,7 +428,7 @@ resolve_device() {
   list_devices
   local tsv="$RUN_DIR/devices.tsv" pick="$RUN_DIR/device.row" n
   if [ -n "${LANE1_DEVICE_ID:-}" ]; then
-    awk -F '\t' -v id="$LANE1_DEVICE_ID" '$1 == id || $10 == id || $2 == id' "$tsv" | head -n 1 >"$pick"
+    awk -F '\t' -v id="$LANE1_DEVICE_ID" '$1 == id || $10 == id || $2 == id' "$tsv" | head -n 1 >"$pick" || true
     if [ ! -s "$pick" ]; then
       warn "device '$(mask "$LANE1_DEVICE_ID")' is not in devicectl's list; using it as given"
       print_devices "$tsv"
@@ -516,10 +521,10 @@ verify_running() {
     --domain-identifier "$BUNDLE_ID" --source Documents/boot.txt --destination "$RUN_DIR/boot.txt" \
     >"$RUN_DIR/copy-boot.log" 2>&1 && [ -s "$RUN_DIR/boot.txt" ]; then
     local boot_t
-    boot_t=$(sed -n 's/.*boot_unix=\([0-9]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1)
+    boot_t=$(sed -n 's/.*boot_unix=\([0-9]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1 || true)
     if is_number "$boot_t" && [ "$boot_t" -ge $((LAUNCH_EPOCH - 60)) ]; then
       BOOT_FRESH=1
-      NATIVE=$(sed -n 's/.*native=\([a-z]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1)
+      NATIVE=$(sed -n 's/.*native=\([a-z]*\).*/\1/p' "$RUN_DIR/boot.txt" | head -n 1 || true)
       [ -n "$NATIVE" ] || NATIVE="?"
       log "boot: $(head -n 1 "$RUN_DIR/boot.txt")"
     else

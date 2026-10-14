@@ -34,6 +34,17 @@ ok() { printf '%s[%s] ✅%s %s\n' "$_C_GRN" "${LANE1_LOG_TAG:-lane1}" "$_C_OFF" 
 warn() { printf '%s[%s] ⚠️  %s%s\n' "$_C_YEL" "${LANE1_LOG_TAG:-lane1}" "$*" "$_C_OFF" >&2; }
 # die <exit-code> <message> [follow-up lines...]: one actionable message (extra args become indented hint lines),
 # then exit. Codes: 2 usage, 3 environment, 4 build, 5 device (ios_run.sh adds 6 install, 7 launch, 9 locked).
+# Under `set -euo pipefail` an unguarded failing command ends the script with no message (seen on a real Mac:
+# ios_run stopped right after '== preflight'). Report the file, line and command instead; errtrace (-E) carries the
+# trap into functions and subshells. Exits via `die`/`exit` do not trigger ERR.
+lane1_on_err() {
+  printf '%s[%s] ❌ unexpected failure (exit %s) at %s:%s: %s%s\n' "$_C_RED" "${LANE1_LOG_TAG:-lane1}" "$1" \
+    "${3##*/}" "$2" "$4" "$_C_OFF" >&2
+  printf '      → 이 줄을 그대로 보내 주세요 (docs/IPHONE_DEPLOY.md §7).\n' >&2
+}
+set -E
+trap 'lane1_on_err $? $LINENO "${BASH_SOURCE[0]:-?}" "$BASH_COMMAND"' ERR
+
 die() {
   local code=$1
   shift
