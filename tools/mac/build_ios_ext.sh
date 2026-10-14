@@ -161,6 +161,25 @@ build_haptics_ios() {
 
 # ---------------------------------------------------------------------------------------------------------------
 # traffic (native/ext, godot-cpp) — native/ext/README.md "Build — macOS editor + iOS".
+# pick_ios_archive <basename> <target> <dir>... → newest "<basename>*.a" whose name mentions ios and the target
+# (falls back to any "<basename>*ios*.a"); prints nothing if none.
+pick_ios_archive() {
+  local base=$1 t=$2 f best="" best_m=0 m
+  shift 2
+  for pat in "$base.ios.$t*.a" "$base*ios*$t*.a" "$base*ios*.a"; do
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+      if [ -z "$best" ] || [ "$m" -gt "$best_m" ]; then
+        best=$f
+        best_m=$m
+      fi
+    done < <(find "$@" -name "$pat" -type f 2>/dev/null || true)
+    [ -z "$best" ] || break
+  done
+  printf '%s' "$best"
+}
+
 build_traffic_ios() {
   local t=$TARGET bdir="$EXT_DIR/build/ios-$TARGET" gen lib cpp
   have cmake || {
@@ -192,12 +211,17 @@ build_traffic_ios() {
     grep -E 'error:|Error|BUILD FAILED' "$STATUS_DIR/traffic_build.log" | head -n 20 >&2 || true
     return 1
   }
-  lib=$(find "$EXT_DIR/bin" "$bdir" -name "libtraffic.ios.$t.arm64.a" 2>/dev/null | head -n 1 || true)
-  cpp=$(find "$bdir" -name "libgodot-cpp.ios.$t.arm64.a" 2>/dev/null | head -n 1 || true)
+  # Device run 2026-10-14: the build succeeded but the exact names below were not found — the Xcode generator and
+  # godot-cpp's suffix logic do not always produce "<name>.ios.<target>.arm64.a" in one fixed folder. Accept any
+  # iOS static archive for this target (newest first), and print what exists if nothing matches.
+  lib=$(pick_ios_archive "libtraffic" "$t" "$EXT_DIR/bin" "$bdir")
+  cpp=$(pick_ios_archive "libgodot-cpp" "$t" "$bdir" "$EXT_DIR/bin")
   if [ -z "$lib" ] || [ -z "$cpp" ]; then
-    warn "traffic build finished but libtraffic/libgodot-cpp .a not found under $(rel "$bdir")"
+    warn "traffic build finished but libtraffic/libgodot-cpp .a not found under $(rel "$bdir") — archives present:"
+    find "$bdir" "$EXT_DIR/bin" -name '*.a' 2>/dev/null | sed "s|$LANE1_ROOT/||" | head -n 20 >&2 || true
     return 1
   fi
+  log "traffic archives: $(rel "$lib"), $(rel "$cpp")"
   rm -rf "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework"
   xcodebuild -create-xcframework -library "$lib" -output "$EXT_DIR/bin/libtraffic.ios.$t.xcframework" >/dev/null
   xcodebuild -create-xcframework -library "$cpp" -output "$EXT_DIR/bin/libgodot-cpp.ios.$t.xcframework" >/dev/null
